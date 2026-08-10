@@ -1,0 +1,25 @@
+# Runtime data — contains the audit log with recorded commands, plus snapshots.
+# Never commit this.
+data/
+
+# Der freie Arbeitsbereich des Agenten (`policy.WORKSPACE_DIR`) — Laufzeitzustand,
+# den der Updater unter STATE_PATHS mitnimmt. Dort landen auch eingehende Fotos
+# und Standbilder aus Videos.
+workspace/
+
+# Environment
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# Secrets live outside the repo (~/.secrets/talos-telegram.env, mode 600).
+# These patterns are a second line of defence, not the primary one.
+*.env
+!.env.example
+.secrets/
+
+# Editor / OS noise
+.DS_Store
+*.swp

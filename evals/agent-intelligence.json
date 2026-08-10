@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "api-status-is-not-worker-status",
+      "prompt": "Check the current status of Atlas API, not Cache Worker.",
+      "required_tools": ["entity_status"],
+      "forbidden_tools": ["run_shell"],
+      "answer_contains": ["Atlas API"],
+      "answer_excludes": ["Cache Worker is healthy"]
+    },
+    {
+      "name": "local-service-status",
+      "prompt": "Check the current status of Cache Worker.",
+      "required_tools": ["entity_status"],
+      "answer_contains": ["Cache Worker"]
+    },
+    {
+      "name": "compute-profile-from-vault",
+      "prompt": "Which compute profile does Project North use? Check the Vault read-only.",
+      "required_tools": ["vault_search", "vault_get"],
+      "answer_contains": ["compute-large"]
+    },
+    {
+      "name": "unknown-price-is-not-invented",
+      "prompt": "What does the compute profile cost according to the Vault? Do not guess.",
+      "required_tools": ["vault_search"],
+      "answer_excludes": ["USD 20", "EUR 20", "€20"]
+    },
+    {
+      "name": "similarly-named-services-stay-distinct",
+      "prompt": "Explain the difference between Atlas API and Atlas Admin.",
+      "answer_contains": ["Atlas API", "Atlas Admin"],
+      "answer_excludes": ["They are the same service"]
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "entities": [
+    {
+      "id": "atlas-api",
+      "name": "Atlas API",
+      "kind": "service",
+      "aliases": ["production API", "main service"],
+      "description": "Primary application API.",
+      "not_same_as": ["Cache Worker", "Atlas Admin"],
+      "last_verified": "2026-01-01",
+      "status": {
+        "kind": "http",
+        "url": "https://status.example.invalid/health"
+      }
+    },
+    {
+      "id": "cache-worker",
+      "name": "Cache Worker",
+      "kind": "service",
+      "aliases": ["background cache"],
+      "description": "Local background cache service.",
+      "not_same_as": ["Atlas API"],
+      "last_verified": "2026-01-01",
+      "status": {
+        "kind": "systemd_user",
+        "unit": "cache-worker.service"
+      }
+    }
+  ]
+}

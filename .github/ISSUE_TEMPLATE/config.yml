@@ -1,0 +1,10 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability (a way past the kernel)
+    url: https://github.com/talos-kernel/talos/security/advisories/new
+    about: >-
+      Do NOT open a public issue for anything that gets past the kernel. Report it
+      privately here — see SECURITY.md for scope and the limits no patch removes.
+  - name: Question or idea
+    url: https://github.com/talos-kernel/talos/discussions
+    about: Not sure it is a bug? Start a discussion. How-to and "should this exist" live here.

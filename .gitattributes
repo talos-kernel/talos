@@ -1,0 +1,16 @@
+# Was NICHT in eine Auslieferung gehoert.
+#
+# `git archive` baut den Tarball unter `dist/`, den `install.sh` laedt und
+# `talos update` gegenpruefen kann. Wer dort die Website und die Pressebilder
+# mitliefert, verdreifacht die Auslieferung mit Dateien, die auf dem Zielrechner
+# niemand oeffnet — das veroeffentlichte 0.2.0 war aus genau diesem Grund 170 KB,
+# ein unbeschnittenes Archiv desselben Baums ist 4,6 MB.
+#
+# `export-ignore` wirkt NUR auf `git archive`. Im Repository bleiben beide
+# Verzeichnisse normal versioniert; GitHub zeigt das README-Bild weiterhin an.
+site/    export-ignore
+assets/  export-ignore
+# Wartungswerkzeug des Betreuers. Wer Talos installiert, hat dafuer keine Verwendung —
+# und `sync-public.sh` trug die GitHub-Kennung des Betreuers ausgeschrieben in jede
+# Auslieferung. Gefunden beim Scan des FERTIGEN Tarballs, nicht des Arbeitsbaums.
+scripts/ export-ignore

@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+# Der Quell-Tarball ist erreichbar, soll aber nicht in Suchindizes landen.
+Disallow: /dist/
+
+Sitemap: https://talos-agent.ch/sitemap.xml

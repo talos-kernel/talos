@@ -1,0 +1,601 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TALOS — Field Manual</title>
+<meta name="description" content="Install Talos, give it an identity, run it. Every command — and the ones it deliberately does not have.">
+<link rel="icon" href="../brand/favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="../brand/apple-touch-icon.png">
+<meta property="og:title" content="TALOS — Field Manual">
+<meta property="og:description" content="Install it, give it an identity, run it. Every command — and the ones it deliberately does not have.">
+<meta property="og:image" content="https://talos-agent.ch/brand/og-logo.png">
+<meta property="og:url" content="https://talos-agent.ch/docs/">
+<link rel="canonical" href="https://talos-agent.ch/docs/">
+<meta name="theme-color" content="#EDEAE1">
+<style>
+@font-face { font-family:"Mono"; src:url("../fonts/mono-var.woff2") format("woff2-variations");
+             font-weight:100 800; font-display:swap; }
+
+/* Ein Dossier ist Papier. Die Seite bekennt sich zu einem Aussehen — im Dunkelmodus
+   wird daraus nicht "das Gegenteil", sondern dasselbe Papier bei schlechterem Licht. */
+:root{
+  --paper:  oklch(0.955 0.007 88);
+  --paper2: oklch(0.925 0.009 88);
+  --ink:    oklch(0.22 0.013 70);
+  --mid:    oklch(0.46 0.011 70);
+  --faint:  oklch(0.66 0.009 80);
+  --rule:   oklch(0.78 0.009 85);
+  --stamp:  oklch(0.52 0.19 27);
+  --ok:     oklch(0.48 0.10 155);
+  --ask:    oklch(0.55 0.13 75);
+  --grain:  oklch(0.5 0.01 80/.05);
+  --mono:"Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --paper:  oklch(0.20 0.010 70);
+    --paper2: oklch(0.245 0.012 70);
+    --ink:    oklch(0.90 0.010 85);
+    --mid:    oklch(0.70 0.010 80);
+    --faint:  oklch(0.52 0.010 80);
+    --rule:   oklch(0.38 0.010 75);
+    --stamp:  oklch(0.62 0.17 27);
+    --ok:     oklch(0.70 0.12 155);
+    --ask:    oklch(0.74 0.13 75);
+    --grain:  oklch(0.8 0.01 80/.035);
+  }
+}
+:root[data-theme="light"]{
+  --paper:oklch(0.955 0.007 88); --paper2:oklch(0.925 0.009 88);
+  --ink:oklch(0.22 0.013 70); --mid:oklch(0.46 0.011 70); --faint:oklch(0.66 0.009 80);
+  --rule:oklch(0.78 0.009 85); --stamp:oklch(0.52 0.19 27);
+  --ok:oklch(0.48 0.10 155); --ask:oklch(0.55 0.13 75); --grain:oklch(0.5 0.01 80/.05);
+}
+:root[data-theme="dark"]{
+  --paper:oklch(0.20 0.010 70); --paper2:oklch(0.245 0.012 70);
+  --ink:oklch(0.90 0.010 85); --mid:oklch(0.70 0.010 80); --faint:oklch(0.52 0.010 80);
+  --rule:oklch(0.38 0.010 75); --stamp:oklch(0.62 0.17 27);
+  --ok:oklch(0.70 0.12 155); --ask:oklch(0.74 0.13 75); --grain:oklch(0.8 0.01 80/.035);
+}
+
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth; scroll-padding-top:26px; -webkit-text-size-adjust:100%}
+@media (prefers-reduced-motion: reduce){ html{scroll-behavior:auto} }
+body{
+  background:var(--paper); color:var(--ink);
+  font-family:var(--mono); font-size:14.5px; line-height:1.75;
+  font-variant-numeric:tabular-nums;
+}
+/* ⚠️ Die Papierkoernung liegt auf einer FIXIERTEN Ebene, nicht auf dem Body.
+   Als Body-Hintergrund wird das Punktraster ueber die gesamte Dokumenthoehe gerastert —
+   auf einer langen Seite sind das Millionen Punkte, und das Rendern dauert sichtbar.
+   Fixiert kostet es genau einen Bildschirm. */
+body::before{
+  content:""; position:fixed; inset:0; z-index:0; pointer-events:none;
+  background-image:radial-gradient(var(--grain) 1px, transparent 1px);
+  background-size:5px 5px;
+}
+.frame, .punch{position:relative; z-index:1}
+::selection{background:var(--ink); color:var(--paper)}
+
+.frame{border:1.5px dashed var(--ink); margin:clamp(8px,1.6vw,22px); position:relative}
+.punch{position:fixed; left:calc(clamp(8px,1.6vw,22px)/2 - 5px); top:0; bottom:0;
+       display:flex; flex-direction:column; justify-content:space-evenly; pointer-events:none; z-index:4}
+.punch i{width:10px; height:10px; border:1.5px solid var(--ink); border-radius:50%; background:var(--paper)}
+@media(max-width:860px){.punch{display:none}}
+
+.sheet{max-width:1000px; margin:0 auto; padding:0 clamp(16px,3.6vw,54px)}
+
+/* ── masthead ───────────────────────────────────────────────── */
+.masthead{border-bottom:1.5px dashed var(--ink); padding:14px 0; position:sticky; top:0;
+          background:var(--paper); z-index:3}
+.masthead .sheet{display:flex; gap:18px; align-items:baseline; flex-wrap:wrap}
+.masthead b{font-weight:800; letter-spacing:.24em; font-size:15px}
+.masthead a{color:inherit; text-decoration:none}
+.masthead a:hover{color:var(--stamp)}
+.masthead span{font-size:10.5px; color:var(--mid); letter-spacing:.14em; text-transform:uppercase}
+.masthead .sp{flex:1}
+#theme{font:inherit; font-size:10.5px; letter-spacing:.14em; text-transform:uppercase;
+       background:transparent; color:var(--mid); border:1.5px solid var(--rule);
+       padding:3px 10px; cursor:pointer}
+#theme:hover{border-color:var(--ink); color:var(--ink)}
+
+/* ── hero ───────────────────────────────────────────────────── */
+.hero{padding:clamp(34px,6vh,70px) 0 26px}
+.doc-line{font-size:10.5px; letter-spacing:.2em; text-transform:uppercase; color:var(--mid);
+          display:flex; gap:26px; flex-wrap:wrap; margin-bottom:26px}
+h1{font-weight:800; font-size:clamp(30px,5.4vw,62px); line-height:1.02;
+   letter-spacing:-.015em; text-transform:uppercase; max-width:15ch; text-wrap:balance}
+.hero .lede{margin-top:24px; max-width:62ch; color:var(--mid)}
+.hero .lede + .lede{margin-top:12px}
+.hero .lede strong{color:var(--ink); font-weight:700}
+.spec-row{display:flex; margin-top:34px; border:1.5px solid var(--ink); width:fit-content;
+          max-width:100%; flex-wrap:wrap}
+.spec{padding:11px 22px; border-right:1.5px solid var(--ink); font-size:11px; letter-spacing:.05em;
+      color:var(--mid)}
+.spec:last-child{border-right:none}
+.spec b{display:block; font-weight:800; font-size:20px; letter-spacing:0; color:var(--ink)}
+
+/* ── index ──────────────────────────────────────────────────── */
+.index{border-top:1.5px dashed var(--ink); border-bottom:1.5px dashed var(--ink);
+       padding:16px 0; margin-bottom:8px}
+.index ol{list-style:none; display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr));
+          gap:2px 26px; counter-reset:sec}
+.index a{display:block; color:var(--mid); text-decoration:none; font-size:12.5px; padding:2px 0}
+.index a::before{counter-increment:sec; content:counter(sec,decimal-leading-zero) "  ";
+                 color:var(--faint)}
+.index a:hover{color:var(--ink)}
+
+/* ── sections ───────────────────────────────────────────────── */
+section{padding:38px 0 8px; scroll-margin-top:70px}
+h2{font-weight:800; text-transform:uppercase; letter-spacing:.02em;
+   font-size:clamp(19px,2.4vw,25px); line-height:1.15; margin-bottom:4px; text-wrap:balance}
+h2 .n{display:block; font-size:10.5px; letter-spacing:.22em; color:var(--stamp);
+      font-weight:400; margin-bottom:9px}
+h3{font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:.1em;
+   margin:26px 0 6px}
+p{max-width:66ch; margin:11px 0; color:var(--mid)}
+strong{color:var(--ink); font-weight:700}
+em{font-style:normal; text-decoration:underline; text-underline-offset:3px;
+   text-decoration-color:var(--rule)}
+a{color:var(--ink); text-decoration-color:var(--rule); text-underline-offset:3px}
+a:hover{text-decoration-color:var(--stamp)}
+ul{max-width:66ch; margin:11px 0; padding-left:0; list-style:none}
+li{margin:5px 0; color:var(--mid); padding-left:18px; position:relative}
+li::before{content:"—"; position:absolute; left:0; color:var(--faint)}
+
+pre{background:var(--paper2); border:1.5px solid var(--rule); padding:13px 15px;
+    overflow-x:auto; margin:14px 0; font-size:13px; line-height:1.65; color:var(--ink)}
+pre .c{color:var(--faint)}
+pre .f{color:var(--stamp)}
+code{background:var(--paper2); border:1px solid var(--rule); padding:0 4px; font-size:.92em}
+pre code{background:none; border:none; padding:0; font-size:inherit}
+
+/* ── tables ─────────────────────────────────────────────────── */
+.tw{overflow-x:auto; margin:16px 0; border:1.5px solid var(--ink)}
+table{border-collapse:collapse; width:100%; font-size:12.5px; min-width:540px}
+th,td{text-align:left; padding:8px 13px; border-bottom:1px solid var(--rule); vertical-align:top}
+th{font-size:10px; letter-spacing:.16em; text-transform:uppercase; color:var(--mid);
+   font-weight:400; border-bottom:1.5px solid var(--ink)}
+tr:last-child td{border-bottom:none}
+td:first-child{color:var(--ink); white-space:nowrap}
+td.d{color:var(--mid)}
+
+/* ── notes ──────────────────────────────────────────────────── */
+.note{border:1.5px solid var(--rule); border-left:4px solid var(--faint);
+      background:var(--paper2); padding:12px 15px; margin:16px 0; max-width:66ch}
+.note.warn{border-left-color:var(--stamp)}
+.note.good{border-left-color:var(--ok)}
+.note b{display:block; font-size:10px; letter-spacing:.18em; text-transform:uppercase;
+        color:var(--faint); margin-bottom:6px; font-weight:700}
+.note.warn b{color:var(--stamp)}
+.note.good b{color:var(--ok)}
+.note p{margin:0; font-size:13.5px; max-width:none}
+.note p + p{margin-top:8px}
+
+/* ── verdict stamps ─────────────────────────────────────────── */
+.stamps{display:flex; flex-wrap:wrap; gap:14px; margin:18px 0}
+.vs{border:2.5px solid currentColor; padding:6px 13px; font-size:11px; font-weight:800;
+    letter-spacing:.18em; text-transform:uppercase; transform:rotate(-2deg);
+    mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='.6' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .95 0'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='.9'/%3E%3C/svg%3E");
+    mask-size:110px}
+.vs.a{color:var(--ok); transform:rotate(1.5deg)}
+.vs.h{color:var(--ask)}
+.vs.d{color:var(--stamp); transform:rotate(-3deg)}
+.stamps p{margin:0; align-self:center; font-size:12.5px; max-width:38ch}
+
+footer{border-top:1.5px dashed var(--ink); margin-top:44px; padding:20px 0 30px;
+       font-size:11.5px; color:var(--faint); display:flex; gap:24px; flex-wrap:wrap}
+footer a{color:var(--mid)}
+</style>
+</head>
+<body>
+
+<div class="punch"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+<div class="frame">
+
+  <div class="masthead"><div class="sheet">
+    <b><a href="../">◉ TALOS</a></b>
+    <span>Docs · Field Manual</span>
+    <span class="sp"></span>
+    <span>rev 0.9.2-alpha</span>
+    <button id="theme" type="button" aria-label="Switch colour theme">theme</button>
+  </div></div>
+
+  <div class="sheet">
+
+    <div class="hero">
+      <div class="doc-line">
+        <span>Doc · Setup &amp; Operation</span>
+        <span>Classification · Public</span>
+        <span>Subject · An agent you can hand a shell to</span>
+      </div>
+      <h1>Setting it up</h1>
+      <p class="lede">Talos takes instructions over a chat channel, reasons with a language
+      model, and runs tools — but only after a deterministic kernel has ruled on the
+      action. <strong>The model proposes; it does not decide.</strong></p>
+      <p class="lede">That one sentence explains most of what follows, including why the
+      command line is short and why a few obvious conveniences are missing on purpose.</p>
+      <div class="spec-row">
+        <div class="spec"><b>full</b>unit suite</div>
+        <div class="spec"><b>real</b>adversarial suite</div>
+        <div class="spec"><b>small</b>gate path</div>
+        <div class="spec"><b>30s</b>token life</div>
+        <div class="spec"><b>0</b>default identities</div>
+      </div>
+    </div>
+
+    <div class="index"><ol>
+      <li><a href="#install">Install</a></li>
+      <li><a href="#identity">Give it an identity</a></li>
+      <li><a href="#model">Give it a mind</a></li>
+      <li><a href="#run">Run it</a></li>
+      <li><a href="#session">The terminal session</a></li>
+      <li><a href="#background">Work on the side</a></li>
+      <li><a href="#memory">What it remembers</a></li>
+      <li><a href="#commands">Every command</a></li>
+      <li><a href="#slash">In-session commands</a></li>
+      <li><a href="#stuck">When something won't work</a></li>
+      <li><a href="#channels">Channels</a></li>
+      <li><a href="#missing">What it doesn't have</a></li>
+    </ol></div>
+
+    <section id="install">
+      <h2><span class="n">Section 01</span>Install</h2>
+      <p>One line. It downloads the signed release, verifies the signature and the
+      checksum, runs the full test suite — and then <em>stops</em>.</p>
+<pre><span class="c"># read it first — it is served as plain text on purpose</span>
+curl -fsSL https://talos-agent.ch/install.sh | less
+
+<span class="c"># then run it</span>
+curl -fsSL https://talos-agent.ch/install.sh | sh</pre>
+      <p>Or from source, if you would rather see everything:</p>
+<pre>git clone https://github.com/talos-kernel/talos.git
+cd talos
+python3 -m venv .venv &amp;&amp; . .venv/bin/activate
+pip install -r requirements.txt
+python -m pytest tests/ -q</pre>
+      <div class="note good">
+        <b>The installer starts nothing</b>
+        <p>It proves the build and hands you back your shell. Nothing begins listening
+        until you say so — an installer that silently launches a process holding a shell
+        tool is not something you can audit after the fact.</p>
+      </div>
+      <p>Python 3.11 or newer, Linux or macOS. The shell tool needs
+      <code>bubblewrap</code> on Linux; macOS uses the built-in <code>sandbox-exec</code>.
+      Where there is no isolation, the shell <strong>refuses</strong> rather than running
+      unprotected.</p>
+    </section>
+
+    <section id="identity">
+      <h2><span class="n">Section 02</span>Give it an identity</h2>
+      <p>Talos ships with <strong>zero</strong> identities that may command it. Not an
+      oversight to fix during setup — it is the state it starts in, and the reason it is
+      safe to install before you have decided anything.</p>
+<pre>python -m talos setup</pre>
+      <p>The wizard writes <code>talos.env</code> and stops. The key that matters:</p>
+<pre><span class="f">TALOS_ALLOWED_PRINCIPALS</span>=telegram:123456789,cli:1000</pre>
+      <p>An identity is <strong>channel-qualified</strong>. The same number on a different
+      channel is a different identity — so a Telegram account that may command Talos grants
+      nothing to an email address spelling the same name.</p>
+      <p>The command line is a channel like any other: your unix uid must be listed as
+      <code>cli:&lt;uid&gt;</code> before <code>talos chat</code> or <code>talos ask</code>
+      will do anything. A shell next to the agent is not an argument for granting it
+      something.</p>
+      <div class="note warn">
+        <b>The config file is the boundary</b>
+        <p><code>talos.env</code> carries the bot token, the API keys <em>and</em> the
+        allowlist. It is Tier A in the kernel's own floor: reading is refused, writing needs
+        a human. Otherwise the kernel would stay intact while the list of who may command it
+        came from a file the agent could rewrite.</p>
+        <p>On a real deployment, hand it to another user entirely — <code>root:agent</code>,
+        mode <code>640</code>, directory owned by root too. <code>doctor</code> treats that
+        as the <em>better</em> state, not a finding.</p>
+      </div>
+    </section>
+
+    <section id="model">
+      <h2><span class="n">Section 03</span>Give it a mind</h2>
+      <p>Talos does not ship a model. It talks to one — through an API key, or through a
+      CLI you already have installed and logged in.</p>
+<pre>python -m talos models              <span class="c"># the catalogue</span>
+python -m talos models --refresh    <span class="c"># ask the providers directly</span>
+python -m talos setup model</pre>
+      <p>Each provider carries its <strong>own</strong> key and its own base url, resolved
+      at the moment of the call:</p>
+<pre><span class="f">TALOS_API_KEY_ANTHROPIC</span>=sk-ant-…
+<span class="f">TALOS_API_KEY_OPENAI</span>=sk-…</pre>
+      <div class="note warn">
+        <b>Why one key per provider, and not one key</b>
+        <p>Until 2026-08-05 a single value served every provider, so selecting an
+        OpenAI-shaped route sent an <em>Anthropic</em> key to OpenAI as a bearer token.
+        Tests with identical placeholder keys cannot see that bug. Switching to a provider
+        whose key is missing now fails the <em>switch</em> — the previous provider stays
+        active instead of a conversation dying mid-turn.</p>
+      </div>
+    </section>
+
+    <section id="run">
+      <h2><span class="n">Section 04</span>Run it</h2>
+      <div class="tw"><table>
+        <thead><tr><th>Command</th><th>What it is</th></tr></thead>
+        <tbody>
+        <tr><td>python -m talos</td><td class="d">The service. Long-polls Telegram, runs schedules, stays up.</td></tr>
+        <tr><td>talos chat</td><td class="d">A session in this terminal. Multi-turn; approvals possible at a tty.</td></tr>
+        <tr><td>talos ask "…"</td><td class="d">One turn, answer on stdout, then gone. For scripts and cron.</td></tr>
+        <tr><td>python -m talos --once</td><td class="d">A single cycle, for diagnosis.</td></tr>
+        </tbody>
+      </table></div>
+      <div class="note">
+        <b>No command starts the agent on the side</b>
+        <p><code>setup</code>, <code>update</code> and every diagnostic stop when they are
+        done. The switch stays with the human.</p>
+      </div>
+    </section>
+
+    <section id="session">
+      <h2><span class="n">Section 05</span>The terminal session</h2>
+<pre>$ talos chat
+Talos 0.9.2-alpha  ·  anthropic/claude-opus-4  ·  autonomy 3
+speaking as cli:1000  ·  approvals possible — you are at a terminal
+/help for commands, `exit` to leave
+
+› what changed in the log today?</pre>
+      <p>The second line is the one to read. It says, before you ask for anything, whether
+      an approval is even possible in this session — so a refusal later is explained in
+      advance rather than guessed at.</p>
+
+      <h3>Approvals hang on the terminal</h3>
+      <p>When the kernel needs a person to answer, whether one is there is
+      <strong>measured</strong>: both <code>stdin</code> and <code>stdout</code> must be a
+      real terminal.</p>
+      <div class="tw"><table>
+        <thead><tr><th>How you started it</th><th>What happens when a human is needed</th></tr></thead>
+        <tbody>
+        <tr><td>talos chat</td><td class="d">A person is there — you are asked, and you answer with the next line.</td></tr>
+        <tr><td>talos chat &lt; jobs.txt</td><td class="d">No terminal → refused, with the reason stated.</td></tr>
+        <tr><td>talos chat &gt; out.log</td><td class="d">Nobody would read the question → refused.</td></tr>
+        <tr><td>talos ask "…"</td><td class="d">Always refused. A one-liner waits for nothing.</td></tr>
+        </tbody>
+      </table></div>
+      <p>Answering is just typing: <code>yes</code>, <code>no</code>, or
+      <code>always</code> — the last creates a standing rule for <em>that exact action</em>,
+      bound to its arguments, never to the tool's name.</p>
+      <div class="note warn">
+        <b>A session cannot start itself</b>
+        <p>The agent has a shell. If it could run <code>talos chat</code> inside it, it
+        would be giving itself orders with no channel and no reader. Both
+        <code>chat</code> and <code>ask</code> refuse when they detect the agent's own
+        sandbox around them.</p>
+      </div>
+    </section>
+
+    <section id="background">
+      <h2><span class="n">Section 06</span>Work on the side</h2>
+      <p>Some questions take two minutes, and the conversation should not stand still for
+      them.</p>
+<pre>› /background go through /var/log and summarise today's errors
+
+Background #1 started: go through /var/log and summarise today's…
+  id bg_a1b2c3d4e5f6 · runs unattended, so anything needing approval is refused</pre>
+      <p>The result arrives later as its own message, marked as a report rather than as a
+      reply to whatever you asked in the meantime.</p>
+      <div class="note warn">
+        <b>A background task is a scheduled run, not a helper with your rights</b>
+        <p>Nobody is sitting in front of it. So the same ceiling applies as for a timed
+        run: anything that would need a human becomes a refusal. Putting a question into a
+        chat where a different conversation is going on is the most reliable way to land a
+        “yes” on the wrong thing.</p>
+        <p>Its context is <strong>empty</strong> — it gets the task and nothing else. Two
+        runs sharing one history write into each other, and afterwards nobody can say which
+        of them said what. The result does not go back into the history either.</p>
+      </div>
+      <p>At most three run at once. Each one costs a thread, tokens and model time; without
+      a cap a dozen typed tasks leave you with a machine that has stopped answering.</p>
+    </section>
+
+    <section id="memory">
+      <h2><span class="n">Section 07</span>What it remembers</h2>
+      <p>The conversation is kept per channel, in memory only, and it is bounded twice — by
+      turns and by characters. An unbounded history is an unbounded prompt (cost, latency,
+      drift) and an unbounded leak: what was said three weeks ago would go out to the model
+      again today.</p>
+      <p>When the bound is reached, the <em>middle</em> is summarised and the ends are kept
+      verbatim. The head usually carries the actual task; the tail carries whatever “and
+      that too” refers to.</p>
+<pre>You:                  set up the backup for the NAS
+Agent:                done — see /etc/backup.d
+<span class="c">Earlier (summarised): discussed retention, settled on 30 days; the
+                      NFS mount needed the hard option</span>
+You:                  and add the offsite copy</pre>
+      <div class="note">
+        <b>A summary is labelled as one</b>
+        <p>It is never disguised as a verbatim turn. A summary that looks like something
+        actually said is a claim about words nobody used — and the model could quote it back
+        as if it were.</p>
+        <p>If summarising fails, the oldest turns are dropped as before. The <em>bound</em>
+        is not a comfort feature: a history that kept growing after a failed summary would
+        turn a cost question into a leak.</p>
+      </div>
+      <p><code>/new</code> clears the active context, summary included. The event log and
+      the searchable archive stay — “forgotten” here means precisely: out of the prompt.</p>
+    </section>
+
+    <section id="commands">
+      <h2><span class="n">Section 08</span>Every command</h2>
+      <p>Thirteen, each answering a question an operator actually asks. Every one takes
+      <code>--help</code>.</p>
+      <div class="tw"><table>
+        <thead><tr><th>Command</th><th>What it answers</th></tr></thead>
+        <tbody>
+        <tr><td>chat</td><td class="d">A session here, with approvals at a terminal.</td></tr>
+        <tr><td>ask "…"</td><td class="d">One turn from a script or a cron line.</td></tr>
+        <tr><td>setup</td><td class="d">How do I set this up. Writes a file and stops.</td></tr>
+        <tr><td>doctor</td><td class="d">Why doesn't something work. Changes nothing; no network without <code>--online</code>.</td></tr>
+        <tr><td>config</td><td class="d">What's in there, and how do I change it.</td></tr>
+        <tr><td>models</td><td class="d">What can it think with.</td></tr>
+        <tr><td>status</td><td class="d">What did it do last.</td></tr>
+        <tr><td>events</td><td class="d">What happened — filter by run, type or tool.</td></tr>
+        <tr><td>why &lt;id&gt;</td><td class="d">Why was <em>that</em> allowed or refused, and what came of it.</td></tr>
+        <tr><td>report</td><td class="d">The log as a record someone else can read, with a chain digest.</td></tr>
+        <tr><td>review</td><td class="d">What this installation should change about itself.</td></tr>
+        <tr><td>update</td><td class="d">New version beside the old one; signature checked, tests first.</td></tr>
+        <tr><td>version</td><td class="d">Which build is this.</td></tr>
+        </tbody>
+      </table></div>
+      <div class="note">
+        <b>Subcommands run before the config is loaded</b>
+        <p>Otherwise <code>setup</code> would die on the missing configuration it exists to
+        create, and <code>doctor</code> on exactly the state it is meant to diagnose. That
+        was once the case, and it is the reason for the order.</p>
+      </div>
+    </section>
+
+    <section id="slash">
+      <h2><span class="n">Section 09</span>In-session commands</h2>
+      <p>The same set in the terminal and in the messenger — one command centre, not two.
+      There is deliberately no separate vocabulary for the CLI.</p>
+      <div class="tw"><table>
+        <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+        <tbody>
+        <tr><td>/help</td><td class="d">What this installation understands.</td></tr>
+        <tr><td>/policy &lt;path|cmd&gt;</td><td class="d">What the kernel <em>would</em> decide — without doing it.</td></tr>
+        <tr><td>/background &lt;task&gt;</td><td class="d">Run it beside this conversation, unattended.</td></tr>
+        <tr><td>/autonomy [0-5]</td><td class="d">Show or tighten the dial. It can only ever narrow what the kernel allows.</td></tr>
+        <tr><td>/undo</td><td class="d">Reverse the last write, from the snapshot the executor took.</td></tr>
+        <tr><td>/new</td><td class="d">Clear the active context, summary included.</td></tr>
+        <tr><td>/log</td><td class="d">The recent events, in the chat.</td></tr>
+        <tr><td>/revoke</td><td class="d">Drop a standing approval.</td></tr>
+        <tr><td>/stop</td><td class="d">End the running task, including any open question.</td></tr>
+        </tbody>
+      </table></div>
+      <p>Every verdict the kernel can return:</p>
+      <div class="stamps">
+        <span class="vs a">Allow</span>
+        <p>It runs, and the receipt says what it touched.</p>
+      </div>
+      <div class="stamps">
+        <span class="vs h">Needs human</span>
+        <p>You are asked — with the kernel's facts, not the model's description of itself.</p>
+      </div>
+      <div class="stamps">
+        <span class="vs d">Deny</span>
+        <p>No path forward except a different request.</p>
+      </div>
+    </section>
+
+    <section id="stuck">
+      <h2><span class="n">Section 10</span>When something won't work</h2>
+      <p>Start with the doctor. It reads, counts and looks — it creates no directory,
+      writes no file, starts no service, and shows no secret.</p>
+<pre>python -m talos doctor</pre>
+      <p>Every finding carries its remedy in its own text, because the agent reads these
+      lines too: a finding without a remedy becomes “it isn't set up”, which is right and
+      useless.</p>
+<pre>capabilities
+  <span class="c">ok</span>   grab_frame (ffmpeg)   /usr/bin/ffmpeg
+  <span class="c">·</span>    web_search (ddgs)     missing — `pip install ddgs`, no key needed</pre>
+
+      <h3>Why did it refuse that?</h3>
+<pre>talos events --tool run_shell     <span class="c"># find the id</span>
+talos why 4831                    <span class="c"># the verdict, the rule, and what followed</span></pre>
+      <p><code>why</code> names the rule that applied and the targets it applied to — and
+      says out loud that those targets were <em>derived from the real arguments</em>, never
+      taken from what the model wrote. Then it shows the rest of the same run, because
+      “refused, and then?” is the question that makes people stop reading logs.</p>
+
+      <h3>What should this installation change?</h3>
+<pre>talos review</pre>
+      <p>It reads its own log and reports patterns worth acting on: the same wall hit
+      repeatedly, approval prompts worn out by repetition, proposals the kernel refuses
+      every time, and capabilities that are missing <em>and have actually cost runs</em>.
+      It also runs by itself after a turn, at most once a day, and says nothing when there
+      is nothing to say.</p>
+      <div class="note">
+        <b>Proposals only</b>
+        <p>The review never applies anything and has no function that could. A standing rule
+        created out of “you approved this three times” would be a second source of
+        permission built from the agent's own history — the exact thing capability tokens
+        exist to prevent.</p>
+      </div>
+    </section>
+
+    <section id="channels">
+      <h2><span class="n">Section 11</span>Channels</h2>
+      <p>Every way in <strong>fetches</strong>. Telegram long-polls; mail pulls over IMAP.
+      Nothing listens on a port, because a webhook would turn an outbound-only process into
+      a reachable one.</p>
+      <div class="tw"><table>
+        <thead><tr><th>Channel</th><th>Trust</th><th>Notes</th></tr></thead>
+        <tbody>
+        <tr><td>telegram</td><td class="d">FULL</td><td class="d">Buttons for approvals, live status, images in and out.</td></tr>
+        <tr><td>cli</td><td class="d">FULL</td><td class="d"><code>chat</code> and <code>ask</code>. Approvals only at a terminal.</td></tr>
+        <tr><td>mail</td><td class="d">ASK</td><td class="d">Sender proven from our own server's <code>Authentication-Results</code>, fail-closed.</td></tr>
+        <tr><td>whatsapp</td><td class="d">NOTIFY</td><td class="d">Outbound only. There is no inbound, on purpose.</td></tr>
+        </tbody>
+      </table></div>
+      <div class="note warn">
+        <b>A From: header is not an identity</b>
+        <p>It is chosen by the sender and IMAP verifies nothing, so an allowlist keyed on it
+        is bypassed by one line of text. Talos trusts only the
+        <code>Authentication-Results</code> its own receiving server stamped, takes the
+        topmost one, and refuses when there is none.</p>
+      </div>
+    </section>
+
+    <section id="missing">
+      <h2><span class="n">Section 12</span>What it doesn't have</h2>
+      <p>If you have used other agent CLIs, some things will be missing. Each was
+      considered and left out for the same reason.</p>
+      <div class="tw"><table>
+        <thead><tr><th>Not here</th><th>Why not</th></tr></thead>
+        <tbody>
+        <tr><td>gateway</td><td class="d">A gateway terminates foreign identities and then <em>claims</em> <code>channel:id</code> to the kernel instead of proving it. Identity checking would hang on a component outside the kernel.</td></tr>
+        <tr><td>setup --portal</td><td class="d">A web portal is a network service with its own authentication — by definition a second source of permission beside the allowlist.</td></tr>
+        <tr><td>config.yaml</td><td class="d">The config carries the allowlist, and the path floor protects that exact file. Two places means two truths about who may command it.</td></tr>
+        <tr><td>--tui</td><td class="d">Pure surface. It buys optics and costs a render path plus test surface; the kernel decisions are already printed.</td></tr>
+        <tr><td>tool calling</td><td class="d">The API request carries no <code>tools</code> field. Provider-side tool calling would let the model reach an executor the kernel never saw.</td></tr>
+        <tr><td>a plan you can approve</td><td class="d">That would be consent to actions nobody has seen yet. A plan may set order and an abort condition; every step still passes the gate on its own.</td></tr>
+        </tbody>
+      </table></div>
+      <div class="note good">
+        <b>The rule behind all of them</b>
+        <p>Many views are fine. There may be exactly one dispatcher, one path from arguments
+        to targets, and one source of permission. What weakens a guardian is not the number
+        of commands — it is a second way in.</p>
+      </div>
+    </section>
+
+    <footer>
+      <a href="../">Front page</a>
+      <a href="https://github.com/talos-kernel/talos">Source</a>
+      <a href="../install.sh">install.sh, plain text</a>
+      <span>Alpha — the kernel's rules are stable, the surface around them is not.</span>
+    </footer>
+
+  </div>
+</div>
+
+<script>
+(function(){
+  var wurzel = document.documentElement, knopf = document.getElementById("theme");
+  // Der Schalter setzt data-theme, das die Media-Query in BEIDE Richtungen ueberstimmt.
+  // Ohne gespeicherte Wahl bleibt das Betriebssystem massgeblich — deshalb wird beim
+  // Laden nur gelesen, nie gesetzt.
+  try {
+    var wahl = localStorage.getItem("talos-theme");
+    if (wahl === "light" || wahl === "dark") wurzel.setAttribute("data-theme", wahl);
+  } catch (e) {}
+  knopf.addEventListener("click", function(){
+    var dunkel = wurzel.getAttribute("data-theme")
+      ? wurzel.getAttribute("data-theme") === "dark"
+      : window.matchMedia("(prefers-color-scheme: dark)").matches;
+    var neu = dunkel ? "light" : "dark";
+    wurzel.setAttribute("data-theme", neu);
+    try { localStorage.setItem("talos-theme", neu); } catch (e) {}
+  });
+})();
+</script>
+</body>
+</html>

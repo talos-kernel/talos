@@ -1,0 +1,4 @@
+# Only needed to run the proofs — the agent itself does not import these.
+# The installer pulls them in because it refuses to finish without running
+# the test suite and the adversarial suite in front of you.
+pytest>=8.0

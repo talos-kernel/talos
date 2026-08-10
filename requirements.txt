@@ -1,0 +1,6 @@
+requests>=2.31
+ddgs>=9.0          # schluessellose Websuche (MIT) — siehe web.DuckDuckGoSearch
+faster-whisper>=1.0   # lokales Hoeren (MIT) — siehe talos/hearing.py
+cryptography>=42     # Ed25519 fuer die Release-Signatur (updater.py). Bewusst eine
+                     # gepflegte Bibliothek statt eigener Krypto: das Update ist die
+                     # eine Stelle, an der ein Fehler fremden Code ausfuehrt.
