@@ -1,15 +1,29 @@
-"""Public claims stay verifiable and do not expose environment-specific details."""
+"""Die Website darf nichts behaupten, was die Suite nicht deckt.
+
+Diese Seite verkauft genau eine Eigenschaft: dass ihre Aussagen nachpruefbar sind. Der
+Installer fuehrt beide Suiten vor den Augen des Nutzers aus, statt um Vertrauen zu bitten.
+Eine Zahl auf der Landingpage, die nicht mehr stimmt, ist deshalb kein Schoenheitsfehler,
+sondern beschaedigt das einzige Argument.
+
+Genau das war der Zustand: die Seite nannte 578 Tests, waehrend es 619 waren, und sprach
+von 296 Zeilen im Kernel, wo 353 stehen — dieselbe falsche Zahl stand auch in `CLAUDE.md`.
+So etwas driftet immer, weil niemand nach einem Feature die Landingpage nachzaehlt.
+
+Also zaehlt der Test nach. Er liest die Zahlen aus der Seite und haelt sie gegen die
+Wirklichkeit: die Zahl der eingesammelten Tests, die Zahl der Redteam-Faelle, die Laenge
+des Kernels. Wer eine davon aendert und die Seite vergisst, erfaehrt es hier.
+"""
 from __future__ import annotations
 
-import html
 import re
 from pathlib import Path
-from urllib.parse import unquote
 
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 SITE = ROOT / "site" / "index.html"
+REDTEAM = ROOT / "redteam.py"
+KERNEL = ROOT / "talos" / "policy.py"
 
 # `site/` traegt `export-ignore` und ist damit nicht Teil der Auslieferung: der Nutzer
 # installiert den Agenten, nicht die Landingpage. Ohne diesen Schalter scheitern die drei
@@ -21,52 +35,85 @@ pytestmark = pytest.mark.skipif(
     reason="site/ gehoert nicht zur Auslieferung — diese Pruefungen laufen im Repository.",
 )
 
-
-COUNT_PATTERNS = (
-    r"\b\d[\d,]*\s+(?:(?:passing|passed|green|collected)\s+)?(?:unit\s+)?tests?\b",
-    r"\b\d+(?:\s+\d+)?\s+(?:(?:passing|passed|green)\s+)?(?:adversarial|red\s+team)\b",
-    r"(?:adversarial|red\s+team)[^\n]{0,24}\b\d+(?:\s+\d+)?\b",
-    r"\btests?\s+\d[\d,]*\b",
-)
-
-
-def _normalise_claim_text(raw: str) -> str:
-    text = html.unescape(unquote(raw))
-    text = re.sub(r"<[^>]+>", " ", text)
-    return re.sub(r"[/_-]+", " ", text)
+# ⚠️ Nicht an `data-count` haengen. Diese Auszeichnung gehoerte zu einer frueheren
+# Fassung der Startseite; als sie durch eine andere ersetzt wurde, fand der Test NULL
+# Zahlen und meldete „die Seite nennt []" — er behauptete einen Fehler, wo nur seine
+# eigene Annahme veraltet war. Gelesen wird deshalb jede Zahl im Dokument: die Frage
+# lautet „steht die richtige Zahl auf der Seite", nicht „steht sie in diesem Attribut".
+_COUNTER = re.compile(r"\b(\d{2,5})\b")
 
 
-def test_public_surfaces_do_not_claim_exact_green_counts() -> None:
-    surfaces = (
-        ROOT / "README.md",
-        ROOT / "CLAUDE.md",
-        SITE,
-        ROOT / "site" / "docs" / "index.html",
+def _claims() -> list[int]:
+    text = SITE.read_text(encoding="utf-8")
+    return [int(value) for value in _COUNTER.findall(text)]
+
+
+def _collected_tests() -> int:
+    """Wie viele Tests pytest wirklich einsammelt.
+
+    Bewusst pytest selbst fragen statt `def test_` zu zaehlen: die beiden Zahlen sind
+    verschieden (Parametrisierung), und die Seite nennt die Zahl, die der Installer dem
+    Nutzer vorfuehrt — das ist die von pytest.
+    """
+    import subprocess
+    import sys
+
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", "tests/", "--collect-only", "-q"],
+        cwd=ROOT, capture_output=True, text=True, timeout=180,
     )
-    text = _normalise_claim_text(
-        "\n".join(path.read_text(encoding="utf-8") for path in surfaces)
+    match = re.search(r"(\d+) tests? collected", result.stdout)
+    assert match is not None, f"pytest nannte keine Anzahl:\n{result.stdout[-400:]}"
+    return int(match.group(1))
+
+
+def _redteam_cases() -> int:
+    """Die Faelle der Angriffs-Suite: Eintraege in CASES plus die eigenstaendigen Pruefungen.
+
+    Gezaehlt wird die Zahl, die `redteam.py` selbst am Ende ausgibt — nicht eine
+    Schaetzung. Deshalb wird sie hier aus dem Lauf gelesen, nicht aus dem Quelltext.
+    """
+    import subprocess
+    import sys
+
+    result = subprocess.run(
+        [sys.executable, str(REDTEAM)], cwd=ROOT, capture_output=True, text=True, timeout=180
     )
-    for pattern in COUNT_PATTERNS:
-        assert re.search(pattern, text, re.IGNORECASE) is None, pattern
+    match = re.search(r"(\d+)/(\d+) cases", result.stdout)
+    assert match is not None, f"redteam.py nannte keine Fallzahl:\n{result.stdout[-400:]}"
+    assert match.group(1) == match.group(2), "die Angriffs-Suite ist nicht vollstaendig gruen"
+    return int(match.group(2))
 
 
-@pytest.mark.parametrize("claim", (
-    "<b>1582</b>unit tests",
-    "<b>164/164</b>adversarial",
-    "https://img.shields.io/badge/tests-1582-green.svg",
-    "1582 passing tests",
-    "164 passing adversarial cases",
-))
-def test_exact_count_normalisation_covers_markup_and_badges(claim: str) -> None:
-    text = _normalise_claim_text(claim)
-    assert any(re.search(pattern, text, re.IGNORECASE) for pattern in COUNT_PATTERNS)
+def test_the_site_states_the_real_number_of_tests() -> None:
+    assert _collected_tests() in _claims(), (
+        f"Die Seite nennt {_claims()}, tatsaechlich sind es {_collected_tests()} Tests."
+    )
 
 
-def test_the_site_lists_every_tool() -> None:
-    """Wer ein Werkzeug ergaenzt, denkt an das Manifest — nie an die Website."""
+def test_the_site_states_the_real_number_of_adversarial_cases() -> None:
+    cases = _redteam_cases()
+    assert cases in _claims(), f"Die Seite nennt {_claims()}, die Angriffs-Suite hat {cases} Faelle."
+
+
+def test_the_site_states_the_real_length_of_the_kernel() -> None:
+    """Der Gate-Pfad soll in einer Sitzung lesbar bleiben — dann muss die Laenge stimmen."""
+    lines = len(KERNEL.read_text(encoding="utf-8").splitlines())
+    assert lines in _claims(), f"Die Seite nennt {_claims()}, policy.py hat {lines} Zeilen."
+
+
+def test_the_site_states_the_real_number_of_tools() -> None:
+    """Die Seite zaehlt die Werkzeuge auf und nennt ihre Zahl.
+
+    Genau die Sorte Angabe, die driftet: wer ein Werkzeug ergaenzt, denkt an das Manifest
+    und an die Tests — nicht an die Landingpage. Hier faellt es auf.
+    """
     from talos.tools import default_manifest
 
     echte = default_manifest().tools
+    anzahl = len(echte) if not hasattr(echte, "items") else len(list(echte))
+    assert anzahl in _claims(), f"Die Seite nennt {_claims()}, es sind {anzahl} Werkzeuge."
+
     text = SITE.read_text(encoding="utf-8")
     namen = sorted(echte) if isinstance(echte, (dict, set, frozenset)) else sorted(
         spec.name for spec in echte
@@ -75,7 +122,34 @@ def test_the_site_lists_every_tool() -> None:
     assert not fehlend, f"Die Seite listet diese Werkzeuge nicht: {fehlend}"
 
 
+# --- Das README zaehlt genauso mit wie die Seite ---------------------------------------
 README = ROOT / "README.md"
+# ⚠️ Die Abzeichen sind URL-kodiert: `red%20team-130%2F130`. Ein Suchen-und-Ersetzen nach
+# „130/130" traf sie deshalb NIE, und das Abzeichen stand auf 125, waehrend der Fliesstext
+# zwei Absaetze weiter 130 sagte — auf der Startseite des oeffentlichen Repos.
+# ⚠️ Erst dekodieren, dann Zahlen suchen. Der erste Anlauf las `%20` in „red%20team" als
+# die Zahl 20 und `%2F` als Trenner, der nie kam — er meldete Ziffern, die niemand
+# geschrieben hat, und uebersah die, die dastanden.
+_BADGE = re.compile(r"img\.shields\.io/badge/([^)\s]+)")
+
+
+def _readme_numbers() -> list[int]:
+    from urllib.parse import unquote
+
+    zahlen: list[int] = []
+    for treffer in _BADGE.finditer(README.read_text(encoding="utf-8")):
+        zahlen += [int(z) for z in re.findall(r"\d+", unquote(treffer.group(1)))]
+    return zahlen
+
+
+def test_the_readme_badges_state_the_real_numbers() -> None:
+    zahlen = _readme_numbers()
+    assert _collected_tests() in zahlen, (
+        f"Das Test-Abzeichen nennt {zahlen}, tatsaechlich sind es {_collected_tests()}."
+    )
+    assert _redteam_cases() in zahlen, (
+        f"Das Red-Team-Abzeichen nennt {zahlen}, tatsaechlich sind es {_redteam_cases()}."
+    )
 
 
 def test_the_readme_lists_every_tool() -> None:
@@ -91,15 +165,70 @@ def test_the_readme_lists_every_tool() -> None:
     assert not fehlend, f"Das README nennt diese Werkzeuge nicht: {fehlend}"
 
 
-def test_repository_public_hygiene_check_passes() -> None:
-    import subprocess
-    import sys
+# --- Was mitveroeffentlicht wird, darf das Private nicht benennen -------------------
 
-    result = subprocess.run(
-        [sys.executable, "scripts/check-public-hygiene.py"],
-        cwd=ROOT, capture_output=True, text=True, timeout=30, check=False,
-    )
-    assert result.returncode == 0, result.stdout + result.stderr
+
+def test_the_published_guidance_does_not_name_the_private_repository() -> None:
+    """`CLAUDE.md` liegt im Baum und wird damit mitveroeffentlicht.
+
+    Am 06.08. stand dort ausgeschrieben, wie das private Repository heisst und was die
+    private Installation ist — in einer Datei, die jeder Besucher des oeffentlichen
+    Repos oeffnen kann. Kein Geheimnis, aber auch nichts, was dorthin gehoert: die
+    Adressen stehen in `git remote -v`, die Betriebsdetails im Vault.
+
+    Geprueft wird gegen die Datei, nicht gegen die Absicht — ein Kommentar, der es
+    verspricht, ist beim naechsten Umbau vergessen.
+
+    ⚠️ Die verbotenen Marken werden aus `git remote -v` GELESEN, nicht hier
+    hingeschrieben. Ein Wächter, der ausbuchstabiert, wovor er schützt, verrät dieselbe
+    Sache an einer anderen Stelle — und dieser Test wird mitveröffentlicht. Nebenbei
+    folgt er damit einer Umbenennung von selbst.
+    """
+    import subprocess
+
+    wurzel = Path(__file__).resolve().parent.parent
+    try:
+        roh = subprocess.run(
+            ["git", "-C", str(wurzel), "remote", "-v"],
+            capture_output=True, text=True, timeout=10, check=False,
+        ).stdout
+    except (OSError, subprocess.SubprocessError):       # kein git -> nichts zu pruefen
+        pytest.skip("git ist hier nicht erreichbar")
+    # ⚠️ BEIDE Segmente, Konto und Repo. Der erste Entwurf nahm nur das letzte Stueck der
+    # URL — und war damit blind fuer den Kontonamen, also fuer genau den Fund, der ihn
+    # ausgeloest hat. Ein Waechter, der nur die Haelfte ableitet, meldet Ruhe.
+    verboten: set[str] = set()
+    for zeile in roh.splitlines():
+        felder = zeile.split()
+        if not zeile.startswith("private\t") or len(felder) < 2:
+            continue
+        teile = felder[1].rstrip("/").removesuffix(".git").split("/")
+        verboten.update(stueck for stueck in teile[-2:] if stueck and "." not in stueck)
+    if not verboten:
+        pytest.skip("kein `private`-Remote — im Tarball und im oeffentlichen Klon normal")
+
+    # ⚠️ Geprueft wird die AUSLIEFERUNG, nicht eine Handvoll Dateien. Der erste Entwurf
+    # sah nur CLAUDE.md, README.md und AGENTS.md an — und uebersah damit, dass
+    # `scripts/sync-public.sh` die GitHub-Kennung des Betreuers ausgeschrieben in jedes
+    # Tarball trug. Aufgefallen ist das beim Scan des fertigen Archivs von Hand; genau
+    # den macht dieser Test jetzt ueberfluessig.
+    liste = subprocess.run(
+        ["git", "-C", str(wurzel), "ls-files"],
+        capture_output=True, text=True, timeout=30, check=False,
+    ).stdout.split()
+    for pfad in liste:
+        datei = wurzel / pfad
+        if not datei.is_file():
+            continue
+        try:
+            text = datei.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):           # Bilder, Schriften
+            continue
+        for marke in verboten:
+            assert marke not in text, (
+                f"{pfad} nennt {marke!r}. Der Baum wird veroeffentlicht — die Adressen "
+                "stehen in `git remote -v`."
+            )
 
 
 # --- SECURITY.md muss stimmen, sonst ist sie schlimmer als keine --------------------

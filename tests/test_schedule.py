@@ -1,7 +1,7 @@
 """Zeitgesteuerte Auftraege — und die Decke, die sie schwaecher macht als getippte.
 
-Der Kern ist nicht der Zeitplan, sondern was ein Lauf OHNE Menschen darf. Hermes und
-OpenClaw lassen einen Cron-Job mit voller Macht laufen; hier muss er weniger duerfen,
+Der Kern ist nicht der Zeitplan, sondern was ein Lauf OHNE Menschen darf. Verbreitete
+Agenten-Frameworks lassen einen Cron-Job mit voller Macht laufen; hier muss er weniger duerfen,
 sonst waere die zeitgesteuerte Ausfuehrung ein zweiter Erlaubnisweg neben dem Kernel.
 """
 from __future__ import annotations

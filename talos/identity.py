@@ -3,7 +3,7 @@
 `SOUL.md` ist die Quelle. Der Name steht in ihrer ersten Ueberschrift; wer den Agenten
 umtaufen will, aendert diese eine Zeile — und zwar nur diese. Kein zweiter Ort, an dem
 „Talos" noch einmal steht und beim Umbenennen vergessen wird, und kein Neustart: die
-Datei wird bei jeder Nachricht neu gelesen und inhaltlich verglichen (siehe `_fresh`).
+Datei wird bei jeder Nachricht gegen ihren Zeitstempel geprueft (siehe `_fresh`).
 
 Eigenes Modul, weil zwei sehr verschiedene Schichten den Namen brauchen: der Reasoner
 (fuer den Prompt) und der Telegram-Kanal (fuer die Kopfzeile der Statusanzeige). Laege
@@ -12,7 +12,6 @@ es hier nicht geben soll.
 """
 from __future__ import annotations
 
-import hashlib
 import re
 from pathlib import Path
 
@@ -36,27 +35,31 @@ _HEADING = re.compile(r"^#\s+(.+?)\s*$", re.MULTILINE)
 # und der Preambel jedes Reasoner-Zugs. Beides einmal beim Start zu lesen war der Fehler,
 # der zuletzt live sichtbar wurde: nach einer Umbenennung in SOUL.md stand in der Anzeige
 # weiter der alte Name, waehrend die Quelle laengst den neuen trug — und der Agent stellte
-# sich mit einem Namen vor, den es nicht mehr gab. Deshalb wird der gelesene Inhalt mit
-# dem letzten Inhalt verglichen: Groesse und Zeitstempel allein reichen nicht, weil ein
-# schneller Schreibvorgang beides unveraendert lassen kann.
+# sich mit einem Namen vor, den es nicht mehr gab. Der Deckel ist deshalb der Dateistempel,
+# nicht die Prozesslaufzeit: eine Aenderung wirkt sofort, unveraendert kostet sie einen
+# `stat` statt eines Lesevorgangs.
 #
 # Kein Sicherheitsproblem: SOUL.md liegt im Persistenz-Floor, jede Aenderung geht durch
 # die Freigabe des Betreibers. Das Nachladen macht keinen Weg auf, es nimmt nur den Neustart weg.
-_cache: dict[str, tuple[bytes, str, str]] = {}
+_cache: dict[str, tuple[tuple[int, int], str, str]] = {}
 
 
 def _fresh(target: Path) -> tuple[str, str] | None:
-    """(Persona, Name) — aus dem Cache, wenn der Dateiinhalt unveraendert ist."""
+    """(Persona, Name) — aus dem Cache, wenn die Datei sich nicht geruehrt hat."""
+    try:
+        stamp = target.stat()
+    except OSError:
+        return None
+    key = (stamp.st_mtime_ns, stamp.st_size)
+    hit = _cache.get(str(target))
+    if hit is not None and hit[0] == key:
+        return hit[1], hit[2]
     try:
         text = target.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
         return None
-    fingerprint = hashlib.sha256(text.encode("utf-8")).digest()
-    hit = _cache.get(str(target))
-    if hit is not None and hit[0] == fingerprint:
-        return hit[1], hit[2]
     soul = text.strip()[:MAX_SOUL_CHARS] or FALLBACK_PREAMBLE
-    _cache[str(target)] = (fingerprint, soul, _name_from(text))
+    _cache[str(target)] = (key, soul, _name_from(text))
     return soul, _cache[str(target)][2]
 
 

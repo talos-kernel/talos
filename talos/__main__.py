@@ -247,7 +247,7 @@ def run(once: bool = False, ask: str = "", chat: bool = False) -> None:
     # Die dritte Decke. Sie wirkt nur, solange ein zeitgesteuerter Lauf laeuft —
     # dann wird aus jedem `NEEDS_HUMAN` ein `DENY`, weil niemand da ist, der
     # zustimmen koennte. Ein unbeaufsichtigter Lauf darf damit WENIGER als ein
-    # getippter; bei Hermes und OpenClaw ist es umgekehrt gleich viel.
+    # getippter; bei verbreiteten Agenten-Frameworks ist es umgekehrt gleich viel.
     unattended = UnattendedCeiling()
     schedules = ScheduleStore(SCHEDULE_DB)
     # Die vierte Decke. Sie wirkt nur waehrend eines delegierten Laufs — dann darf

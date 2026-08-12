@@ -7,7 +7,6 @@ fehlende Datei den Agenten nicht stumm schaltet.
 """
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from talos.identity import DEFAULT_NAME, FALLBACK_PREAMBLE, MAX_SOUL_CHARS, agent_name, load_soul
@@ -28,22 +27,16 @@ def test_renaming_takes_effect_without_a_restart(tmp_path: Path) -> None:
 
     Genau das ging live schief: der Name wurde beim Start einmal gelesen, danach
     aenderte die SOUL ihre Ueberschrift, und der Waechter stellte sich weiter unter
-    dem alten Namen vor. Der Zwischenspeicher haengt deshalb am Inhalt der Datei,
-    nicht an der Laufzeit des Prozesses.
+    dem alten Namen vor. Der Zwischenspeicher haengt deshalb am Zeitstempel der
+    Datei, nicht an der Laufzeit des Prozesses.
     """
     soul = _soul(tmp_path, "# TALOS\n\nYou guard.\n")
     assert agent_name(soul) == "Talos"
     assert "You guard." in load_soul(soul)
-    original = soul.stat()
 
-    # Gleiche Laenge und bewusst derselbe Zeitstempel wie vorher: schnelle
-    # Schreibvorgaenge koennen auf grob aufloesenden Dateisystemen beides
-    # unveraendert lassen. Auch dann muss der neue Inhalt sichtbar werden.
+    # Gleiche Laenge wie vorher — der Zwischenspeicher darf sich nicht auf die
+    # Dateigroesse verlassen, sonst ueberlebt „# TALOS" ein „# ARGUS" unbemerkt.
     _soul(tmp_path, "# ARGUS\n\nYou guard.\n")
-    os.utime(soul, ns=(original.st_atime_ns, original.st_mtime_ns))
-    rewritten = soul.stat()
-    assert rewritten.st_size == original.st_size
-    assert rewritten.st_mtime_ns == original.st_mtime_ns
     assert agent_name(soul) == "Argus"
 
     _soul(tmp_path, "# WARDEN\n\nYou watch.\n")

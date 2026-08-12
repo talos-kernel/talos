@@ -1,7 +1,7 @@
 """Zeitgesteuerte Auftraege — und warum sie WENIGER duerfen als getippte.
 
-Die groesste Luecke gegenueber Hermes und OpenClaw, von beiden unabhaengig als erste
-genannt: dort laufen Cron-Jobs, Heartbeats und Watcher ohne Anstoss. Die entscheidende Formulierung
+Die groesste Luecke gegenueber verbreiteten Agenten-Frameworks: dort laufen
+Cron-Jobs, Heartbeats und Watcher ohne Anstoss. Die entscheidende Formulierung
 trifft es — „Talos wartet auf eine Nachricht, sonst existiert der Tag fuer ihn nicht."
 
 Der naheliegende Weg waere, es genauso zu machen. Genau das geht hier nicht, und der
@@ -23,7 +23,7 @@ Drei Antworten waeren moeglich gewesen, zwei davon falsch:
      dem Grund des Kernels. Der Betreiber entscheidet danach wach und im Kontext.
 
 Wir nehmen die dritte. Damit ist ein unbeaufsichtigter Lauf **strukturell schwaecher**
-als ein beaufsichtigter — die Umkehrung dessen, was OpenClaw und Hermes tun, wo ein
+als ein beaufsichtigter — die Umkehrung dessen, was verbreitete Agenten-Frameworks tun, wo ein
 Cron-Job dieselbe (volle) Macht hat wie ein getippter Befehl. Das ist der Punkt, an dem
 Talos nicht gleichzieht, sondern vorbeigeht: **Autonomie ohne Machtzuwachs.**
 

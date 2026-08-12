@@ -1,6 +1,6 @@
 """Append-only Event-Log (SQLite/WAL) mit Idempotenz.
 
-Kernlehre aus Hermes + OpenClaw: durabler Event-Log, überlebt Reboot/OOM.
+Kernlehre verbreiteter Agenten-Runtimes: durabler Event-Log, überlebt Reboot/OOM.
 Idempotency-Key verhindert Doppelverarbeitung derselben Telegram-Update.
 
 Seit dem Worker-Thread schreiben zwei Threads: der Poll-Thread (Kommandos, Freigaben)

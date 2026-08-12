@@ -1410,7 +1410,7 @@ failures += key_failures
 
 # --- Angriff auf die zeitgesteuerte Ausfuehrung ------------------------------------
 # Die Frage, an der alles haengt: erlangt ein Auftrag, der ohne Menschen laeuft, mehr
-# Rechte als derselbe Auftrag im Chat? Bei Hermes/OpenClaw ist die Antwort "gleich viel"
+# Rechte als derselbe Auftrag im Chat? Bei verbreiteten Agenten-Frameworks ist die Antwort "gleich viel"
 # — hier muss sie "weniger" lauten, sonst waere der Zeitplan ein zweiter Erlaubnisweg.
 from talos.autonomy import AutonomyGovernor as _AG, GovernedKernel as _GK  # noqa: E402
 from talos.schedule import UnattendedCeiling as _UC  # noqa: E402

@@ -1,6 +1,6 @@
 """Verifier — TOCTOU-Bindung vor Ausführung + Ergebnisprüfung danach.
 
-Vorbild ist OpenClaws Exec-Approval-Binding (aus der Codebasen-Analyse): der Zustand einer
+Vorbild ist das verbreitete Exec-Approval-Binding: der Zustand einer
 Zieldatei wird zum Entscheidungszeitpunkt als realpath + sha256 gebunden und **unmittelbar vor
 dem Ausführen erneut geprüft**. Weicht er ab, wird fail-closed abgebrochen — so kann zwischen
 Freigabe und Spawn nichts untergeschoben werden.

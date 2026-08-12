@@ -8,6 +8,8 @@ Versions are alpha: the kernel's rules are stable, the surface around them is no
 
 ## [Unreleased]
 
+## [0.9.4-alpha] — 2026-08-12
+
 ### Fixed
 
 - Hermes one-shot runs now keep `PLAN` and `TOOL_CALL` machine output in the final-answer

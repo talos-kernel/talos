@@ -30,7 +30,7 @@ from .usage import Run, UsageMeter
 # wofuer man deployen sollte: the operator aendert die Datei, fertig. Gelesen wird pro Zug
 # und nicht beim Import — eine beim Start eingefrorene Persona hiess, dass der Agent nach
 # einer Umbenennung weiter unter dem alten Namen antwortete, den seine eigene Quelle
-# nicht mehr trug. `load_soul` vergleicht den Inhalt; unveraendert bleibt der Parse-Cache aktiv.
+# nicht mehr trug. `load_soul` prueft den Zeitstempel; unveraendert kostet das einen `stat`.
 
 # Der Reasoner schlägt Werkzeuge nur VOR — ausgeführt wird nichts hier. Braucht die Aufgabe
 # ein Werkzeug, gibt das Modell GENAU eine einzelne Zeile `TOOL_CALL: {…}` (einzeiliges JSON)

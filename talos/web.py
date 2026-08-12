@@ -317,15 +317,11 @@ def _address_refusal(raw: str) -> str | None:
         return f"not a usable address: {raw}"
     # IPv4-in-IPv6 (`::ffff:127.0.0.1`) und 6to4 verstecken eine IPv4-Adresse in einer
     # IPv6-Huelle. Beide Formen muessen geprueft werden, sonst ist Loopback per v6 offen.
-    # Check embedded IPv4 addresses first. On Python versions where an
-    # IPv4-mapped loopback is classified as `private` on the IPv6 wrapper,
-    # doing so preserves the more specific loopback verdict.
-    candidates: list[object] = []
+    candidates = [ip]
     for attribute in ("ipv4_mapped", "sixtofour"):
         embedded = getattr(ip, attribute, None)
         if embedded is not None:
             candidates.append(embedded)
-    candidates.append(ip)
     if getattr(ip, "teredo", None) is not None:
         return f"teredo-tunnelled address: {raw}"
     for candidate in candidates:

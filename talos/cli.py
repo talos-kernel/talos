@@ -1,6 +1,6 @@
 """Die Befehlszeile — und warum sie kurz bleibt.
 
-Hermes hat rund siebzig Unterbefehle, OpenClaw rund fuenfzig. Beide sind darueber
+Verbreitete Agenten-CLIs tragen fuenfzig bis siebzig Unterbefehle. Sie sind darueber
 gewachsen und tragen inzwischen Befehle, die sich gegenseitig erklaeren muessen. Talos
 hat sieben, und jeder beantwortet eine Frage, die ein Betreiber wirklich stellt:
 

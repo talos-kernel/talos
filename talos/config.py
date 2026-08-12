@@ -72,7 +72,7 @@ ENTITIES_FILE = DATA_DIR / "entities.json"
 # gehoeren und ein Update sie mitnimmt statt sie zu ersetzen.
 VOICE_DIR = DATA_DIR / "voices"
 PIPER_BIN = str(INSTALL_DIR / ".venv" / "bin" / "piper")
-VAULT_DIR = HOME / "obsidian-vault"
+VAULT_DIR = HOME / ".talos" / "vault"
 QMD_BIN = str(HOME / ".local" / "bin" / "qmd")
 HERMES_BIN = str(HOME / ".local" / "bin" / "hermes")
 DEFAULT_MODEL_PROVIDER = "openai-codex"

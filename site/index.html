@@ -282,19 +282,19 @@ html,body{max-width:100%; overflow-x:hidden}
       <span>Classification: public</span>
       <span>Date: 2026-08-05</span>
     </div>
-    <h1><span id="type1">An agent you can hand a shell to.</span><span class="cursor" id="cur"></span></h1>
+    <h1><span id="type1"></span><span class="cursor" id="cur"></span></h1>
     <p class="lede">Talos executes tools only after a <strong>deterministic security
     kernel</strong> has ruled on the action. The model proposes. It never decides.
     Every effect is authorised individually — <strong>bound to its exact arguments,
     valid once, for thirty seconds.</strong></p>
     <div class="spec-row">
-      <div class="spec"><b>full</b>unit suite</div>
-      <div class="spec"><b>real</b>adversarial suite</div>
-      <div class="spec"><b>small</b>gate path</div>
-      <div class="spec"><b>all</b>tools gated</div>
+      <div class="spec"><b>1589</b>unit tests</div>
+      <div class="spec"><b>164/164</b>adversarial</div>
+      <div class="spec"><b>528</b>lines · gate path</div>
+      <div class="spec"><b>18</b>gated tools</div>
       <div class="spec"><b>0</b>default identities</div>
     </div>
-    <div class="stamp s-hero" id="heroStamp">Verified in CI</div>
+    <div class="stamp s-hero" id="heroStamp">Verified · 164/164</div>
   </div>
 </div>
 
@@ -377,7 +377,7 @@ html,body{max-width:100%; overflow-x:hidden}
 
 <section id="tools">
   <div class="sheet">
-    <h2>The instruments</h2>
+    <h2>The instruments <span class="cnt">18</span></h2>
     <p class="lede">Every one of them passes the gate. A tool without an entry in
     <code>TARGET_EXTRACTORS</code> is <strong>DENY by construction</strong> — not by a rule
     somebody remembered to write, but because there is nothing to judge it on.</p>
@@ -434,8 +434,8 @@ html,body{max-width:100%; overflow-x:hidden}
 <pre id="inst"><span class="c"># the installer proves the claims before your eyes, then starts nothing</span>
 <span class="p">curl</span> -fsSL https://talos-agent.ch/install.sh | <span class="p">bash</span>
 
-<span class="c">▸ Running the full test suite</span>   <span class="ok">complete</span> <span class="c">— platform skips are reported, never hidden</span>
-<span class="c">▸ Running the adversarial suite</span> <span class="ok">complete</span> <span class="c">— any failure aborts the install</span>
+<span class="c">▸ Running the test suite</span>       <span class="ok">1589 collected</span> <span class="c">— pytest prints the platform-specific pass/skip breakdown</span>
+<span class="c">▸ Running the adversarial suite</span> <span class="ok">164 OK</span> <span class="c">— any failure aborts the install</span>
 
 <span class="ok">Done.</span> Talos is in ~/talos — and it is <b>not running</b>.
 <span class="c">That is not a forgotten step. The switch is yours.</span></pre>

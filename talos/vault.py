@@ -1,4 +1,4 @@
-"""Secure runners and shared path rules for the Obsidian notes vault.
+"""Secure runners and shared path rules for the markdown notes vault.
 
 Path validation lives here so the policy kernel and the filesystem runners derive the
 same canonical target.  qmd is always invoked with an argv list; no user input reaches
@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Callable, Mapping
 from urllib.parse import unquote, urlsplit
 
-DEFAULT_VAULT_DIR = Path.home() / "obsidian-vault"
+DEFAULT_VAULT_DIR = Path.home() / ".talos" / "vault"
 DEFAULT_QMD_BIN = str(Path.home() / ".local" / "bin" / "qmd")
 QMD_COLLECTION = "obsidian"
 
