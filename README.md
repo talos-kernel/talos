@@ -495,10 +495,13 @@ is data, bounded like any tool result, never an instruction.
 ## Identity
 
 `SOUL.md` carries the agent's **name and character**. Its first heading is the name —
-change `# TALOS` to `# ARGUS`, restart, and the agent is renamed everywhere, including the
-header of the live display. There is no second place where the name lives.
+change `# TALOS` to `# ARGUS` and the agent is renamed everywhere, including the header
+of the live display. There is no second place where the name lives.
 
-The file also sets the language rule: the agent answers in the language you wrote in.
+`AGENTS.md` carries durable operating discipline; `USER.md` carries stable preferences
+for the operator. All three reload on the next message, have explicit context limits, are
+protected by the persistence floor, and survive updates as operator-owned state. Missing
+`AGENTS.md` or `USER.md` is harmless; a missing or broken `SOUL.md` uses the safe fallback.
 
 ## What a run looks like
 

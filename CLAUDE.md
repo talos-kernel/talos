@@ -7,7 +7,8 @@ Guidance for Claude Code (and any other coding agent) working in this repository
 An autonomous agent that takes instructions over a chat channel, reasons with a language
 model, and executes tools — but only after a deterministic security kernel has ruled on
 the action. Full architecture in `README.md`. The agent's name and character live in
-`SOUL.md`.
+`SOUL.md`; durable operating discipline lives in `AGENTS.md`, and stable operator
+preferences live in `USER.md`. All three are operator-owned prompt state and reload live.
 
 | | |
 |---|---|

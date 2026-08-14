@@ -31,9 +31,9 @@ Wem welcher Pfad gehoert
     <prefix>/talos.env      Konfiguration des Betreibers (Bot-Token, Allowlist, 0600)
     <prefix>/data/          Event-Log und Snapshots (0700) — die Belege ueber alles Getane
     <prefix>/workspace/     Arbeitsverzeichnis des Agenten
-    <prefix>/SOUL.md        Name und Wesen des Agenten. Sieht aus wie Auslieferung, ist
-                            es nicht: die erste Ueberschrift ist der NAME. Wer keine
-                            eigene hat, behaelt die ausgelieferte.
+    <prefix>/SOUL.md        Name und Wesen des Agenten; erste Ueberschrift = NAME
+    <prefix>/AGENTS.md      dauerhafte Arbeitsdisziplin
+    <prefix>/USER.md        stabile Praeferenzen des Betreibers
         gehoeren dem Betreiber. Sie werden nie ersetzt, sondern in den neuen Baum
         KOPIERT (nicht verschoben) — nur so bleibt der alte Baum vollstaendig und der
         Rueckweg wirklich trivial. Nach dem Umschalten schreibt der Agent in die Kopie;
@@ -141,13 +141,11 @@ MAX_DOWNLOAD_BYTES = 64 * 1024 * 1024  # eine Auslieferung ist klein; alles daru
 CHANGELOG_MAX_LINES = 40
 LIVE_WINDOW_S = 300  # frisch geschriebenes Event-Log -> da laeuft vermutlich einer
 VENV_PYTHON = Path(".venv") / "bin" / "python"
-# ⚠️ `SOUL.md` gehoert hierher, obwohl es aussieht wie eine Datei der Auslieferung.
-# Seine erste Ueberschrift IST der Name des Agenten, und der Rest ist sein Wesen und
-# seine Sprachregel. Kaeme es aus dem Tarball, wuerde ein Update jede benannte
-# Installation still auf die neutrale Fassung zuruecksetzen — der Agent hiesse danach
-# anders und spraeche anders, ohne dass jemand das getippt haette. Wer keine eigene hat,
-# behaelt die ausgelieferte: `_carry_state` ueberspringt, was nicht existiert.
-STATE_PATHS = ("talos.env", "data", "workspace", "SOUL.md")
+# ⚠️ Die drei Markdown-Dateien gehoeren dem Betreiber, obwohl sie wie Dateien der
+# Auslieferung aussehen. SOUL traegt Name/Wesen, AGENTS die dauerhafte Arbeitsdisziplin,
+# USER die stabilen Praeferenzen. Ein Update darf keine davon still zuruecksetzen. Wer
+# eine Quelle noch nicht hat, behaelt die ausgelieferte: `_carry_state` ueberspringt sie.
+STATE_PATHS = ("talos.env", "data", "workspace", "SOUL.md", "AGENTS.md", "USER.md")
 
 # Version aus einer fremden Datei landet in einer URL UND in einem Pfad neben der
 # Installation. Ohne diese Schranke waere `../../..` ein Schreibzugriff ausserhalb.
@@ -582,6 +580,16 @@ def _carry_state(plan: _Plan, out: _Writer) -> None:
         if not source.exists():
             continue
         destination = plan.staging / name
+        # Operatorzustand gewinnt auch bei einem Typkonflikt mit dem Release. Ohne
+        # diese Bereinigung kopiert `copy2(file, existing_dir)` still nach
+        # `dir/file`; ein geliefertes `AGENTS.md/` machte die echte AGENTS.md damit
+        # nach dem Switch unsichtbar. Symlinks werden immer entfernt, nie verfolgt.
+        if destination.is_symlink():
+            destination.unlink()
+        elif source.is_dir() and destination.exists() and not destination.is_dir():
+            destination.unlink()
+        elif not source.is_dir() and destination.is_dir():
+            shutil.rmtree(destination)
         if source.is_dir():
             # ⚠️ `symlinks=True` ist hier kein Detail. Ohne das FOLGT `copytree` jedem
             # Link und kopiert dessen Ziel — ein Link, dessen Ziel nicht mehr existiert,

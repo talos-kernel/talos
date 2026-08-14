@@ -42,8 +42,8 @@ import time
 from typing import Any, Callable, Iterable, Mapping, Protocol
 
 from .credentials import CredentialStore, Route
-from .identity import load_soul
-from .reasoner import CANCELLED_TEXT, TOOL_PROTOCOL, skills_block
+from . import instructions
+from .reasoner import CANCELLED_TEXT, PLAN_PROTOCOL, TOOL_PROTOCOL, skills_block
 from .stream import OnText
 from .usage import Run, UsageMeter
 
@@ -296,14 +296,17 @@ class ApiReasoner:
     def _compose(self, prompt: str) -> tuple[str, str]:
         """(stehende Anweisungen, Nachricht) — pro Zug gelesen, nicht beim Start eingefroren.
 
-        Inhalt und Reihenfolge sind dieselben wie im CLI-Pfad (`load_soul()` +
-        `TOOL_PROTOCOL` + Skill-Katalog + Nachricht), aber die stehenden Anweisungen gehen
-        ins System-Feld statt in den Nutzerzug. Grund ist nicht Kosmetik: liegen Persona,
-        Werkzeugprotokoll und die Nachricht des Betreibers im selben Nutzerzug, kann das
-        Modell beides nicht mehr auseinanderhalten — und Text, den ein Fremder in die
-        Nachricht schreibt, sieht dann aus wie eine stehende Regel.
+        Derselbe Builder wie im CLI-Pfad ordnet SOUL, AGENTS, USER, Werkzeug-/Planprotokoll
+        und Skill-Katalog. Hier gehen die stehenden Anweisungen ins System-Feld statt in
+        den Nutzerzug. Grund ist nicht Kosmetik: liegen Persona, Werkzeugprotokoll und die
+        Nachricht des Betreibers im selben Nutzerzug, kann das Modell beides nicht mehr
+        auseinanderhalten — und fremder Nachrichtentext sieht dann wie eine stehende Regel aus.
         """
-        return f"{load_soul()}{TOOL_PROTOCOL}{self._skills_text()}", prompt
+        return instructions.assemble_system_prompt(
+            tool_protocol=TOOL_PROTOCOL,
+            plan_protocol=PLAN_PROTOCOL,
+            skills=self._skills_text(),
+        ), prompt
 
     def _route(self) -> Route:
         """Schluessel und Adresse dieses Anbieters — bei JEDEM Aufruf frisch aufgeloest.

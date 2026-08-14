@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from .policy import ToolRequest
 
@@ -342,6 +343,7 @@ def make_entity_status_runner(
     registry: EntityRegistry,
     *,
     web_fetch: Callable[[ToolRequest], str],
+    web_fetch_http: Callable[[ToolRequest], str] | None = None,
     run: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
     uid: Callable[[], int] = os.getuid,
     clock: Callable[[], float] = time.time,
@@ -356,7 +358,15 @@ def make_entity_status_runner(
             raise ValueError("unknown entity or no configured status source")
         source = entity.status
         if source.kind == "http":
-            raw = web_fetch(ToolRequest("web_fetch", req.identity, {"url": source.url}))
+            # Freie Modell-URLs bleiben beim HTTPS-only-Runner. HTTP ist nur ueber
+            # diesen nicht exponierten Pfad fuer eine operator-owned Registry-URL
+            # moeglich; DNS-/Adress-/Redirect-Floors bleiben im Web-Runner aktiv.
+            fetch = (
+                web_fetch_http
+                if urlsplit(source.url).scheme.casefold() == "http" and web_fetch_http
+                else web_fetch
+            )
+            raw = fetch(ToolRequest("web_fetch", req.identity, {"url": source.url}))
             try:
                 evidence: Any = json.loads(raw)
             except ValueError:

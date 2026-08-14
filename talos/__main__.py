@@ -276,12 +276,22 @@ def run(once: bool = False, ask: str = "", chat: bool = False) -> None:
         allow_http=config.web_allow_http,
         allowed_addresses=config.web_allowed_addresses,
     )
+    # Nicht ins Werkzeugmanifest aufnehmen: dieser Runner ist ausschliesslich fuer
+    # feste, operator-owned Registry-Statusquellen. Freie web_fetch-URLs bleiben
+    # weiterhin an `config.web_allow_http` (produktiv: HTTPS-only) gebunden.
+    status_http_runner = web.make_web_runners(
+        search_api_key=config.brave_api_key,
+        allow_http=True,
+        allowed_addresses=config.web_allowed_addresses,
+    )["web_fetch"]
     runners = {
         **tools.RUNNERS,
         **tools.make_vault_runners(config.vault_dir, config.qmd_bin),
         "undo_last": tools.make_undo_runner(log),
         "entity_status": make_entity_status_runner(
-            entity_registry, web_fetch=network_runners["web_fetch"]
+            entity_registry,
+            web_fetch=network_runners["web_fetch"],
+            web_fetch_http=status_http_runner,
         ),
         # Der Rückweg wird erst beim Aufruf gebunden (`conductor` entsteht weiter
         # unten) — dieselbe Auflösung des Zyklus wie beim Worker.

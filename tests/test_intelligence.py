@@ -128,6 +128,42 @@ def test_http_entity_status_uses_registry_url_not_model_input() -> None:
     assert output["evidence"] == {"service": "up"}
 
 
+def test_http_registry_source_uses_private_http_runner_not_free_web_runner() -> None:
+    reg = EntityRegistry.from_mapping(
+        {
+            "version": 1,
+            "entities": [
+                {
+                    "id": "vps",
+                    "name": "VPS",
+                    "kind": "infrastructure",
+                    "aliases": ["Hetzner VPS"],
+                    "description": "Operator-owned host.",
+                    "not_same_as": [],
+                    "last_verified": "2026-08-14",
+                    "status": {"kind": "http", "url": "http://status.tail.test/status"},
+                }
+            ],
+        }
+    )
+    calls: list[str] = []
+
+    def https_only(_req: ToolRequest) -> str:
+        raise AssertionError("free web runner must not receive an operator-owned HTTP source")
+
+    def status_http(req: ToolRequest) -> str:
+        calls.append(str(req.args["url"]))
+        return '{"service":"up"}'
+
+    runner = make_entity_status_runner(
+        reg, web_fetch=https_only, web_fetch_http=status_http
+    )
+    output = json.loads(runner(ToolRequest("entity_status", OWNER, {"name": "VPS"})))
+
+    assert calls == ["http://status.tail.test/status"]
+    assert output["entity"] == "VPS" and output["evidence"] == {"service": "up"}
+
+
 def test_systemd_entity_status_uses_fixed_unit_and_structured_evidence() -> None:
     calls: list[tuple[list[str], dict]] = []
 
