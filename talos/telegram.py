@@ -21,9 +21,7 @@ import requests
 from .agent_loop import AgentProgress, ProgressStage
 from .channel import Button, CallbackQuery, Inbound, Principal, StructuredMessage, Trust
 from .identity import agent_name
-from .ux import (
-    SYM_BLOCKED, SYM_FAIL, SYM_GATE, SYM_OK, SYM_PLAN, SYM_TALOS, SYM_THINKING, SYM_TOOL,
-)
+from .ux import GEOMETRIC, Style, style_for
 
 _BASE = "https://api.telegram.org/bot{token}/{method}"
 CHANNEL_NAME = "telegram"
@@ -508,8 +506,10 @@ class TelegramActivity:
         max_lines: int = DEFAULT_ACTIVITY_LINES,
         heartbeat_s: float = DEFAULT_HEARTBEAT_S,
         name: str = "",
+        style: Style = GEOMETRIC,
     ) -> None:
         self._client = client
+        self._style = style
         self._chat_id = chat_id
         self._clock = clock
         self._min_edit_interval = max(0.0, min_edit_interval)
@@ -590,13 +590,19 @@ class TelegramActivity:
             # neben einem Satz, der sich nie mehr aendert, waere erfundene Bewegung.
             self._end_thinking()
             now = self._clock()
-            self._append(_Line(SYM_PLAN, event.summary, now, done_at=now))
+            self._append(_Line(self._style.plan, event.summary, now, done_at=now))
             if self._ensure_message():
                 self._edit(force=True)
             return
         if event.stage is ProgressStage.TOOL:
             self._end_thinking()
-            self._append(_Line(SYM_TOOL, _tool_text(event), self._clock()))
+            self._append(
+                _Line(
+                    self._style.tool_symbol(event.tool),
+                    _tool_text(event, self._style),
+                    self._clock(),
+                )
+            )
             # Hier faellt die Entscheidung: ab jetzt gibt es etwas zu belegen.
             if self._ensure_message():
                 # Ein Tool-Start ist die wichtigste Zwischeninformation — der darf nicht warten.
@@ -647,19 +653,19 @@ class TelegramActivity:
         if self._message_id is None:
             try:
                 self._client.send_message(
-                    self._chat_id, f"{SYM_FAIL} {TXT_FAILED}: {detail}", disable_notification=True
+                    self._chat_id, f"{self._style.fail} {TXT_FAILED}: {detail}", disable_notification=True
                 )
             except Exception:
                 pass
             return
         body = self._render(final=True)
-        self._edit(text=f"{body}\n{SYM_FAIL} {TXT_FAILED}: {detail}", force=True)
+        self._edit(text=f"{body}\n{self._style.fail} {TXT_FAILED}: {detail}", force=True)
 
     # ------------------------------------------------------------------ intern
     def _begin_thinking(self) -> None:
         if self._thinking is not None:
             return
-        self._thinking = _Line(SYM_THINKING, TXT_THINKING, self._clock())
+        self._thinking = _Line(self._style.thinking, TXT_THINKING, self._clock())
         self._append(self._thinking)
         self._edit()
 
@@ -687,13 +693,13 @@ class TelegramActivity:
         line = self._lines[-1]
         line.done_at = self._clock()
         if event.status == "done":
-            line.sym = SYM_OK
+            line.sym = self._style.ok
         elif event.status == "needs_human":
-            line.sym, line.text = SYM_GATE, f"{_tool_text(event)} — {TXT_NEEDS_YOU}"
+            line.sym, line.text = self._style.gate, f"{_tool_text(event, self._style)} — {TXT_NEEDS_YOU}"
         elif event.status in {"denied", "binding_changed"}:
-            line.sym, line.text = SYM_BLOCKED, f"{_tool_text(event)} — {TXT_REFUSED}"
+            line.sym, line.text = self._style.blocked, f"{_tool_text(event, self._style)} — {TXT_REFUSED}"
         else:
-            line.sym = SYM_FAIL
+            line.sym = self._style.fail
 
     def _settle(self) -> None:
         self._end_thinking()
@@ -705,7 +711,7 @@ class TelegramActivity:
     def _render(self, *, final: bool = False, footer: str = "") -> str:
         now = self._clock()
         elapsed = now - self._start
-        head = f"{SYM_TALOS} {self._name} · {elapsed:.0f}s"
+        head = f"{self._style.talos} {self._name} · {elapsed:.0f}s"
         if not final and self._max_steps:
             head += f" · step {self._step}/{self._max_steps}"
         parts = [head]
@@ -937,18 +943,23 @@ class TelegramReply:
         return True
 
 
-def _tool_text(event: AgentProgress) -> str:
+def _tool_text(event: AgentProgress, style: Style = GEOMETRIC) -> str:
     """Was das Werkzeug tut — nie Prompt, Inhalt oder voller Shell-Befehl."""
     tool = re.sub(r"[^A-Za-z0-9_.-]", "", event.tool)[:48]
-    label = TOOL_LABELS.get(tool, TOOL_LABEL_FALLBACK)
+    base = TOOL_LABELS.get(tool, TOOL_LABEL_FALLBACK)
+    label = style.tool_label(tool, base)
     summary = _redact(event.summary)
     # Ein Shell-Summary bleibt generisch, auch wenn ein fremder Callback rohe Argumente
     # hineinschreibt. Der volle Befehl gehoert nur in den Freigabe-Dialog.
     if tool == "run_shell":
-        return LABEL_SHELL_GENERIC
-    # Der Loop liefert das Label bereits mit ("write — notes.md"); dann nicht doppeln.
-    if summary.startswith(label):
-        return summary
+        verb = style.tool_verbs.get("run_shell")
+        return f"{verb} command" if verb else LABEL_SHELL_GENERIC
+    # Der Loop liefert das Basislabel manchmal mit ("write — notes.md"); es wird abgetrennt,
+    # damit das gewaehlte Label nicht doppelt erscheint, sobald der Stil es umbenennt.
+    if summary == base:
+        summary = ""
+    else:
+        summary = summary.removeprefix(f"{base} — ")
     return f"{label} — {summary}" if summary else label
 
 
@@ -994,9 +1005,10 @@ class TelegramChannel:
     name = CHANNEL_NAME
     trust = Trust.FULL
 
-    def __init__(self, client: ActivityClient) -> None:
+    def __init__(self, client: ActivityClient, *, status_style: str = "geometric") -> None:
         self._client = client
         self._offset = 0
+        self._style = style_for(status_style)
 
     def poll(self) -> list[Inbound]:
         # ActivityClient ist für Tests schmal; der echte Client stellt get_updates bereit.
@@ -1047,7 +1059,9 @@ class TelegramChannel:
     def begin_activity(self, conversation: str) -> TelegramActivity:
         # Der Name wird JETZT gelesen, nicht beim Start: wer SOUL.md umbenennt, sah sonst
         # bis zum naechsten Neustart weiter den alten Namen ueber jedem Lauf stehen.
-        return TelegramActivity(self._client, chat_id_of(conversation), name=agent_name())
+        return TelegramActivity(
+            self._client, chat_id_of(conversation), name=agent_name(), style=self._style
+        )
 
     def begin_reply(self, conversation: str) -> TelegramReply:
         """Die mitwachsende Antwort. Getrennt von `begin_activity`, weil sie etwas

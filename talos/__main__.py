@@ -128,7 +128,8 @@ def run(once: bool = False, ask: str = "", chat: bool = False) -> None:
                     config.poll_timeout_s,
                     inbox=WORKSPACE_DIR / "inbox",
                     may_fetch=lambda user_id: str(user_id) in erlaubte_telegram_ids,
-                )
+                ),
+                status_style=config.status_style,
             ),
         )
     # `talos ask "…"`: dieselbe Frage, derselbe Conductor, derselbe Kernel. Der Kanal

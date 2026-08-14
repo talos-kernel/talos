@@ -142,6 +142,7 @@ Inside view
 /model — show the provider/model or select one safely
 /reasoning — how thinking happens, and what deliberately does not exist here
 /debug — state worth looking at: paths, permissions, counters
+/health — the traffic light: what runs, what stumbled lately, what is quiet
 
 Shell runs inside a sandbox (workspace-only writes, no network). The command floor still
 decides first: catastrophic is refused outright, risky asks you. Shell runs have no undo."""
@@ -282,6 +283,8 @@ class CommandCenter:
             return CommandResult(reply=self._reasoning())
         if name == "debug":
             return CommandResult(reply=self._debug(conversation))
+        if name == "health":
+            return CommandResult(reply=self._health(conversation))
         return CommandResult(reply=f"Unknown command /{name}. /help lists them all.")
 
     # --- Steuerung ---------------------------------------------------------------
@@ -909,6 +912,72 @@ class CommandCenter:
             "\nKein Token, keine Kennung, kein Secret steht hier drin — /debug ist zum Zeigen da."
         )
         return "\n".join(lines)
+
+    def _health(self, conversation: str) -> str:
+        """Die kompakte Ampel — weil /debug die Fakten hat, sie aber unter vielen anderen
+        Zeilen fuehrt.
+
+        Entstanden aus einer Beobachtung im Betrieb: ein still stehender Poller und eine
+        wachsende Fehlerquote blieben tagelang unbemerkt, weil man ihnen aktiv nachgraben
+        musste. Alles hier kommt aus bereits injizierten Quellen — kein Netzaufruf, kein
+        Schreiben. Ein Gesundheitszustand, der selbst eine Wirkung haette, waere keine
+        Anzeige mehr — und genau deshalb darf diese Anzeige ein Kommando sein.
+        """
+        zeilen = [f"Zustand — laeuft seit {_duration(time.time() - self.started_at)}"]
+
+        # Denken: der Zaehler misst jeden Lauf, auch den gescheiterten — eine Ampel,
+        # die nur die geglueckten kennt, zeigt gruen im Sturm.
+        if self.usage is None:
+            zeilen.append("Denken: kein Zaehler verdrahtet")
+        else:
+            snap = self.usage.snapshot()
+            if not snap.runs:
+                zeilen.append("Denken: noch kein Lauf seit dem Start")
+            else:
+                zeile = f"Denken: {snap.runs} Laeufe"
+                zeile += f", {snap.failed} ohne Ergebnis" if snap.failed else ", alle mit Ergebnis"
+                last = snap.last
+                if last is not None:
+                    notiz = " ".join(str(last.note).split())[:120] if last.note else ""
+                    zeile += (
+                        f" · letzter {_clock(last.at)} "
+                        f"{'ok' if last.ok else 'FEHLGESCHLAGEN'}"
+                        f"{f' · {notiz}' if notiz else ''}"
+                    )
+                zeilen.append(zeile)
+
+        # Protokoll: was als Fehler EINGETRAGEN wurde, nicht was jemand behauptet.
+        try:
+            fehler = self.log.recent(100, types=("error",))
+        except Exception:
+            # Eine Ampel, die am Messgeraet haengt, darf nie selbst die Stoerung sein.
+            fehler = []
+        if not fehler:
+            zeilen.append("Protokoll: kein Fehler unter den letzten 100 Ereignissen")
+        else:
+            neueste = fehler[-1]  # recent() liefert chronologisch, aeltestes zuerst
+            p = neueste.get("payload") or {}
+            detail = " ".join(str(p.get("error") or p.get("stage") or "").split())[:120]
+            zeilen.append(
+                f"Protokoll: {len(fehler)} Fehler unter den letzten 100 Ereignissen · "
+                f"neuester {_clock(float(neueste.get('ts') or 0))}: "
+                f"{detail or '(ohne Fehlertext)'}"
+            )
+
+        zeilen.append(
+            f"Warteschlange: {'beschaeftigt' if self.worker.busy() else 'frei'}, "
+            f"{self.worker.pending()} wartend"
+        )
+        pending = self.approvals.get(conversation)
+        zeilen.append(f"Offene Freigabe: {'ja — ' + pending.req.tool if pending else 'nein'}")
+        if self.channels is not None:
+            named = ", ".join(
+                f"{name} ({self.channels.trust_of(name).name})" for name in self.channels.names
+            )
+            zeilen.append(f"Kanaele: {named or 'keine'}")
+        if self.governor is not None:
+            zeilen.append(f"Leine: {self.governor.describe()}")
+        return "\n".join(zeilen)
 
 
 # --- Helfer ---------------------------------------------------------------------

@@ -77,6 +77,10 @@ QMD_BIN = str(HOME / ".local" / "bin" / "qmd")
 HERMES_BIN = str(HOME / ".local" / "bin" / "hermes")
 DEFAULT_MODEL_PROVIDER = "openai-codex"
 DEFAULT_MODEL = "gpt-5.6-sol"
+# Statusanzeige: "geometric" (Vorgabe, Talos' gravierte Zeichen) oder "expressive"
+# (Emoji + Verben). Nur die Anzeige, nie die Substanz. Eine Instanz waehlt ueber
+# TALOS_STATUS_STYLE; ein unbekannter Wert bleibt geometrisch.
+STATUS_STYLE = "geometric"
 
 
 def _default_hermes_helper(filename: str) -> Path:
@@ -145,6 +149,7 @@ class TalosConfig:
     hermes_models: Path = HERMES_MODELS
     model_provider: str = DEFAULT_MODEL_PROVIDER
     model_name: str = DEFAULT_MODEL
+    status_style: str = STATUS_STYLE
     shell_needs_human: bool = SHELL_NEEDS_HUMAN
     skills_dirs: tuple[Path, ...] = SKILLS_DIRS
     # WhatsApp ist ein reiner MELDE-Weg (Trust.NOTIFY). Fehlen die Werte, wird der
@@ -313,6 +318,10 @@ def load_config(*, require_channel: bool = True) -> TalosConfig:
         model_name=(
             os.environ.get("TALOS_MODEL")
             or secrets.get("TALOS_MODEL", DEFAULT_MODEL)
+        ),
+        status_style=(
+            os.environ.get("TALOS_STATUS_STYLE")
+            or secrets.get("TALOS_STATUS_STYLE", STATUS_STYLE)
         ),
         web_allowed_addresses=parse_allowed_addresses(
             os.environ.get("TALOS_WEB_ALLOWED_ADDRESSES")

@@ -9,6 +9,7 @@ Steuerkommando gefährlich würde:
 """
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 from talos.approval import ApprovalStore
@@ -17,6 +18,7 @@ from talos.commands import CommandCenter, CommandResult, is_command, parse
 from talos.eventlog import Event, EventLog
 from talos.manifest import Effect, ToolManifest, ToolSpec
 from talos.policy import PolicyKernel, ToolRequest, Verdict
+from talos.usage import Run, UsageMeter
 from talos.channel import Principal
 
 OWNER = Principal("telegram", "100000001")
@@ -65,7 +67,7 @@ def _manifest() -> ToolManifest:
     )
 
 
-def _center(tmp_path: Path, *, reasoner=None, worker=None, approvals=None) -> CommandCenter:
+def _center(tmp_path: Path, *, reasoner=None, worker=None, approvals=None, **extras) -> CommandCenter:
     policy = PolicyKernel(_manifest(), frozenset({OWNER}))
     return CommandCenter(
         log=EventLog(tmp_path / "events.db"),
@@ -77,6 +79,7 @@ def _center(tmp_path: Path, *, reasoner=None, worker=None, approvals=None) -> Co
         worker=worker or _FakeWorker(),
         repo_dir=tmp_path,
         mint=CapabilityMint(policy),
+        **extras,
     )
 
 
@@ -354,3 +357,38 @@ def test_forget_all_drops_every_note(tmp_path: Path) -> None:
     reply = center.dispatch("forget", "all", principal=OWNER, conversation=CHAT).reply or ""
     assert "Dropped 1 note(s)." in reply
     assert center.recall.count() == 0
+
+
+# --- /health: die Ampel liest nur ------------------------------------------------------
+def test_health_reports_a_clean_log_honestly(tmp_path: Path) -> None:
+    """Ohne Fehler und ohne Zaehler sagt die Ampel genau das — statt Schweigen, das
+    nach „kaputt“ aussieht, oder eine Erfindung, die nach „gemessen“ aussieht."""
+    reply = _center(tmp_path).dispatch("health", "", principal=OWNER, conversation=CHAT).reply or ""
+    assert "Zustand" in reply
+    assert "kein Fehler unter den letzten 100" in reply
+    assert "kein Zaehler verdrahtet" in reply
+
+
+def test_health_names_the_newest_error_from_the_log(tmp_path: Path) -> None:
+    """Die Ampel liest das Protokoll, nicht Behauptungen: ein eingetragener Fehler muss
+    mit seinem Text auftauchen — sonst graebt man wieder, statt hinzusehen."""
+    center = _center(tmp_path)
+    center.log.append(
+        Event("run-1", "conductor", "error", {"stage": "reason", "error": "boom nach 12s"})
+    )
+    reply = center.dispatch("health", "", principal=OWNER, conversation=CHAT).reply or ""
+    assert "1 Fehler" in reply
+    assert "boom nach 12s" in reply
+
+
+def test_health_counts_failed_runs_from_the_meter(tmp_path: Path) -> None:
+    """Fehlversuche zaehlen mit — eine Ampel, die nur die geglueckten Laeufe kennt,
+    zeigt gruen im Sturm."""
+    meter = UsageMeter()
+    meter.record(Run(at=time.time(), ok=True, duration_s=3.0))
+    meter.record(Run(at=time.time(), ok=False, duration_s=1.0, note="timeout"))
+    center = _center(tmp_path, usage=meter)
+    reply = center.dispatch("health", "", principal=OWNER, conversation=CHAT).reply or ""
+    assert "2 Laeufe, 1 ohne Ergebnis" in reply
+    assert "FEHLGESCHLAGEN" in reply
+    assert "timeout" in reply

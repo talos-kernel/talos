@@ -15,6 +15,9 @@ und Quittungen — nie in der Prosa der Antwort.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass, field
+from typing import Mapping
+
 SYM_TALOS = "◉"      # Kopfzeile eines Laufs; der Waechter ist wach
 SYM_THINKING = "◈"   # Reasoner arbeitet, noch kein Werkzeug
 SYM_PLAN = "≡"       # ein Ablauf wurde angekuendigt — Reihenfolge, keine Erlaubnis
@@ -28,6 +31,7 @@ SYM_UNDO = "↩"       # zurueckgerollt
 __all__ = [
     "SYM_TALOS", "SYM_THINKING", "SYM_PLAN", "SYM_TOOL", "SYM_OK", "SYM_FAIL",
     "SYM_GATE", "SYM_BLOCKED", "SYM_UNDO",
+    "Style", "GEOMETRIC", "EXPRESSIVE", "style_for",
 ]
 
 
@@ -76,3 +80,76 @@ def mission_panel(
     if done:
         lines.append("done")
     return "\n".join(lines)
+
+
+# --- Statusstil ----------------------------------------------------------------------
+# Zwei Ausgabestile fuer die Statuszeilen. Der Vorgabestil ist bewusst geometrisch (siehe
+# oben): Talos ist ein gravierter Automat, kein Chatbot mit Sprechblase. Ein Betreiber, der
+# seine eigene Instanz ausdrucksvoller haben will, schaltet den Emoji-Stil per
+# `TALOS_STATUS_STYLE=expressive` frei — ohne dass sich am Vorgabeverhalten etwas aendert.
+#
+# Nur die ANZEIGE aendert sich, nie die Substanz: dieselben gemessenen Werte, dieselbe Regel
+# „nichts, was Talos nicht misst". Kein Wort davon erreicht die Prosa der Antwort.
+
+
+@dataclass(frozen=True)
+class Style:
+    """Zeichensatz fuer Kopf, Phasen und Werkzeuge einer Statusanzeige.
+
+    `tool_glyphs`/`tool_verbs` sind pro Werkzeug; fehlt ein Eintrag, gelten `tool` und das
+    knappe Vorgabelabel. So bleibt der geometrische Stil ein reiner Konstantensatz, waehrend
+    der ausdrucksvolle Stil einzelne Werkzeuge namentlich zeichnet.
+    """
+
+    talos: str
+    thinking: str
+    plan: str
+    tool: str
+    ok: str
+    fail: str
+    gate: str
+    blocked: str
+    undo: str
+    tool_glyphs: Mapping[str, str] = field(default_factory=dict)
+    tool_verbs: Mapping[str, str] = field(default_factory=dict)
+
+    def tool_symbol(self, tool: str) -> str:
+        """Das Zeichen fuer ein laufendes Werkzeug — sein eigenes, sonst das Vorgabezeichen."""
+        return self.tool_glyphs.get(tool, self.tool)
+
+    def tool_label(self, tool: str, fallback: str) -> str:
+        """Das Verb fuer ein Werkzeug — ausdrucksvoll ueberschrieben, sonst das knappe Label."""
+        return self.tool_verbs.get(tool, fallback)
+
+
+GEOMETRIC = Style(
+    talos=SYM_TALOS, thinking=SYM_THINKING, plan=SYM_PLAN, tool=SYM_TOOL,
+    ok=SYM_OK, fail=SYM_FAIL, gate=SYM_GATE, blocked=SYM_BLOCKED, undo=SYM_UNDO,
+)
+
+# Ausdrucksvoll: dasselbe Vokabular in gaengigen Emoji, plus ein Verb je Werkzeug. Die
+# Kopfzeile bleibt die Signatur (◉) — sie benennt den Waechter, sie kommentiert nicht.
+EXPRESSIVE = Style(
+    talos=SYM_TALOS,
+    thinking="🧠", plan="🗺️", tool="🛠️",
+    ok="✅", fail="❌", gate="⏸️", blocked="⛔", undo="↩️",
+    tool_glyphs={
+        "read_file": "📖", "write_file": "✍️", "run_shell": "💻", "undo_last": "↩️",
+        "vault_search": "🔎", "vault_get": "📖", "vault_write_note": "✍️",
+        "fetch_page": "🌐", "browse": "🌐", "see_image": "👁️", "hear": "👂",
+        "grab_frame": "🎞️", "entity_status": "📡",
+    },
+    tool_verbs={
+        "read_file": "Reading", "write_file": "Writing", "run_shell": "Running",
+        "undo_last": "Undoing", "vault_search": "Searching vault",
+        "vault_get": "Reading note", "vault_write_note": "Writing note",
+        "fetch_page": "Fetching", "browse": "Browsing", "see_image": "Looking",
+        "hear": "Listening", "grab_frame": "Capturing", "entity_status": "Checking",
+    },
+)
+
+
+def style_for(name: str) -> Style:
+    """Waehlt den Stil ueber seinen Namen. Alles ausser `expressive` bleibt geometrisch —
+    ein unbekannter Wert darf nie die Vorgabe kippen."""
+    return EXPRESSIVE if str(name or "").strip().lower() == "expressive" else GEOMETRIC

@@ -42,7 +42,7 @@ HELP = f"""
   config list|get|set|validate       read and change settings
   models [--refresh]                 which models a provider offers
   status                             what it did last
-  events [--limit n] [--tool t]      what happened — filterable, read-only
+  events [--limit n] [--tool t] [--since 4h]    what happened — filterable, read-only
   why <event-id>                     why that was allowed or refused
   verify                             prove the log was not edited after the fact
   report [--run <id>] [--out <f>]    a record for someone else to read

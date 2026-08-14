@@ -482,3 +482,23 @@ def test_a_single_word_longer_than_the_window_still_goes_out() -> None:
     teile = split_for_telegram("A" * 9000)
     assert len(teile) >= 3
     assert all(len(t) <= TELEGRAM_TEXT_LIMIT + 20 for t in teile)
+
+
+def test_expressive_status_style_uses_emoji_and_verbs() -> None:
+    """Ausdrucksvoll zeichnet Werkzeuge mit Emoji und Verb; geometrisch bleibt unveraendert."""
+    from talos.telegram import _tool_text
+    from talos.ux import EXPRESSIVE, GEOMETRIC, SYM_TOOL, style_for
+
+    read = AgentProgress(ProgressStage.TOOL, tool="read_file", summary="SOUL.md")
+    assert _tool_text(read, GEOMETRIC) == "read — SOUL.md"
+    assert _tool_text(read, EXPRESSIVE) == "Reading — SOUL.md"
+    assert GEOMETRIC.tool_symbol("read_file") == SYM_TOOL
+    assert EXPRESSIVE.tool_symbol("read_file") == "📖"
+
+    # Der Shell-Befehl bleibt in beiden Stilen generisch — nie der rohe Befehl.
+    shell = AgentProgress(ProgressStage.TOOL, tool="run_shell", summary="rm -rf /tmp/x")
+    assert _tool_text(shell, GEOMETRIC) == "shell command"
+    assert _tool_text(shell, EXPRESSIVE) == "Running command"
+
+    assert style_for("expressive") is EXPRESSIVE
+    assert style_for("nonsense") is GEOMETRIC   # unbekannt kippt die Vorgabe nie

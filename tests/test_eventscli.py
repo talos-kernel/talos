@@ -8,6 +8,7 @@ und warum. Deshalb prueft diese Datei zwei Dinge: dass die Erklaerung wirklich e
 from __future__ import annotations
 
 import io
+import time
 
 from talos.eventlog import Event, EventLog, new_run_id
 from talos.eventscli import run_events, run_why
@@ -165,3 +166,43 @@ def test_neither_command_can_change_anything() -> None:
     assert not verboten, f"eine Lese-Sicht darf nichts davon kennen: {verboten}"
     assert "log.append" not in quelle, "diese Befehle schreiben nicht ins Protokoll"
     assert "undo" not in {n for n in eventscli.__all__}
+
+
+# --- --since: der Zeitfilter ------------------------------------------------------------
+def test_since_shows_only_what_is_younger(tmp_path) -> None:
+    """Ein Zeitfilter, der heimlich aeltere Zeilen mitliefert, erzaehlt eine falsche
+    Geschichte ueber den Abend — und faellt erst auf, wenn man sich darauf verlassen hat."""
+    lauf = new_run_id()
+    pfad = tmp_path / "ev.db"
+    log = EventLog(pfad)
+    log.append(Event(lauf, "exec", "exec.result", {"tool": "read_file", "status": "DONE"}),
+               now=time.time() - 3 * 3600)
+    log.append(Event(lauf, "exec", "exec.result", {"tool": "run_shell", "status": "DONE"}),
+               now=time.time() - 5 * 60)
+    log.close()
+    text = _lauf(run_events, ["--since", "1h"], pfad)
+    assert "run_shell" in text
+    assert "read_file" not in text
+
+
+def test_a_bad_since_is_refused_not_guessed(tmp_path) -> None:
+    """Geraten ist der Filter schlimmer als verweigert: „gestern“ haette still alles
+    heissen koennen — und die Antwort saehe aus wie eine gepruefte."""
+    aus = io.StringIO()
+    assert run_events(["--since", "gestern"], out=aus, db=_log(tmp_path, [])) == 2
+    assert "--since" in aus.getvalue()
+
+
+def test_since_combines_with_the_tool_filter(tmp_path) -> None:
+    """Zeit UND Werkzeug muessen beide gelten — sonst meldet „--since 1h --tool X" Treffer,
+    die ausserhalb des Fensters liegen."""
+    lauf = new_run_id()
+    pfad = tmp_path / "ev.db"
+    log = EventLog(pfad)
+    log.append(Event(lauf, "exec", "exec.result", {"tool": "run_shell", "status": "DONE"}),
+               now=time.time() - 2 * 3600)
+    log.append(Event(lauf, "exec", "exec.result", {"tool": "read_file", "status": "DONE"}),
+               now=time.time() - 60)
+    log.close()
+    assert "nothing matched" in _lauf(run_events, ["--since", "1h", "--tool", "run_shell"], pfad)
+    assert "read_file" in _lauf(run_events, ["--since", "1h", "--tool", "read_file"], pfad)

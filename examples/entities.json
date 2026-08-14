@@ -26,6 +26,19 @@
         "kind": "systemd_user",
         "unit": "cache-worker.service"
       }
+    },
+    {
+      "id": "nas",
+      "name": "NAS",
+      "kind": "infrastructure",
+      "aliases": ["storage box"],
+      "description": "Network storage in the operator's tailnet. Appears in the tailnet snapshot as nas.",
+      "not_same_as": ["Atlas API"],
+      "last_verified": "2026-01-01",
+      "status": {
+        "kind": "http",
+        "url": "http://vps.tailnet.invalid/tailnet"
+      }
     }
   ]
 }

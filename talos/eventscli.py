@@ -48,6 +48,25 @@ def _flag(name: str, argv: list[str], default: str = "") -> str:
     return argv[stelle] if stelle < len(argv) else default
 
 
+_SUFFIX_SEKUNDEN = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}
+
+
+def _dauer(roh: str) -> float | None:
+    """Parst „30m“, „4h“, „2d“, „1w“ in Sekunden. Unlesbares gibt None statt geraten zu
+    werden — ein Filter, der still etwas anderes bedeutet als auf ihm steht, liefert die
+    schlimmste Sorte Auskunft aus einem Protokoll: eine falsche, die richtig aussieht."""
+    text = str(roh or "").strip().lower()
+    if len(text) < 2 or text[-1] not in _SUFFIX_SEKUNDEN:
+        return None
+    try:
+        wert = float(text[:-1])
+    except ValueError:
+        return None
+    if wert <= 0:
+        return None
+    return wert * _SUFFIX_SEKUNDEN[text[-1]]
+
+
 def _one_line(text: object, limit: int = SUMMARY_CHARS) -> str:
     """Alles auf eine Zeile. ⚠️ Dieselbe Regel wie in `remedy.py`: ein Zeilenumbruch aus
     fremdem Text koennte in einer Liste eine Zeile vortaeuschen, die es nicht gibt."""
@@ -71,14 +90,14 @@ def _summary(event: dict) -> str:
 
 
 def run_events(argv: list[str] | None = None, *, out=None, db=None) -> int:
-    """`talos events [--limit n] [--type t] [--tool t] [--run id]`."""
+    """`talos events [--limit n] [--type t] [--tool t] [--run id] [--since 4h]`."""
     from .config import EVENTLOG_DB
     from .eventlog import EventLog
 
     argumente = list(argv or [])
     schreiben = (out or sys.stdout).write
     if "--help" in argumente or "-h" in argumente:
-        schreiben("  usage: talos events [--limit n] [--type t] [--tool t] [--run id]\n")
+        schreiben("  usage: talos events [--limit n] [--type t] [--tool t] [--run id] [--since 4h]\n")
         return 0
 
     try:
@@ -87,18 +106,30 @@ def run_events(argv: list[str] | None = None, *, out=None, db=None) -> int:
         schreiben("  --limit wants a number\n")
         return 2
 
+    seit_roh = _flag("--since", argumente)
+    seit = 0.0
+    if seit_roh:
+        geparst = _dauer(seit_roh)
+        if geparst is None:
+            schreiben(f"  --since wants a duration like 30m, 4h or 2d — got {seit_roh!r}\n")
+            return 2
+        seit = geparst
+
     typ, werkzeug, lauf = _flag("--type", argumente), _flag("--tool", argumente), _flag("--run", argumente)
     log = EventLog(Path(db) if db is not None else Path(EVENTLOG_DB))
     try:
         # Bei einem Filter wird weiter zurueck gelesen — sonst faende `--tool run_shell`
         # in den letzten 25 Zeilen nichts und behauptete, es sei nie vorgekommen.
         roh = log.by_run(lauf) if lauf else log.recent(
-            limit * 20 if (typ or werkzeug) else limit,
+            limit * 20 if (typ or werkzeug or seit) else limit,
             types=(typ,) if typ else (),
         )
     finally:
         log.close()
 
+    if seit:
+        schwelle = time.time() - seit
+        roh = [e for e in roh if float(e.get("ts") or 0) >= schwelle]
     if werkzeug:
         roh = [e for e in roh if str((e.get("payload") or {}).get("tool") or "") == werkzeug]
     gezeigt = roh[-limit:]

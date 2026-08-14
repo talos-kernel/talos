@@ -8,6 +8,16 @@ Versions are alpha: the kernel's rules are stable, the surface around them is no
 
 ## [Unreleased]
 
+### Added
+
+- `talos events --since 4h` filters the audit trail by age (durations like `30m`, `4h`,
+  `2d`), not just by tool, type or run — "what happened tonight" no longer needs manual
+  database digging. An unreadable duration is refused, never guessed.
+- `/health` answers the traffic-light question right in the chat: runs and failures from
+  the usage meter, the newest error entry from the event log, queue state, pending
+  approval, channels and dial — everything from sources already wired in. No network
+  call, no write: a health display that had an effect of its own would not be a display.
+
 ## [0.9.4-alpha] — 2026-08-12
 
 ### Fixed
