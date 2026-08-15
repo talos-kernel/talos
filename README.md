@@ -15,12 +15,12 @@
 </p>
 
 <p align="center">
-  <!-- ⚠️ Bewusst „tests", nicht „passing": die Zahl kommt aus dem Einsammeln (1596).
+  <!-- ⚠️ Bewusst „tests", nicht „passing": die Zahl kommt aus dem Einsammeln (1617).
        Plattformabhaengige Sandbox- und Repository-Pruefungen koennen uebersprungen werden;
        `test_site_claims` prueft deshalb die gesammelte Zahl statt ein Umgebungsresultat. -->
-  <img src="https://img.shields.io/badge/tests-1596-2e7d32.svg" alt="Tests">
-  <img src="https://img.shields.io/badge/red%20team-164%2F164-2e7d32.svg" alt="Red team">
-  <img src="https://img.shields.io/badge/gate%20path-528%20lines-8a4318.svg" alt="Gate path">
+  <img src="https://img.shields.io/badge/tests-1617-2e7d32.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/red%20team-166%2F166-2e7d32.svg" alt="Red team">
+  <img src="https://img.shields.io/badge/gate%20path-544%20lines-8a4318.svg" alt="Gate path">
   <img src="https://img.shields.io/badge/tools-18%20gated-8a4318.svg" alt="Tools">
   <img src="https://img.shields.io/badge/default%20identities-0-c62828.svg" alt="Default identities">
   <img src="https://img.shields.io/badge/python-3.11%2B-1565c0.svg" alt="Python">
@@ -103,7 +103,7 @@ authorised individually, bound to its exact arguments and targets, valid once, f
 seconds. Forgetting to call the gate does not produce an unchecked effect — it produces no
 effect at all, because the raw runners are unreachable without a token.
 
-That design is testable, and it is tested: 164 adversarial scenarios run on every change and
+That design is testable, and it is tested: 166 adversarial scenarios run on every change and
 try to get an effect past the kernel. They are in [`redteam.py`](redteam.py). Read them
 before you trust anything written above.
 
@@ -170,8 +170,8 @@ pip install -r requirements.txt
 
 python -m talos setup                    # asks three things, writes a file, stops
 python -m talos doctor                   # what is still missing
-python -m pytest tests/ -q               # 1596 tests
-python redteam.py                        # 164 adversarial cases
+python -m pytest tests/ -q               # 1617 tests
+python redteam.py                        # 166 adversarial cases
 python -m talos                          # run it
 ```
 
@@ -589,7 +589,7 @@ executing anything. It is the fastest way to understand the kernel.
 
 ## Architecture
 
-Small modules on purpose. The gate path (`policy.py`, 528 lines) has to be readable in one
+Small modules on purpose. The gate path (`policy.py`, 544 lines) has to be readable in one
 sitting — a gate you cannot read is not a gate.
 
 | Module | Role |
