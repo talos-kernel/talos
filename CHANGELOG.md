@@ -8,6 +8,19 @@ Versions are alpha: the kernel's rules are stable, the surface around them is no
 
 ## [Unreleased]
 
+### Fixed
+
+- e2e: three real-model cases asserted on the model's wording and flaked on it —
+  differently per run with identical code. They now check kernel facts: the standing
+  rule, parked approvals, and the exec events (`Y2`, `Y3`, `Y7`). `Y3` prompts the
+  replay with the command taken from the rule that was actually created, not a second
+  hardcoded string, and a leftover parked approval from the resumed loop is cleared
+  instead of eating the next case's input. `Z3` names the tool it means — tool
+  *choice* is model behaviour, not a deterministic test subject — and proves the call
+  happened via the event log. The wall-clock self-review is disabled in the harness:
+  it delivered its report right after the answer into the same sink, and the harness
+  read the report as the reply.
+
 ### Added
 
 - `talos events --since 4h` filters the audit trail by age (durations like `30m`, `4h`,
