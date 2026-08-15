@@ -32,14 +32,21 @@ SHELL_TIMEOUT_S = 60
 UNDO_LOOKBACK = 200
 
 
+def _need(req: ToolRequest, key: str) -> str:
+    """Return a required text argument or raise a clear tool error."""
+    if key not in req.args:
+        raise ValueError(f"das Werkzeug braucht das Argument '{key}'")
+    return str(req.args[key])
+
+
 def read_file(req: ToolRequest) -> str:
-    return Path(str(req.args["path"])).read_text(encoding="utf-8")
+    return Path(_need(req, "path")).read_text(encoding="utf-8")
 
 
 def write_file(req: ToolRequest) -> str:
-    path = Path(str(req.args["path"]))
+    path = Path(_need(req, "path"))
+    content = _need(req, "content")
     path.parent.mkdir(parents=True, exist_ok=True)
-    content = str(req.args["content"])
     path.write_text(content, encoding="utf-8")
     return f"{len(content)} Zeichen geschrieben nach {path}"
 
@@ -61,7 +68,7 @@ def run_shell(req: ToolRequest) -> str:
     Ist keine Isolation verfuegbar, wird **verweigert statt ungeschuetzt ausgefuehrt** —
     ausser der Betreiber hat das ausdruecklich abgeschaltet.
     """
-    command = str(req.args["command"])
+    command = _need(req, "command")
     try:
         result = sandbox.run_sandboxed(command)
     except sandbox.SandboxUnavailable as error:
