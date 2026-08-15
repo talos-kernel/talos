@@ -37,6 +37,9 @@ BLOCKED_MARKER_DIGESTS = frozenset({
     "48f9460fe0dc9f272e7414963dd2b52287ec07d872d665d2e9364c957f163ab0",
     "7aecf6e598c1f48798dada5d00a0f578ab5f9bc1b9e66bce9ac176fe058cf104",
     "7cd59327d99d11138461861191fd25b85a9132da71e8e71818c7fa6802368cd8",
+    # + service-unit and host markers that reached the tree before the set covered them (2026-08-15)
+    "092d503b8892452b2b2e9048c7a9b62ba6b5f08baf7200e0f16cfb2887167275",
+    "bb2255fa30c66120732ac53d4efd832ff908d980f2e40358b8eaa3c29d410881",
 })
 
 # Some tests need realistic credential shapes to prove redaction. Only those exact inert
