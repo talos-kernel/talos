@@ -28,6 +28,9 @@ ALLOWED_ENDPOINT_FIXTURE_HOSTS = {
 # Exact private project/person markers, stored only as case-folded SHA-256 digests so the
 # public guard does not repeat the identifiers it is meant to keep out of the tree.
 BLOCKED_MARKER_DIGESTS = frozenset({
+    "0afa9d9a1b780339772946ac0dfd4b98e5e56b34a117cac353985be7a6a50ac7",
+    "b5143f0410a1d4d905bfe2290fd4c965e1e1ece5bc99a6b7ee5f663a366256ca",
+    "c8d536fa90e0f08ece57e02d258f95221656edf172e5b577132c54cbb48da03d",
     "3a5a2512949399115565867a73a413ec6ba215c8f2df385f78b33238a6639b7c",
     "e1608f75c5d7813f3d4031cb30bfb786507d98137538ff8e128a6ff74e84e643",
     "4676c685dbf2380d0339a9a87c931e0bba3c8488262dce8324c55b71f90bb629",
