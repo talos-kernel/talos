@@ -108,3 +108,29 @@ def test_both_cli_channels_offer_the_display() -> None:
 
     assert isinstance(ChatChannel(uid=1000).begin_activity("cli:1000"), CliActivity)
     assert isinstance(CliChannel(question="q", uid=1000).begin_activity("cli:1000"), CliActivity)
+
+
+def test_the_configured_style_reaches_the_display() -> None:
+    """TALOS_STATUS_STYLE=expressive gilt auch im Terminal — sonst stuende der
+    Betreiber mit Emoji im Messenger und Glyphen im CLI, zwei Wahrheiten."""
+    from talos.askcli import CliChannel
+
+    kanal = CliChannel(question="q", uid=1000, style="expressive")
+    anzeige = kanal.begin_activity("cli:1000")
+    assert anzeige._style.tool_symbol("agent_consult") == "🤝"
+    assert anzeige._style.tool_symbol("read_file") == "📖"
+
+
+def test_every_gated_tool_has_an_expressive_glyph_and_verb() -> None:
+    """Die Emoji-Karte driftete schon einmal hinter dem Manifest her (fetch_page
+    statt web_fetch — ein Schluessel, den es als Werkzeug nie gab)."""
+    from talos.tools import default_manifest
+    from talos.ux import EXPRESSIVE
+
+    echte = default_manifest().tools
+    namen = sorted(echte) if isinstance(echte, dict) else sorted(s.name for s in echte)
+    fehlend_glyph = [n for n in namen if n not in EXPRESSIVE.tool_glyphs]
+    fehlend_verb = [n for n in namen if n not in EXPRESSIVE.tool_verbs]
+    assert not fehlend_glyph and not fehlend_verb, (
+        f"Emoji-Karte unvollstaendig: glyphs {fehlend_glyph}, verbs {fehlend_verb}"
+    )

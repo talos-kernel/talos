@@ -136,15 +136,20 @@ EXPRESSIVE = Style(
     tool_glyphs={
         "read_file": "📖", "write_file": "✍️", "run_shell": "💻", "undo_last": "↩️",
         "vault_search": "🔎", "vault_get": "📖", "vault_write_note": "✍️",
-        "fetch_page": "🌐", "browse": "🌐", "see_image": "👁️", "hear": "👂",
-        "grab_frame": "🎞️", "entity_status": "📡",
+        "web_fetch": "🌐", "web_search": "🔎", "browse": "🌐", "see_image": "👁️",
+        "hear": "👂", "speak": "🔊",
+        "grab_frame": "🎞️", "entity_status": "📡", "agent_consult": "🤝",
+        "ask_operator": "🙋", "delegate": "🧭", "session_search": "🗂️",
     },
     tool_verbs={
         "read_file": "Reading", "write_file": "Writing", "run_shell": "Running",
         "undo_last": "Undoing", "vault_search": "Searching vault",
         "vault_get": "Reading note", "vault_write_note": "Writing note",
-        "fetch_page": "Fetching", "browse": "Browsing", "see_image": "Looking",
-        "hear": "Listening", "grab_frame": "Capturing", "entity_status": "Checking",
+        "web_fetch": "Fetching", "web_search": "Searching the web", "browse": "Browsing",
+        "see_image": "Looking", "hear": "Listening", "speak": "Speaking",
+        "grab_frame": "Capturing", "entity_status": "Checking",
+        "agent_consult": "Consulting", "ask_operator": "Asking you",
+        "delegate": "Delegating", "session_search": "Searching history",
     },
 )
 

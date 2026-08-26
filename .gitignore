@@ -2,6 +2,13 @@
 # Never commit this.
 data/
 
+# Operator-owned prompt state einer Installation (deployment-eigen, wie SOUL.md
+# auf dem Ziel). Wer sie hier anlegt, darf sie nie committen — sie werden sonst
+# mitveroeffentlicht. Das Repo liefert bewusst keine davon aus.
+/AGENTS.md
+/USER.md
+/MEMORY.md
+
 # Der freie Arbeitsbereich des Agenten (`policy.WORKSPACE_DIR`) — Laufzeitzustand,
 # den der Updater unter STATE_PATHS mitnimmt. Dort landen auch eingehende Fotos
 # und Standbilder aus Videos.

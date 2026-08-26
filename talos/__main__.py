@@ -141,7 +141,7 @@ def run(once: bool = False, ask: str = "", chat: bool = False) -> None:
     if ask:
         from .askcli import CliChannel
 
-        cli_channel = CliChannel(ask, os.getuid())
+        cli_channel = CliChannel(ask, os.getuid(), style=config.status_style)
         channels += (cli_channel,)
     # `talos chat`: derselbe Kanalname, dieselbe Kennung, dieselbe Registry. Der
     # Unterschied zu `ask` ist allein, dass die Schleife weiterlaeuft — und dass die
@@ -149,7 +149,7 @@ def run(once: bool = False, ask: str = "", chat: bool = False) -> None:
     elif chat:
         from .chatcli import ChatChannel
 
-        chat_channel = ChatChannel(os.getuid())
+        chat_channel = ChatChannel(os.getuid(), style=config.status_style)
         channels += (chat_channel,)
     if config.whatsapp_token and config.whatsapp_phone_id:
         channels += (WhatsAppChannel(config.whatsapp_token, config.whatsapp_phone_id),)
@@ -290,12 +290,22 @@ def run(once: bool = False, ask: str = "", chat: bool = False) -> None:
         allow_http=config.web_allow_http,
         allowed_addresses=config.web_allowed_addresses,
     )
+    # Nicht ins Werkzeugmanifest aufnehmen: dieser Runner ist ausschliesslich fuer
+    # feste, operator-owned Registry-Statusquellen. Freie web_fetch-URLs bleiben
+    # weiterhin an `config.web_allow_http` (produktiv: HTTPS-only) gebunden.
+    status_http_runner = web.make_web_runners(
+        search_api_key=config.brave_api_key,
+        allow_http=True,
+        allowed_addresses=config.web_allowed_addresses,
+    )["web_fetch"]
     runners = {
         **tools.RUNNERS,
         **tools.make_vault_runners(config.vault_dir, config.qmd_bin),
         "undo_last": tools.make_undo_runner(log),
         "entity_status": make_entity_status_runner(
-            entity_registry, web_fetch=network_runners["web_fetch"]
+            entity_registry,
+            web_fetch=network_runners["web_fetch"],
+            web_fetch_http=status_http_runner,
         ),
         # Der Rückweg wird erst beim Aufruf gebunden (`conductor` entsteht weiter
         # unten) — dieselbe Auflösung des Zyklus wie beim Worker.

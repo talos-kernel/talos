@@ -7,15 +7,16 @@ Guidance for Claude Code (and any other coding agent) working in this repository
 An autonomous agent that takes instructions over a chat channel, reasons with a language
 model, and executes tools — but only after a deterministic security kernel has ruled on
 the action. Full architecture in `README.md`. The agent's name and character live in
-`SOUL.md`.
+`SOUL.md`; durable operating discipline lives in `AGENTS.md`, and stable operator
+preferences live in `USER.md`. All three are operator-owned prompt state and reload live.
 
 | | |
 |---|---|
-| Gate path | `policy.py`, **532 lines** — has to stay readable in one sitting |
+| Gate path | `policy.py`, **548 lines** — has to stay readable in one sitting |
 | Tools | **19**, every one gated |
-| Suites | **1707** tests · **164** adversarial · 44 end-to-end |
+| Suites | **1737** tests · **166** adversarial · 44 end-to-end |
 | Home | <https://talos-agent.ch> · docs at `/docs/` |
-| Repos | `talos-kernel/talos` published · a separate private one holds the full history (`git remote -v`) |
+| Repository | `talos-kernel/talos` is the public source tree |
 
 ⚠️ **`public` is blocked for pushing.** Its push url is a deliberate dead end — the
 published state is only ever produced by `scripts/sync-public.sh` into a separate clone.
@@ -194,8 +195,8 @@ In practice:
 ```bash
 python3 -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt
 
-python -m pytest tests/ -q   # 1707 tests, ~8s
-python redteam.py            # 164 adversarial cases — mandatory for any kernel change
+python -m pytest tests/ -q   # 1737 tests, ~8s
+python redteam.py            # 166 adversarial cases — mandatory for any kernel change
 python e2e.py                # 44 cases against a real model (costs tokens and time)
 python -m talos --once       # single cycle, for diagnosis
 python -m talos              # run
@@ -254,7 +255,7 @@ python -m talos anchor       # pin the chain head — exit 1 if the log shrank (
    for pushing** — its push url is a deliberate dead end. The public state is only ever
    produced by `scripts/sync-public.sh` into a separate clone; a direct push from here
    would carry the whole private history across.
-10. **A private deployment is not this repo.** The instance on the operator's machine has
+10. **An operator installation is not this repo.** The instance on the operator's machine has
    its own `SOUL.md` (its first heading is the agent's *name*), its own `CLAUDE.md`,
    its own env file and its own `data/`. Sync the **package** (`talos/` → `talos/`), never
    the repository root, or the deployment gets renamed and loses its event log — which is
@@ -264,7 +265,7 @@ python -m talos anchor       # pin the chain head — exit 1 if the log shrank (
 
 - Comments and docstrings explain **why**, especially where a rule looks counterintuitive.
   Those are the ones that get argued away six months later.
-- Small modules. The gate path (`policy.py`, 532 lines) must stay readable in one sitting.
+- Small modules. The gate path (`policy.py`, 548 lines) must stay readable in one sitting.
 - Glyphs come from `talos/ux.py` only, one meaning each, **never inside an answer's prose**.
 - Telegram edit interval stays ≥ 1.2 s; the API tolerates roughly one edit per second
   per chat.

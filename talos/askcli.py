@@ -65,6 +65,7 @@ class CliChannel:
     question: str
     uid: int
     out: object = None
+    style: str = ""
     _delivered: bool = field(default=False, init=False)
     answered: bool = field(default=False, init=False)
 
@@ -116,8 +117,9 @@ class CliChannel:
     def begin_activity(self, conversation: str):
         """Dieselbe Live-Anzeige wie im `chat` — ein Zug darf genauso belegt sein."""
         from .cli_activity import CliActivity
+        from .ux import style_for
 
-        return CliActivity(out=self.out)
+        return CliActivity(out=self.out, style=style_for(self.style))
 
 
 def refuse_in_sandbox(env: dict | None = None) -> str:

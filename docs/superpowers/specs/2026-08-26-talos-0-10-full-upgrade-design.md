@@ -112,7 +112,7 @@ dedicated OS user (`talos-model`); reasoning calls cross a Unix socket.
   where a real model is configured; skipped with a note otherwise.
 - Public sync via `scripts/sync-public.sh`, then a hygiene pass (grep for private
   hostnames, user names, mail addresses, absolute home paths in the synced tree).
-- The operator's private deployment via the new `deploy-pi.sh` (package-only sync),
+- The operator's own installation via the new `deploy-pi.sh` (package-only sync),
   then `talos health` + `talos anchor --send` there as the read-back proof.
 - Internal docs update: refresh the comparison report's DONE/OPEN status.
 

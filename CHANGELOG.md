@@ -294,8 +294,8 @@ Versions are alpha: the kernel's rules are stable, the surface around them is no
 ### Fixed
 
 - **The shipped guidance no longer names the private repository.** `CLAUDE.md` travels with
-  the tree, so it is in the tarball and in the public repo — and it wrote out what the
-  private repository is called and what the private deployment is. No secret (the account
+  the tree, so it is in the tarball and in the public repo — and it wrote out what that
+  repository is called and what the operator's own installation is. No secret (the account
   name is in the author field of every public commit anyway), but nothing that belongs
   there either: addresses live in `git remote -v`, operational detail in the operator's own
   notes. ⚠️ 0.8.0 and 0.8.1 still carry the old text and are deliberately **not** replaced:

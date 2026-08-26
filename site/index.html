@@ -319,9 +319,9 @@ footer .sp{flex:1}
         <a class="btn ghost" href="#install">Install</a>
       </div>
       <div class="meter-row">
-        <span><b>1707</b>unit tests</span>
-        <span><b>164/164</b>adversarial</span>
-        <span><b>532</b>lines · gate</span>
+        <span><b>1737</b>unit tests</span>
+        <span><b>166/166</b>adversarial</span>
+        <span><b>548</b>lines · gate</span>
         <span><b>30s</b>token life</span>
       </div>
     </div>
@@ -361,7 +361,7 @@ footer .sp{flex:1}
         more cases than these patterns name. Two things the page cannot show: before any of
         these stages the real kernel checks <em>who</em> is asking (and there is no default
         allowlist), and file tools walk their own pipeline — system floor, identity, secrets,
-        persistence, effect. The authoritative version is the Python one; 164 adversarial
+        persistence, effect. The authoritative version is the Python one; 166 adversarial
         cases run against it on every install and every update.</p>
       </div>
     </div>
@@ -432,10 +432,10 @@ footer .sp{flex:1}
     <p class="sec-tag rv">proof, not adjectives</p>
     <h2 class="rv">Reproducible in under a minute</h2>
     <div class="stats">
-      <div class="stat rv"><div class="n cnt" data-n="1707">0</div><div class="l">unit tests, run by the installer in front of you</div></div>
-      <div class="stat rv"><div class="n cnt" data-n="164">0</div><div class="l">adversarial cases trying to pass the kernel</div></div>
+      <div class="stat rv"><div class="n cnt" data-n="1737">0</div><div class="l">unit tests, run by the installer in front of you</div></div>
+      <div class="stat rv"><div class="n cnt" data-n="166">0</div><div class="l">adversarial cases trying to pass the kernel</div></div>
       <div class="stat rv"><div class="n cnt" data-n="44">0</div><div class="l">end-to-end cases against a real model</div></div>
-      <div class="stat rv"><div class="n cnt" data-n="532">0</div><div class="l">lines in the file that decides everything</div></div>
+      <div class="stat rv"><div class="n cnt" data-n="548">0</div><div class="l">lines in the file that decides everything</div></div>
       <div class="stat rv"><div class="n cnt" data-n="30" data-suf="s">0</div><div class="l">token lifetime, single use</div></div>
       <div class="stat rv"><div class="n cnt" data-n="0">0</div><div class="l">identities allowed by default</div></div>
     </div>
@@ -454,9 +454,9 @@ footer .sp{flex:1}
 <span class="p">curl</span> -fsSL https://talos-agent.ch/install.sh | <span class="p">bash</span>
 
   <span class="p">▸</span> Checking prerequisites      <span class="ok">✓ Python 3.11+</span>
-  <span class="p">▸</span> Running the test suite      <span class="ok">1707 passed</span>
+  <span class="p">▸</span> Running the test suite      <span class="ok">1737 passed</span>
   <span class="p">▸</span> Running the adversarial suite
-    <span class="ok">164/164 cases behaved as expected.</span> <span class="c">— any failure aborts the install</span>
+    <span class="ok">166/166 cases behaved as expected.</span> <span class="c">— any failure aborts the install</span>
 
   <span class="ok">Done.</span> Talos is in <b>~/talos</b> — <span class="warn">and it is not running.</span>
   <span class="c">That is not a forgotten step. The switch is yours.</span></pre>
@@ -571,9 +571,9 @@ const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
     ['  <span class="ok">✓</span> Python 3.11+', 140],
     ['  <span class="ok">✓</span> curl, tar available', 200],
     ['▸ Running the test suite', 420],
-    ['  <span class="ok">1707 passed</span>', 300],
+    ['  <span class="ok">1737 passed</span>', 300],
     ['▸ Running the adversarial suite', 460],
-    ['  <span class="ok">164/164 cases behaved as expected.</span>', 380],
+    ['  <span class="ok">166/166 cases behaved as expected.</span>', 380],
     ['', 80],
     ['<span class="ok">Done.</span> The switch is yours. <span class="warn">Entering console…</span>', 520],
   ];

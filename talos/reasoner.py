@@ -21,16 +21,16 @@ import time
 from pathlib import Path
 from typing import Callable, Protocol
 
-from .identity import FALLBACK_PREAMBLE, SOUL_PATH, load_soul
+from . import instructions
 from .intelligence import reasoning_effort_for
 from .stream import OnText, StreamReader
 from .usage import Run, UsageMeter
 
-# Persona und Name kommen aus SOUL.md — siehe identity.py. Charakter ist nichts,
-# wofuer man deployen sollte: the operator aendert die Datei, fertig. Gelesen wird pro Zug
-# und nicht beim Import — eine beim Start eingefrorene Persona hiess, dass der Agent nach
-# einer Umbenennung weiter unter dem alten Namen antwortete, den seine eigene Quelle
-# nicht mehr trug. `load_soul` prueft den Zeitstempel; unveraendert kostet das einen `stat`.
+# Identitaet, Arbeitsdisziplin und Betreiberpraeferenzen kommen aus den drei Dateien in
+# `instructions.py` (SOUL/AGENTS/USER). Gelesen wird pro Zug und nicht beim Import —
+# eine beim Start eingefrorene Belehrung hiess, dass der Agent nach einer Aenderung
+# weiter mit dem alten Stand antwortete. Der Name bleibt allein Sache von
+# SOUL.md/identity.py.
 
 # Der Reasoner schlägt Werkzeuge nur VOR — ausgeführt wird nichts hier. Braucht die Aufgabe
 # ein Werkzeug, gibt das Modell GENAU eine einzelne Zeile `TOOL_CALL: {…}` (einzeiliges JSON)
@@ -331,7 +331,12 @@ class ClaudeCliReasoner:
             return ""
 
     def reason(self, prompt: str, on_text: OnText | None = None) -> str:
-        full = f"{load_soul()}{TOOL_PROTOCOL}{PLAN_PROTOCOL}{self._skills_text()}\n\nNachricht:\n{prompt}"
+        system = instructions.assemble_system_prompt(
+            tool_protocol=TOOL_PROTOCOL,
+            plan_protocol=PLAN_PROTOCOL,
+            skills=self._skills_text(),
+        )
+        full = f"{system}\n\nNachricht:\n{prompt}"
         model_argv = ["--model", self._model] if self._model else []
         # Der Stream-Pfad ist additiv: ohne Senke laeuft alles wie bisher. Ein Fehler im
         # Format kostet damit hoechstens die Live-Anzeige, nie die Antwort.
@@ -638,10 +643,13 @@ class HermesCliReasoner:
             return ""
 
     def argv_for(self, prompt: str) -> list[str]:
-        full = (
-            f"{load_soul()}{TOOL_PROTOCOL}{PLAN_PROTOCOL}{self._skills_text()}"
-            f"{HERMES_FINAL_CHANNEL_PROTOCOL}\n\nNachricht:\n{prompt}"
+        system = instructions.assemble_system_prompt(
+            tool_protocol=TOOL_PROTOCOL,
+            plan_protocol=PLAN_PROTOCOL,
+            skills=self._skills_text(),
+            final_protocol=HERMES_FINAL_CHANNEL_PROTOCOL,
         )
+        full = f"{system}\n\nNachricht:\n{prompt}"
         return [
             self.binary,
             "-z",

