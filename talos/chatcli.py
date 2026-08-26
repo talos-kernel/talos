@@ -115,6 +115,16 @@ class ChatChannel:
         """
         self.send(conversation, getattr(message, "text", "") or str(message))
 
+    def begin_activity(self, conversation: str):
+        """Die Live-Anzeige des Terminals — dasselbe Protokoll wie die des Messengers.
+
+        Der Conductor kennt nur das schmale `Activity`-Protokoll; dass hier Zeilen
+        auf stdout statt einer editierten Statusnachricht entstehen, ist Kanal-Sache.
+        """
+        from .cli_activity import CliActivity
+
+        return CliActivity(out=self.out)
+
 
 def attended(stdin=None, stdout=None) -> bool:
     """Sitzt ein Mensch davor? Gemessen, nicht behauptet.

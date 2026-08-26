@@ -131,9 +131,11 @@ RSYNC_COMMON=(
   --exclude='*.env'
   --exclude=/data/
   # Build-Reste der Quelle gehoeren nicht in ein Deployment: ein mitgeschickter
-  # pyc-Stand einer anderen Maschine ist Alt-Code, der wie aktueller aussieht.
+  # pyc-Stand einer anderen Maschine ist Alt-Code, der wie aktueller aussieht,
+  # und Finder-Beifang gehoert auf keinen Server.
   --exclude='__pycache__/'
   --exclude='*.pyc'
+  --exclude='.DS_Store'
 )
 RSYNC_REPORT=(
   --itemize-changes

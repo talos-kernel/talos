@@ -13,7 +13,7 @@ the action. Full architecture in `README.md`. The agent's name and character liv
 |---|---|
 | Gate path | `policy.py`, **532 lines** — has to stay readable in one sitting |
 | Tools | **19**, every one gated |
-| Suites | **1699** tests · **164** adversarial · 44 end-to-end |
+| Suites | **1707** tests · **164** adversarial · 44 end-to-end |
 | Home | <https://talos-agent.ch> · docs at `/docs/` |
 | Repos | `talos-kernel/talos` published · a separate private one holds the full history (`git remote -v`) |
 
@@ -194,7 +194,7 @@ In practice:
 ```bash
 python3 -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt
 
-python -m pytest tests/ -q   # 1699 tests, ~8s
+python -m pytest tests/ -q   # 1707 tests, ~8s
 python redteam.py            # 164 adversarial cases — mandatory for any kernel change
 python e2e.py                # 44 cases against a real model (costs tokens and time)
 python -m talos --once       # single cycle, for diagnosis

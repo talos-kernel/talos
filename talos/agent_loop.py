@@ -454,6 +454,7 @@ def _safe_tool_summary(tool: str, args: dict, targets: tuple[str, ...]) -> str:
         "vault_search": "search vault",
         "vault_get": "read vault note",
         "vault_write_note": "write vault note",
+        "agent_consult": "consult second agent",
     }
     label = labels.get(tool, "run tool")
     if tool not in {"read_file", "write_file", "undo_last"}:

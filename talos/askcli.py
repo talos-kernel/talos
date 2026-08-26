@@ -113,6 +113,12 @@ class CliChannel:
         stumm bliebe, saehe aus wie ein Haenger."""
         self.send(conversation, getattr(message, "text", "") or str(message))
 
+    def begin_activity(self, conversation: str):
+        """Dieselbe Live-Anzeige wie im `chat` — ein Zug darf genauso belegt sein."""
+        from .cli_activity import CliActivity
+
+        return CliActivity(out=self.out)
+
 
 def refuse_in_sandbox(env: dict | None = None) -> str:
     """Leer, wenn der Aufruf von aussen kommt; sonst der Grund für die Ablehnung."""

@@ -206,3 +206,27 @@ def test_since_combines_with_the_tool_filter(tmp_path) -> None:
     log.close()
     assert "nothing matched" in _lauf(run_events, ["--since", "1h", "--tool", "run_shell"], pfad)
     assert "read_file" in _lauf(run_events, ["--since", "1h", "--tool", "read_file"], pfad)
+
+
+def test_events_follow_prints_new_entries_until_interrupted(tmp_path, monkeypatch) -> None:
+    """tail-Bauart: der Bestand einmal, danach jede neue Zeile — Ctrl-C sauber beendet."""
+    from talos.eventlog import Event, EventLog
+
+    pfad = _log(tmp_path, [("exec", "exec.result", {"tool": "read_file", "status": "done"}, "r1")])
+    ticks = {"n": 0}
+
+    def schlaf(_s):
+        ticks["n"] += 1
+        if ticks["n"] == 1:
+            log = EventLog(pfad)
+            log.append(Event("r2", "exec", "exec.result", {"tool": "agent_consult", "status": "done"}))
+            log.close()
+        else:
+            raise KeyboardInterrupt
+
+    monkeypatch.setattr("talos.eventscli.time.sleep", schlaf)
+    text = _lauf(run_events, ["--follow"], pfad)
+    assert "following" in text
+    assert "read_file" in text          # der Bestand
+    assert "agent_consult" in text      # die neue Zeile aus dem Takt
+    assert text.count("read_file") == 1  # nichts kommt doppelt

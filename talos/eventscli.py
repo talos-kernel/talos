@@ -32,6 +32,8 @@ __all__ = ["run_events", "run_why"]
 DEFAULT_LIMIT = 25
 MAX_LIMIT = 500
 SUMMARY_CHARS = 84
+FOLLOW_INTERVAL_S = 1.0
+FOLLOW_BATCH = 200
 
 
 def _stamp(ts: object) -> str:
@@ -97,8 +99,11 @@ def run_events(argv: list[str] | None = None, *, out=None, db=None) -> int:
     argumente = list(argv or [])
     schreiben = (out or sys.stdout).write
     if "--help" in argumente or "-h" in argumente:
-        schreiben("  usage: talos events [--limit n] [--type t] [--tool t] [--run id] [--since 4h]\n")
+        schreiben("  usage: talos events [--limit n] [--type t] [--tool t] [--run id] [--since 4h] [--follow]\n")
         return 0
+
+    folgen = "--follow" in argumente or "-f" in argumente
+    argumente = [a for a in argumente if a not in ("--follow", "-f")]
 
     try:
         limit = min(MAX_LIMIT, max(1, int(_flag("--limit", argumente, str(DEFAULT_LIMIT)))))
@@ -124,27 +129,50 @@ def run_events(argv: list[str] | None = None, *, out=None, db=None) -> int:
             limit * 20 if (typ or werkzeug or seit) else limit,
             types=(typ,) if typ else (),
         )
+
+        if seit:
+            schwelle = time.time() - seit
+            roh = [e for e in roh if float(e.get("ts") or 0) >= schwelle]
+        if werkzeug:
+            roh = [e for e in roh if str((e.get("payload") or {}).get("tool") or "") == werkzeug]
+        gezeigt = roh[-limit:]
+        if not gezeigt and not folgen:
+            schreiben("  nothing matched\n")
+            return 0
+
+        for e in gezeigt:
+            schreiben(f"  {e['id']:>7}  {_stamp(e.get('ts'))}  {str(e.get('type') or ''):<16} "
+                      f"{_summary(e)}\n")
+        if len(roh) > len(gezeigt):
+            # ⚠️ Eine stille Kuerzung liest sich wie Vollstaendigkeit.
+            schreiben(f"  … {len(roh) - len(gezeigt)} older match(es) not shown (--limit)\n")
+        if folgen:
+            # tail-Bauart: ab jetzt jede neue Zeile, dieselben Filter. Der letzte
+            # gezeigte Stand ist die Marke — was aelter ist, kommt nicht noch einmal.
+            schreiben("  following — Ctrl-C to stop\n")
+            letzte = gezeigt[-1]["id"] if gezeigt else 0
+            try:
+                while True:
+                    time.sleep(FOLLOW_INTERVAL_S)
+                    neu = log.by_run(lauf) if lauf else log.recent(
+                        FOLLOW_BATCH, types=(typ,) if typ else ())
+                    if werkzeug:
+                        neu = [e for e in neu
+                               if str((e.get("payload") or {}).get("tool") or "") == werkzeug]
+                    neu = sorted((e for e in neu if e["id"] > letzte), key=lambda e: e["id"])
+                    for e in neu:
+                        schreiben(f"  {e['id']:>7}  {_stamp(e.get('ts'))}  "
+                                  f"{str(e.get('type') or ''):<16} {_summary(e)}\n")
+                    if neu:
+                        letzte = neu[-1]["id"]
+            except KeyboardInterrupt:
+                schreiben("\n")
+                return 0
+        else:
+            schreiben(f"  `talos why <id>` explains one of them\n")
+        return 0
     finally:
         log.close()
-
-    if seit:
-        schwelle = time.time() - seit
-        roh = [e for e in roh if float(e.get("ts") or 0) >= schwelle]
-    if werkzeug:
-        roh = [e for e in roh if str((e.get("payload") or {}).get("tool") or "") == werkzeug]
-    gezeigt = roh[-limit:]
-    if not gezeigt:
-        schreiben("  nothing matched\n")
-        return 0
-
-    for e in gezeigt:
-        schreiben(f"  {e['id']:>7}  {_stamp(e.get('ts'))}  {str(e.get('type') or ''):<16} "
-                  f"{_summary(e)}\n")
-    if len(roh) > len(gezeigt):
-        # ⚠️ Eine stille Kuerzung liest sich wie Vollstaendigkeit.
-        schreiben(f"  … {len(roh) - len(gezeigt)} older match(es) not shown (--limit)\n")
-    schreiben(f"  `talos why <id>` explains one of them\n")
-    return 0
 
 
 def _verdict_lines(event: dict) -> list[str]:
