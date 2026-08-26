@@ -2,13 +2,17 @@
 
 Verbreitete Agenten-CLIs tragen fuenfzig bis siebzig Unterbefehle. Sie sind darueber
 gewachsen und tragen inzwischen Befehle, die sich gegenseitig erklaeren muessen. Talos
-hat sieben, und jeder beantwortet eine Frage, die ein Betreiber wirklich stellt:
+haelt die Liste kurz, und jeder beantwortet eine Frage, die ein Betreiber wirklich stellt:
 
     setup    wie richte ich das ein
     doctor   warum geht etwas nicht
     config   was steht drin, und wie aendere ich es
     models   womit kann es denken
     status   was hat es zuletzt getan
+    health   ist es gesund — Laeufe, Fehler, Zeitplaene, Anker
+    verify   wurde das Protokoll nachtraeglich geaendert
+    anchor   wurde das Protokoll gekuerzt — der Kopf, festgehalten
+    briefing das Morgen-Briefing — Stand aus den haltbaren Quellen
     update   wie komme ich auf den neuen Stand
     version  welcher Stand ist das hier
 
@@ -42,9 +46,12 @@ HELP = f"""
   config list|get|set|validate       read and change settings
   models [--refresh]                 which models a provider offers
   status                             what it did last
+  health [--json]                    is it well — runs, errors, schedules, anchor
   events [--limit n] [--tool t] [--since 4h]    what happened — filterable, read-only
   why <event-id>                     why that was allowed or refused
   verify                             prove the log was not edited after the fact
+  anchor [--send] [--mail]         pin the chain head — catches tail truncation
+  briefing [--send] [--install]    morning status from the logs — health, chain, anchor
   report [--run <id>] [--out <f>]    a record for someone else to read
   review [--window <n>]              what this installation should change
   update [--check]                   new version beside the old one, tests first
@@ -245,9 +252,12 @@ TABLE: dict[str, object] = {
     "ask": cmd_ask,
     "chat": cmd_chat,
     "status": lambda _rest: cmd_status(),
+    "health": _lazy("health", "run_health"),
     "events": _lazy("eventscli", "run_events"),
     "why": _lazy("eventscli", "run_why"),
     "verify": lambda _rest: cmd_verify(),
+    "anchor": _lazy("anchor", "run_anchor"),
+    "briefing": _lazy("briefing", "run_briefing"),
     "report": _lazy("report", "run_report"),
     "review": _lazy("review", "run_review"),
     "update": _lazy("updater", "run_update"),

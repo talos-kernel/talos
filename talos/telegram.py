@@ -162,11 +162,12 @@ def largest_photo(message: object) -> dict:
 def attachment_note(message: dict, saved: str = "") -> str:
     """Eine Zeile ueber das Angehaengte — oder leer, wenn nichts dranhaengt.
 
-    `saved` ist der Pfad, unter dem ein Foto tatsaechlich abgelegt wurde. Steht er da,
-    faellt der Blind-Satz weg und es steht stattdessen dort, WO die Datei liegt — erst
-    damit hat das Sehen ein Ziel, ueber das der Kernel urteilen kann. Ohne Pfad bleibt es
-    beim ehrlichen „Inhalt liegt mir nicht vor": das ist kein Platzhalter, sondern der
-    Fall, in dem nichts geholt wurde (fremder Absender, zu gross, kein Bild).
+    `saved` ist der Pfad, unter dem ein Foto oder eine Sprach-/Audioaufnahme tatsaechlich
+    abgelegt wurde. Steht er da, faellt der Blind-Satz weg und es steht stattdessen dort,
+    WO die Datei liegt — erst damit hat Sehen oder Hoeren ein Ziel, ueber das der Kernel
+    urteilen kann. Ohne Pfad bleibt es beim ehrlichen „Inhalt liegt mir nicht vor": das ist
+    kein Platzhalter, sondern der Fall, in dem nichts geholt wurde (fremder Absender, zu
+    gross, kein Bild, keine Aufnahme).
     """
     if not isinstance(message, dict):
         return ""
@@ -191,7 +192,15 @@ def attachment_note(message: dict, saved: str = "") -> str:
         dauer = f"{int(teil['duration'])} s" if teil.get("duration") else ""
         datei = str(teil.get("file_name") or "")[:80]
         fakten = _join_facts(datei, dauer, _kb(teil.get("file_size")))
-        return f"[{name} attached — {fakten}. {BLIND_NOTE}]" if fakten else f"[{name} attached. {BLIND_NOTE}]"
+        # Ist die Aufnahme geholt worden, bekommt das Modell ein Ziel statt des
+        # Blind-Satzes — genau wie beim Foto. `hear` ist READ; der Kernel urteilt ueber den
+        # Pfad. Nur Sprache/Audio: Video herausschneiden waere ein weicherer Zweitweg.
+        hinweis = (
+            f"Saved to {saved} — transcribe it with hear."
+            if saved and schluessel in ("voice", "audio")
+            else BLIND_NOTE
+        )
+        return f"[{name} attached — {fakten}. {hinweis}]" if fakten else f"[{name} attached. {hinweis}]"
     return ""
 
 
@@ -207,6 +216,24 @@ _SAFE_NAME = re.compile(r"[^A-Za-z0-9_-]")
 MAX_ATTACHMENT_BYTES = 12 * 1024 * 1024
 _DOWNLOAD_TIMEOUT_S = 60
 _SUFFIX = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp", "image/gif": ".gif"}
+# Sprache kommt als ogg/opus (`voice`) oder mit eigener Endung (`audio`). Die Endung wird
+# nur aus einer festen Liste gewaehlt, die `hearing.SUFFIXES` deckt; der Dateiname stammt
+# weiterhin aus Telegrams `file_unique_id`, nie aus einem vom Absender gewaehlten Feld.
+_AUDIO_SUFFIXES = (".ogg", ".oga", ".opus", ".mp3", ".m4a", ".wav", ".flac", ".webm", ".mp4")
+_MIME_AUDIO_SUFFIX = {
+    "audio/ogg": ".ogg", "audio/opus": ".opus", "audio/mpeg": ".mp3",
+    "audio/mp4": ".m4a", "audio/x-m4a": ".m4a", "audio/wav": ".wav",
+    "audio/x-wav": ".wav", "audio/flac": ".flac", "audio/webm": ".webm",
+}
+
+
+def _audio_suffix(file_name: object, mime: object) -> str:
+    """Eine Endung, die `hear` akzeptiert — aus der Dateiendung, sonst dem MIME-Typ, sonst .ogg."""
+    name = str(file_name or "")
+    punkt = name.rfind(".")
+    if punkt != -1 and name[punkt:].lower() in _AUDIO_SUFFIXES:
+        return name[punkt:].lower()
+    return _MIME_AUDIO_SUFFIX.get(str(mime or "").strip().lower(), ".ogg")
 
 
 def _plausible_file_path(raw: object) -> str:
@@ -311,6 +338,49 @@ class TelegramClient:
             return ""
         return str(ziel)
 
+    def fetch_voice(self, message: dict, user_id: int) -> str:
+        """Holt eine Sprach- oder Audionachricht und legt sie im inbox ab. Pfad — oder "".
+
+        Dieselbe fail-closed-Absicherung wie `fetch_photo`: ohne inbox UND ohne die
+        Kennung-Frage (`_may_fetch`) wird nichts geholt, sonst legt jeder Fremde, der den
+        Bot findet, Dateien auf die Platte. Ein Fehlschlag ist NIE eine Ausnahme nach oben;
+        der Aufrufer faellt dann auf den Blind-Satz zurueck. `voice` ist ogg/opus, `audio`
+        bringt oft eine eigene Endung mit — beides landet unter einem Namen aus
+        `file_unique_id`, damit weder Absender noch Modell den Ablageort waehlen.
+        """
+        if self._inbox is None or not self._may_fetch(int(user_id)):
+            return ""
+        teil = message.get("voice")
+        endung = ".ogg"
+        if not isinstance(teil, dict):
+            teil = message.get("audio")
+            if not isinstance(teil, dict):
+                return ""
+            endung = _audio_suffix(teil.get("file_name"), teil.get("mime_type"))
+        datei_id = str(teil.get("file_id") or "")
+        eindeutig = _SAFE_NAME.sub("", str(teil.get("file_unique_id") or ""))[:48]
+        if not datei_id or not eindeutig:
+            return ""
+        if int(teil.get("file_size") or 0) > MAX_ATTACHMENT_BYTES:
+            return ""
+        try:
+            antwort = self._call(requests.get, "getFile", params={"file_id": datei_id}, timeout=30)
+            pfad = _plausible_file_path((antwort.json().get("result") or {}).get("file_path"))
+            if not pfad:
+                return ""
+            roh = self._download(pfad)
+        except (requests.RequestException, ValueError, OSError):
+            return ""
+        if not roh:
+            return ""
+        try:
+            self._inbox.mkdir(parents=True, exist_ok=True)
+            ziel = self._inbox / f"{eindeutig}{endung}"
+            ziel.write_bytes(roh)
+        except OSError:
+            return ""
+        return str(ziel)
+
     def _download(self, file_path: str) -> bytes:
         """Laedt hoechstens `MAX_ATTACHMENT_BYTES` — der Zaehler waehrend des Lesens ist
         der echte Deckel, nicht `Content-Length`."""
@@ -375,7 +445,10 @@ class TelegramClient:
                 # Angehaengtes statt Text. Die Bildunterschrift IST das Wort des
                 # Betreibers und steht deshalb vorne; die Fakten ueber die Datei
                 # kommen darunter, klar als Beobachtung erkennbar.
-                notiz = attachment_note(message, self.fetch_photo(message, frm["id"]))
+                notiz = attachment_note(
+                    message,
+                    self.fetch_photo(message, frm["id"]) or self.fetch_voice(message, frm["id"]),
+                )
                 if not notiz:
                     continue  # weder Text noch etwas, worueber sich reden liesse
                 caption = str(message.get("caption") or "").strip()

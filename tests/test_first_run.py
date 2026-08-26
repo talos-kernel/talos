@@ -204,6 +204,7 @@ def test_require_channel_is_only_relaxed_for_ask_and_chat() -> None:
     erlaubt = {
         ("cli.py", "False"),                     # cmd_ask
         ("__main__.py", "not (ask or chat)"),    # run(), der zweite Ladevorgang
+        ("briefing.py", "False"),                # talos briefing — Berichts-CLI wie ask
     }
     unerwartet = [eintrag for eintrag in gefunden if eintrag not in erlaubt]
     assert not unerwartet, (

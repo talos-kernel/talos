@@ -1,0 +1,17 @@
+# Beispiel-Timer fuer den Anker — Doku-Qualitaet, vor Gebrauch anpassen.
+#
+# Taeglich um 06:30, eine halbe Stunde vor dem Briefing: das Briefing meldet das Alter
+# des letzten Ankers, und ein frischer Anker haelt diese Zahl klein und aussagekraeftig.
+# Wer eine engmaschigere Ueberwachung will, setzt z.B. OnCalendar=hourly — der Anker
+# ist ein reiner Lese-Plus-Append-Schritt, er kostet fast nichts.
+#
+# Aktivieren:  systemctl enable --now talos-anchor.timer
+[Unit]
+Description=Daily Talos chain anchor
+
+[Timer]
+OnCalendar=*-*-* 06:30:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

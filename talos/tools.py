@@ -33,7 +33,13 @@ UNDO_LOOKBACK = 200
 
 
 def _need(req: ToolRequest, key: str) -> str:
-    """Return a required text argument or raise a clear tool error."""
+    """Ein Pflichtargument als Text — oder ein klarer Fehler statt eines nackten KeyError.
+
+    Ein fehlendes `path` schlug bisher als `req.args["path"]` mit `KeyError` durch und
+    erschien dem Modell als kryptisches „error · 'path'", das einen Plan abbrach. Das
+    Urteil faellt weiter der Kernel; hier geht es nur um eine brauchbare Meldung, aus der
+    das Modell den korrekten Aufruf ableiten kann.
+    """
     if key not in req.args:
         raise ValueError(f"das Werkzeug braucht das Argument '{key}'")
     return str(req.args[key])
@@ -275,6 +281,10 @@ def default_manifest() -> ToolManifest:
         # Betreiber jedes Nachsehen freigeben — und eine Freigabe, die man reflexhaft
         # erteilt, ist genau die, die spaeter durchgewunken wird.
         .with_tool(ToolSpec("delegate", Effect.READ, reversible=True))
+        # Eine Beratung durch einen zweiten, operator-konfigurierten Agenten ist READ:
+        # sie liefert nur begrenzten Text zurueck und erteilt weder Capability noch
+        # Freigabe. Ziel und Credential kommen nie aus Modellargumenten.
+        .with_tool(ToolSpec("agent_consult", Effect.READ, reversible=True))
         # Der rendernde Browser. READ wie `web_fetch`: er liest eine Seite, er bedient
         # sie nicht — Klicken und Formulare gibt es bewusst nicht, weil ein Klick kein
         # ableitbares Ziel hat und ein Werkzeug ohne Ziel per Bauart DENY ist.

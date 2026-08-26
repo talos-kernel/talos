@@ -749,7 +749,7 @@ class Conductor:
                     steps_used=steps_used,
                     plan=plan,
                     redirect=self.redirect if steerable else None,
-                    final_check=self._final_check(text),
+                    final_check=self._final_check(text, run_id),
                 )
         except Exception as error:
             # Der Lauf ist tot — eine Frage, auf die er noch wartete, auch.
@@ -1036,14 +1036,39 @@ class Conductor:
             return ""
         return str(block or "")
 
-    def _final_check(self, user_text: str):
+    def _consult_done(self, run_id: str) -> bool:
+        """Ob in DIESEM Lauf eine Beratung gelang — aus dem Event-Log, nie aus der
+        Historie. Der Marker '[agent_consult -> done]' im Verlauf ist Modellprosa
+        wert: die Schleife schreibt ihn aus Executor-Ergebnissen, aber dieselbe
+        Zeichenkette kann auch in einer Antwort stehen. Das Log schreibt nur der
+        Executor."""
+        try:
+            for eintrag in self.log.by_run(run_id):
+                if eintrag.get("type") != "exec.result":
+                    continue
+                nutz = eintrag.get("payload") or {}
+                if (
+                    str(nutz.get("tool") or "") == "agent_consult"
+                    and str(nutz.get("status") or "").upper() == "DONE"
+                ):
+                    return True
+        except Exception:
+            return False
+        return False
+
+    def _final_check(self, user_text: str, run_id: str):
         """Adapt the intelligence review object to the agent-loop's tiny protocol."""
         if self.intelligence is None:
             return None
 
         def check(answer: str, history: tuple[str, ...]) -> tuple[bool, str]:
             try:
-                review = self.intelligence.review(user_text, answer, history)
+                review = self.intelligence.review(
+                    user_text,
+                    answer,
+                    history,
+                    consult_done=lambda: self._consult_done(run_id),
+                )
                 return bool(review.ok), str(review.note or "")
             except Exception:
                 return True, ""

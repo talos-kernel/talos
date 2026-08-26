@@ -1,0 +1,37 @@
+# Talos Modell-Worker — haelt die Provider-Schluessel hinter einer eigenen UID.
+# Installation und Begruendung jeder Zeile: docs/model-worker.md
+[Unit]
+Description=Talos model worker (provider credentials behind their own UID)
+After=network.target
+
+[Service]
+Type=simple
+User=talos-model
+Group=talos-model
+# /run/talos, gehoert talos-model:talos-model, Mode 0750: der Agent (User talos,
+# Mitglied der Gruppe talos-model) erreicht den Socket darin, der Rest der
+# Maschine nicht. Eigentuemer ist der Dienst-User statt root — fuer den Agenten
+# gleich streng (Gruppe r-x, kein Schreiben), und der Dienst braucht kein root.
+RuntimeDirectory=talos
+RuntimeDirectoryMode=0750
+Environment=TALOS_MODEL_WORKER_SOCKET=/run/talos/model.sock
+Environment=TALOS_MODEL_WORKER_ENV=/etc/talos/model.env
+ExecStart=/usr/bin/env python3 -m talos.modelworker
+Restart=on-failure
+RestartSec=2
+
+# Haertung. ProtectSystem=strict macht das ganze Dateisystem read-only — LESEN
+# von /etc/talos/model.env bleibt moeglich (gewollt), SCHREIBEN nirgendwo.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target

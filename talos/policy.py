@@ -28,14 +28,12 @@ HOME = Path.home()
 # Der eigene Bauplan — ABGELEITET aus dem Modulpfad, nie als Zeichenkette geraten.
 # Ein fester Pfad hier ueberlebt weder eine Umbenennung des Verzeichnisses noch ein
 # `TALOS_PREFIX=/opt/talos`: die Liste schuetzt danach ein Verzeichnis, das es nicht
-# gibt, waehrend der Agent Kernel oder Operator-Anweisungen ungefragt ueberschreiben
-# darf. Der Fall ist nicht theoretisch — er ist beim Umbenennen des
+# gibt, waehrend der Agent seinen eigenen Kernel und seine SOUL.md ungefragt
+# ueberschreiben darf. Der Fall ist nicht theoretisch — er ist beim Umbenennen des
 # Installationsverzeichnisses bereits eingetreten und musste von Hand nachgezogen werden.
 PACKAGE_DIR = Path(__file__).resolve().parent
 INSTALL_DIR = PACKAGE_DIR.parent
 SOUL_FILE = INSTALL_DIR / "SOUL.md"
-AGENTS_FILE = INSTALL_DIR / "AGENTS.md"
-USER_FILE = INSTALL_DIR / "USER.md"
 # Der freie Schreibbereich der Stufe 4 haengt am selben Anker (siehe `autonomy.WORKSPACE`).
 # Er liegt bewusst NEBEN dem Code, nicht darin: laege er darunter, fienge der
 # Persistenz-Floor jede gewoehnliche Schreibarbeit ab und Stufe 4 waere wertlos.
@@ -145,8 +143,6 @@ PERSISTENCE_PREFIXES: tuple[str, ...] = _both_forms(
     str(HOME / ".claude"),
     str(PACKAGE_DIR),
     str(SOUL_FILE),
-    str(AGENTS_FILE),
-    str(USER_FILE),
     "/var/spool/cron",
 )
 
@@ -245,6 +241,9 @@ TARGET_EXTRACTORS = {
     # dann zusaetzlich unter der Nur-Lesen-Decke. Der Eintrag muss trotzdem stehen: ein
     # Werkzeug ohne Extractor ist per Bauart DENY.
     "delegate": lambda args: (),
+    # Operator-konfigurierte Agentenberatung. Endpoint und Credential liegen im Runner,
+    # das Modell liefert nur begrenzten Fragetext; die Antwort erteilt keine Capability.
+    "agent_consult": lambda args: (),
     # Zurückrollen wirkt auf die ORIGINALPFADE — genau die sind das Ziel und werden
     # gegatet. Ein Undo auf ~/.bashrc fragt den Betreiber also wie ein Schreiben dorthin.
     "undo_last": lambda args: tuple(
@@ -307,20 +306,8 @@ def _hits(target: str, prefixes: tuple[str, ...]) -> bool:
     Präfix und kam als „allow" durch, während `guard_targets` längst expandiert hat.
     Ein Floor, der nur die ausgeschriebene Schreibweise kennt, ist kein Floor.
     """
-    lexical = os.path.abspath(os.path.normpath(_expand(target)))
-    real = os.path.realpath(lexical)
-    for prefix in prefixes:
-        prefix_lexical = os.path.abspath(os.path.normpath(prefix))
-        # Prefixe werden auch hier erneut aufgeloest. Ein beim Prozessstart noch
-        # fehlender Operatorpfad kann spaeter ein Symlink werden oder umgebogen
-        # werden; sein Schutz darf dadurch nicht aus dem Kernel verschwinden.
-        prefix_real = os.path.realpath(prefix_lexical)
-        for candidate in (lexical, real):
-            if candidate == prefix_lexical or candidate.startswith(prefix_lexical + os.sep):
-                return True
-            if candidate == prefix_real or candidate.startswith(prefix_real + os.sep):
-                return True
-    return False
+    real = os.path.realpath(_expand(target))
+    return any(real == p or real.startswith(p + os.sep) for p in prefixes)
 
 
 # Ordnernamen, die im Notizspeicher Zugangsdaten bedeuten. Ein Notizspeicher ist als
@@ -449,9 +436,10 @@ class PolicyKernel:
 
     manifest: ToolManifest
     allowed_identities: frozenset[Principal]
-    # Solange run_shell nicht isoliert laeuft, ist jedes Kommando freigabepflichtig.
-    # Erst mit Sandbox (eigener Namespace, RO-RootFS, nur Workspace beschreibbar)
-    # darf das hier auf False.
+    # Konservativer Kernel-Default: ohne die Config-Schicht (config.py setzt den
+    # ausgelieferten Default SHELL_NEEDS_HUMAN=0, seit run_shell sandboxed laeuft)
+    # bleibt jedes Kommando freigabepflichtig — fail-closed, und genau die
+    # Konfiguration, gegen die die Angriffs-Suite laeuft.
     shell_needs_human: bool = True
     # Must match the root supplied to make_vault_runners in production.
     vault_dir: Path = DEFAULT_VAULT_DIR

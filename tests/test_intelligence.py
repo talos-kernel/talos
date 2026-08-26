@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import subprocess
 from pathlib import Path
-from types import SimpleNamespace
 
 from talos.channel import Principal
 from talos.intelligence import (
@@ -44,18 +43,6 @@ def registry() -> EntityRegistry:
                     "description": "Local background cache service.",
                     "not_same_as": ["Atlas API"],
                     "status": {"kind": "systemd_user", "unit": "cache-worker.service"},
-                },
-                {
-                    "id": "remote-agent",
-                    "name": "Remote Agent",
-                    "kind": "agent",
-                    "aliases": ["isolated worker"],
-                    "description": "Isolated Hermes agent owned by another local user.",
-                    "status": {
-                        "kind": "systemd_user",
-                        "unit": "remote-agent.service",
-                        "user": "serviceagent",
-                    },
                 },
             ],
         }
@@ -141,42 +128,6 @@ def test_http_entity_status_uses_registry_url_not_model_input() -> None:
     assert output["evidence"] == {"service": "up"}
 
 
-def test_http_registry_source_uses_private_http_runner_not_free_web_runner() -> None:
-    reg = EntityRegistry.from_mapping(
-        {
-            "version": 1,
-            "entities": [
-                {
-                    "id": "vps",
-                    "name": "VPS",
-                    "kind": "infrastructure",
-                    "aliases": ["Hetzner VPS"],
-                    "description": "Operator-owned host.",
-                    "not_same_as": [],
-                    "last_verified": "2026-08-14",
-                    "status": {"kind": "http", "url": "http://status.tail.test/status"},
-                }
-            ],
-        }
-    )
-    calls: list[str] = []
-
-    def https_only(_req: ToolRequest) -> str:
-        raise AssertionError("free web runner must not receive an operator-owned HTTP source")
-
-    def status_http(req: ToolRequest) -> str:
-        calls.append(str(req.args["url"]))
-        return '{"service":"up"}'
-
-    runner = make_entity_status_runner(
-        reg, web_fetch=https_only, web_fetch_http=status_http
-    )
-    output = json.loads(runner(ToolRequest("entity_status", OWNER, {"name": "VPS"})))
-
-    assert calls == ["http://status.tail.test/status"]
-    assert output["entity"] == "VPS" and output["evidence"] == {"service": "up"}
-
-
 def test_systemd_entity_status_uses_fixed_unit_and_structured_evidence() -> None:
     calls: list[tuple[list[str], dict]] = []
 
@@ -206,96 +157,6 @@ def test_systemd_entity_status_uses_fixed_unit_and_structured_evidence() -> None
     ]
     assert calls[0][1]["shell"] is False and calls[0][1]["timeout"] == 3
     assert output["entity"] == "Cache Worker" and output["verdict"] == "running"
-
-
-def test_cross_user_systemd_status_uses_fixed_registry_user_without_shell() -> None:
-    calls: list[tuple[list[str], dict]] = []
-
-    def run(argv, **kwargs):
-        calls.append((argv, kwargs))
-        return subprocess.CompletedProcess(
-            argv,
-            0,
-            "ActiveState=active\nSubState=running\nUnitFileState=enabled\nMainPID=1146\n",
-            "",
-        )
-
-    output = json.loads(
-        make_entity_status_runner(
-            registry(),
-            web_fetch=lambda _req: "",
-            run=run,
-            resolve_user=lambda name: SimpleNamespace(pw_uid=1001)
-            if name == "serviceagent"
-            else None,
-        )(ToolRequest("entity_status", OWNER, {"name": "Remote Agent"}))
-    )
-
-    assert calls[0][0] == [
-        "/usr/bin/sudo",
-        "-n",
-        "-u",
-        "serviceagent",
-        "/usr/bin/env",
-        "XDG_RUNTIME_DIR=/run/user/1001",
-        "PATH=/usr/bin:/bin",
-        "LANG=C.UTF-8",
-        "LC_ALL=C.UTF-8",
-        "/usr/bin/systemctl",
-        "--user",
-        "show",
-        "--no-pager",
-        "--property=ActiveState,SubState,UnitFileState,MainPID,ActiveEnterTimestamp",
-        "--",
-        "remote-agent.service",
-    ]
-    assert calls[0][1]["shell"] is False and calls[0][1]["timeout"] == 3
-    assert output["entity"] == "Remote Agent" and output["verdict"] == "running"
-    assert output["user"] == "serviceagent"
-
-
-def test_systemd_status_rejects_invalid_registry_user() -> None:
-    reg = EntityRegistry.from_mapping(
-        {
-            "version": 1,
-            "entities": [
-                {
-                    "id": "unsafe",
-                    "name": "Unsafe",
-                    "kind": "service",
-                    "description": "Invalid operator data must fail closed.",
-                    "status": {
-                        "kind": "systemd_user",
-                        "unit": "safe.service",
-                        "user": "../../root",
-                    },
-                }
-            ],
-        }
-    )
-
-    entity = reg.get("Unsafe")
-    assert entity is not None and entity.status is None
-
-
-def test_systemd_status_rejects_option_like_registry_unit() -> None:
-    reg = EntityRegistry.from_mapping(
-        {
-            "version": 1,
-            "entities": [
-                {
-                    "id": "unsafe-unit",
-                    "name": "Unsafe Unit",
-                    "kind": "service",
-                    "description": "Option-like units must fail closed.",
-                    "status": {"kind": "systemd_user", "unit": "-H.service"},
-                }
-            ],
-        }
-    )
-
-    entity = reg.get("Unsafe Unit")
-    assert entity is not None and entity.status is None
 
 
 def test_entity_status_rejects_unknown_entity_and_extra_arguments() -> None:

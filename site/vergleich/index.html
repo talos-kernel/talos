@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="../brand/favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="../brand/apple-touch-icon.png">
+
+<!--
+  This page was written for people who already run OpenClaw or Hermes and want to know
+  what Talos does differently. It was originally German for that audience; the site is
+  English throughout now, this page included. The URL stays /vergleich/ — the address
+  was linked and sent around, and a dead address is worse than a German path segment.
+  Machine terms (DENY, sandbox, append-only, the kernel verdicts) stay as they are,
+  like everywhere: the machine console does not translate.
+
+  The tone is deliberate: the others can do more, and the page says so first.
+  A comparison that hides its own weakness is advertising — and advertising would
+  contradict the one property this page is trying to sell.
+-->
+<title>Talos vs. OpenClaw vs. Hermes — an honest comparison</title>
+<meta name="description" content="OpenClaw and Hermes can do more: channels, skills, browser automation, cron fleets. Talos has a deterministic policy kernel, a sandbox and a provable log. The comparison, written down honestly — the gap is doctrine.">
+<link rel="canonical" href="https://talos-agent.ch/vergleich/">
+<meta name="theme-color" content="#17140F">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Talos">
+<meta property="og:title" content="Talos vs. OpenClaw vs. Hermes — an honest comparison">
+<meta property="og:description" content="The others can do more. Talos can prove what it does not do. The comparison, written down honestly.">
+<meta property="og:image" content="https://talos-agent.ch/brand/og-logo.png">
+<meta property="og:url" content="https://talos-agent.ch/vergleich/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Talos vs. OpenClaw vs. Hermes — an honest comparison">
+<meta name="twitter:description" content="The others can do more. Talos can prove what it does not do.">
+<meta name="twitter:image" content="https://talos-agent.ch/brand/og-logo.png">
+
+<style>
+/* ── fonts (lokal, kein Drittanbieter) — /vergleich/ liegt eine Ebene tiefer ── */
+@font-face { font-family:"VT323"; src:url("../fonts/vt323.woff2") format("woff2");
+             font-weight:400; font-display:swap; }
+@font-face { font-family:"Sometype Mono"; src:url("../fonts/sometype-mono-var.woff2") format("woff2");
+             font-weight:400 700; font-style:normal; font-display:swap; }
+@font-face { font-family:"Sometype Mono"; src:url("../fonts/sometype-mono-italic.woff2") format("woff2");
+             font-weight:400; font-style:italic; font-display:swap; }
+
+/* Dieselben Tokens wie die Hauptseite — ein System, ein Look. */
+:root{
+  --bg:    oklch(0.115 0.012 75);
+  --bg2:   oklch(0.145 0.016 78);
+  --amber: oklch(0.80 0.155 80);
+  --hot:   oklch(0.92 0.13 85);
+  --dim:   oklch(0.56 0.09 80);
+  --faint: oklch(0.38 0.055 80);
+  --line:  oklch(0.28 0.04 80);
+  --deny:  oklch(0.64 0.19 32);
+  --allow: oklch(0.74 0.14 145);
+  --crt:   "VT323", monospace;
+  --mono:  "Sometype Mono", monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth; scroll-padding-top:80px; -webkit-text-size-adjust:100%}
+body{
+  background:var(--bg); color:var(--amber);
+  font-family:var(--mono); font-size:14.5px; line-height:1.8;
+  font-variant-numeric:tabular-nums; overflow-x:hidden;
+}
+::selection{background:var(--amber); color:var(--bg)}
+a{color:var(--hot)}
+b,strong{color:var(--hot);font-weight:600}
+.wrap{max-width:1080px;margin:0 auto;padding:0 clamp(18px,4vw,52px)}
+
+/* ── CRT-Overlay: wie auf /docs/ dezent dosiert — die Seite ist zum Lesen da. ── */
+.crt-fx{position:fixed; inset:0; pointer-events:none; z-index:90}
+.crt-fx::before{
+  content:""; position:absolute; inset:0;
+  background:repeating-linear-gradient(0deg, oklch(0 0 0/.13) 0 1px, transparent 1px 3px);
+}
+.crt-fx::after{
+  content:""; position:absolute; inset:0;
+  background:radial-gradient(ellipse at 50% 40%, transparent 62%, oklch(0 0 0/.34) 100%);
+}
+
+/* ── nav (fixiert, wie überall) ───────────────── */
+nav{position:fixed;inset:0 0 auto 0;z-index:50;border-bottom:1px solid var(--line);
+  background:color-mix(in oklch, var(--bg) 88%, transparent);backdrop-filter:blur(8px)}
+nav .wrap{display:flex;gap:26px;align-items:baseline;padding-top:14px;padding-bottom:14px}
+.brand{font-family:var(--crt);font-size:26px;color:var(--hot);text-decoration:none;
+  text-shadow:0 0 10px oklch(0.8 0.155 80/.6);letter-spacing:.1em}
+nav a.lnk{font-size:11.5px;color:var(--dim);text-decoration:none;letter-spacing:.18em;text-transform:uppercase}
+nav a.lnk:hover{color:var(--hot)}
+nav a.lnk.active{color:var(--hot);border-bottom:1px solid var(--amber);padding-bottom:2px;
+  text-shadow:0 0 8px oklch(0.8 0.155 80/.55)}
+nav .sp{flex:1}
+.status{font-size:11px;color:var(--faint);letter-spacing:.12em}
+.status i{color:var(--allow);font-style:normal;animation:pulse 2s infinite}
+@keyframes pulse{50%{opacity:.3}}
+@media(max-width:760px){nav a.lnk,.status{display:none}}
+
+/* ── hero ─────────────────────────────────────── */
+.hero{padding:clamp(120px,18vh,180px) 0 clamp(50px,8vh,80px)}
+.doc-line{font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--dim);
+  display:flex;gap:26px;flex-wrap:wrap;margin-bottom:26px}
+.doc-line::before{content:"● ";color:var(--allow)}
+h1{font-family:var(--crt);font-weight:400;font-size:clamp(42px,6.4vw,84px);line-height:.98;
+  color:var(--hot);text-shadow:0 0 18px oklch(0.8 0.155 80/.5), 0 0 60px oklch(0.8 0.155 80/.22);
+  max-width:20ch;text-wrap:balance}
+.hero .lede{margin-top:24px;max-width:64ch;color:var(--dim)}
+.hero .lede + .lede{margin-top:12px}
+.spec-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;
+  background:var(--line);border:1px solid var(--line);margin-top:36px}
+.spec{background:var(--bg);padding:20px 22px;font-size:12px;color:var(--dim);line-height:1.6}
+.spec b{display:block;font-family:var(--crt);font-weight:400;font-size:clamp(26px,3.2vw,38px);
+  color:var(--hot);line-height:1.1;letter-spacing:.03em;
+  text-shadow:0 0 14px oklch(0.8 0.155 80/.45)}
+
+/* ── sections ─────────────────────────────────── */
+section{padding:clamp(60px,9vh,110px) 0;border-top:1px solid var(--line)}
+.sec-tag{font-family:var(--crt);font-size:19px;color:var(--dim);letter-spacing:.1em;margin-bottom:10px}
+.sec-tag::before{content:"┌─[ "}.sec-tag::after{content:" ]"}
+h2{font-family:var(--crt);font-weight:400;font-size:clamp(30px,4vw,52px);line-height:1.05;color:var(--hot);
+  text-shadow:0 0 14px oklch(0.8 0.155 80/.4);max-width:26ch;text-wrap:balance}
+.sub{color:var(--dim);max-width:64ch;margin-top:18px}
+.sub strong{color:var(--hot)}
+p{max-width:66ch}
+code{background:var(--bg2);border:1px solid var(--line);padding:0 5px;font-size:.92em;color:var(--hot)}
+
+/* Stärken-Liste — anerkennend, nicht kleinlaut */
+.ahead{list-style:none;margin-top:30px;max-width:76ch}
+.ahead li{padding:14px 0 14px 34px;position:relative;color:var(--dim);border-bottom:1px solid var(--line)}
+.ahead li:last-child{border-bottom:none}
+.ahead li::before{content:"▲";position:absolute;left:4px;top:12px;font-size:14px;color:var(--allow)}
+.ahead li b{color:var(--hot)}
+
+/* ── Vergleichstabelle ────────────────────────── */
+.tw{overflow-x:auto;margin-top:34px;border:1px solid var(--line);background:var(--bg)}
+table{border-collapse:collapse;width:100%;font-size:12.5px;min-width:780px}
+th,td{text-align:left;padding:11px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);
+  font-weight:400;background:var(--bg2)}
+th.t{color:var(--hot);text-shadow:0 0 8px oklch(0.8 0.155 80/.4)}
+tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:var(--bg2)}
+td.k{color:var(--hot);white-space:normal;min-width:150px}
+td{color:var(--dim)}
+td.t{color:var(--amber)}
+
+/* ── Doktrin-Liste („warum bewusst weniger") ──── */
+.why-list{border:1px solid var(--line);background:var(--bg2);margin-top:34px}
+.why{display:grid;grid-template-columns:210px 1fr;border-bottom:1px solid var(--line);
+  padding:16px 20px;gap:18px;font-size:13px}
+.why:last-child{border-bottom:none}
+.why:hover{background:var(--bg)}
+.why code{font-family:var(--crt);font-size:19px;color:var(--hot);background:none;border:none;padding:0}
+.why span{color:var(--dim);max-width:66ch}
+.why span b{color:var(--hot)}
+@media(max-width:600px){.why{grid-template-columns:1fr}}
+.doctrine-foot{color:var(--faint);font-size:12.5px;margin-top:22px;max-width:70ch}
+
+/* ── Notiz-Kästen (wie /docs/) ────────────────── */
+.note{border:1px solid var(--line);border-left:3px solid var(--faint);
+  background:var(--bg2);padding:13px 16px;margin-top:22px;max-width:70ch}
+.note.warn{border-left-color:var(--deny)}
+.note.good{border-left-color:var(--allow)}
+.note b{display:block;font-size:10px;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--faint);margin-bottom:6px;font-weight:700}
+.note.warn b{color:var(--deny)}
+.note.good b{color:var(--allow)}
+.note p{margin:0;font-size:13.5px;max-width:none;color:var(--amber)}
+.note p + p{margin-top:8px}
+
+/* ── Kernel-Demo — die Klassen, die kernel.js (unverändert) erwartet ───────────
+   kernel.js stammt aus einer früheren Fassung der Hauptseite und kennt nur IDs
+   und Klassennamen, kein Design. Das CRT-Kleid dazu steht hier; die Datei selbst
+   bleibt unangetastet, damit sie eine Portierung des Kernels bleibt und nicht
+   eine Kopie mit eigener Meinung. */
+.demo{border:1px solid var(--line);background:var(--bg2);margin-top:34px;
+  box-shadow:0 0 60px oklch(0.8 0.155 80/.07)}
+.demo-head{display:flex;gap:14px;align-items:center;border-bottom:1px solid var(--line);
+  padding:12px 20px;font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
+.demo-head .dot{width:9px;height:9px;border-radius:50%;background:var(--allow);animation:pulse 2s infinite}
+.demo-head .r{margin-left:auto;color:var(--faint)}
+.demo-body{padding:clamp(18px,3vw,34px)}
+.prompt-line{display:flex;gap:12px;align-items:baseline;border:1px solid var(--line);
+  padding:14px 18px;background:var(--bg)}
+.prompt-line .sig{color:var(--allow);font-weight:600}
+#cmd{flex:1;background:none;border:none;outline:none;color:var(--hot);
+  font-family:var(--mono);font-size:15px;caret-color:var(--amber);min-width:0}
+.samples{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.mini{font-family:var(--mono);font-size:11.5px;background:none;border:1px solid var(--line);
+  color:var(--dim);padding:6px 12px;cursor:pointer;transition:all .2s}
+.mini:hover{border-color:var(--amber);color:var(--hot)}
+.verdict{margin-top:24px;display:flex;gap:14px;align-items:baseline;flex-wrap:wrap}
+.v-glyph{font-family:var(--crt);font-size:27px;line-height:1}
+#vWord{font-family:var(--crt);font-size:22px;letter-spacing:.08em;text-transform:uppercase}
+#vWhy{font-size:12px;color:var(--dim)}
+.verdict.v-allow .v-glyph,.verdict.v-allow #vWord{color:var(--allow);text-shadow:0 0 12px oklch(0.74 0.14 145/.4)}
+.verdict.v-ask   .v-glyph,.verdict.v-ask   #vWord{color:var(--amber);text-shadow:0 0 12px oklch(0.8 0.155 80/.45)}
+.verdict.v-deny  .v-glyph,.verdict.v-deny  #vWord{color:var(--deny);text-shadow:0 0 12px oklch(0.64 0.19 32/.5)}
+.chain{margin-top:18px;display:grid;gap:1px;background:var(--line);border:1px solid var(--line)}
+.step{display:grid;grid-template-columns:26px 1fr auto;gap:12px;align-items:baseline;
+  padding:10px 14px;background:var(--bg);font-size:12.5px}
+.step .n{font-size:11px;color:var(--faint)}
+.step .what{color:var(--dim)}
+.step .what b{color:var(--hot)}
+.step .res{font-size:11px;color:var(--faint);letter-spacing:.08em;text-transform:uppercase;white-space:nowrap}
+.step.hit{background:var(--bg2)}
+.step.hit .res{color:var(--amber)}
+.step.dim{opacity:.4}
+.verdict.turn .v-glyph{animation:stamp .42s cubic-bezier(.22,1,.36,1) both}
+@keyframes stamp{0%{opacity:0;transform:scale(1.5)}60%{opacity:1}100%{transform:scale(1)}}
+.chain.turn .step{animation:stepIn .34s cubic-bezier(.22,1,.36,1) both;animation-delay:calc(var(--i)*52ms)}
+@keyframes stepIn{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:none}}
+.demo-note{font-size:12px;color:var(--faint);margin-top:22px;max-width:70ch}
+@media(max-width:620px){
+  .step{grid-template-columns:20px 1fr}
+  .step .res{grid-column:2;font-size:10.5px}
+}
+
+/* ── Empfehlung ───────────────────────────────── */
+.pick{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);
+  border:1px solid var(--line);margin-top:34px}
+@media(max-width:760px){.pick{grid-template-columns:1fr}}
+.pick > div{background:var(--bg);padding:26px 26px}
+.pick h3{font-family:var(--crt);font-weight:400;font-size:22px;color:var(--hot);margin-bottom:10px}
+.pick p{color:var(--dim);font-size:13.5px}
+
+footer{border-top:1px solid var(--line);padding:36px 0 50px;font-size:12px;color:var(--faint)}
+footer .wrap{display:flex;gap:26px;flex-wrap:wrap}
+footer a{color:var(--dim);text-decoration:none}
+footer a:hover{color:var(--hot)}
+footer .sp{flex:1}
+
+/* reveals */
+.rv{opacity:0;transform:translateY(20px);transition:opacity .8s cubic-bezier(.19,1,.22,1),transform .8s cubic-bezier(.19,1,.22,1)}
+.rv.in{opacity:1;transform:none}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
+  .rv{opacity:1;transform:none}
+  html{scroll-behavior:auto}
+}
+</style>
+</head>
+<body>
+
+<div class="crt-fx" aria-hidden="true"></div>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="/">TALOS</a>
+    <a class="lnk" href="/">Home</a>
+    <a class="lnk" href="/docs/">Docs</a>
+    <a class="lnk" href="/dossier.html">Dossier</a>
+    <a class="lnk active" href="/vergleich/" aria-current="page">Compare</a>
+    <a class="lnk" href="/console.html">Console</a>
+    <a class="lnk" href="https://github.com/talos-kernel/talos">GitHub</a>
+    <span class="sp"></span>
+    <span class="status"><i>●</i> COMPARISON · AS OF 2026-08-26</span>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="doc-line">
+      <span>Subject: three agent architectures</span>
+      <span>Classification: public</span>
+      <span>Tone: no spin</span>
+    </div>
+    <h1>The others can do more.</h1>
+    <p class="lede">That is not false modesty — it is the first line of this comparison.
+    <strong>OpenClaw</strong> and <strong>Hermes</strong> have more channels,
+    more skills, browser automation and mature cron fleets. If that breadth is what you
+    are after, you are better served there — this page will not talk it away.</p>
+    <p class="lede">Talos trades breadth for something else: a <strong>deterministic
+    policy kernel</strong> between model and effect, a sandbox around the shell, and a
+    log whose integrity you can <strong>prove</strong> rather than have to believe.
+    The gap between the two is doctrine, not backlog — and that is exactly what this page explains.</p>
+    <div class="spec-row">
+      <div class="spec"><b>19</b>tools here, every one gated</div>
+      <div class="spec"><b>100+</b>skills there — counted honestly</div>
+      <div class="spec"><b>164/164</b>adversarial cases</div>
+      <div class="spec"><b>0</b>inbound ports</div>
+      <div class="spec"><b>0</b>default identities</div>
+    </div>
+  </div>
+</header>
+
+<section id="staerken">
+  <div class="wrap">
+    <p class="sec-tag rv">§1 · where the others lead</p>
+    <h2 class="rv">What OpenClaw and Hermes do better</h2>
+    <p class="sub rv">The other side first, complete and without gloating. Anyone running
+    either project should find nothing missing here that they use every day.</p>
+    <ul class="ahead">
+      <li class="rv"><b>Channels.</b> WhatsApp in both directions, several messengers,
+      media pipelines for images, audio and documents. Talos has three ways in
+      (Telegram, mail, CLI) — and all three only fetch.</li>
+      <li class="rv"><b>Skills and plugins.</b> Catalogues in the hundreds, from calendars
+      to image generation, plus sub-agents and MCP integration. Talos has 19 tools,
+      and the number grows slowly — on purpose, see §3.</li>
+      <li class="rv"><b>Browser automation.</b> Filling in forms, clicking, driving
+      entire flows. The Talos browser renders and reads. Nothing more.</li>
+      <li class="rv"><b>Everyday automation.</b> Cron fleets, watchdogs,
+      morning reports — both projects have matured here. Talos can run schedules,
+      but runs them under a hard ceiling (§3).</li>
+      <li class="rv"><b>Model routing.</b> Multiple sources, local models,
+      mature fallback chains. Talos has provider routes with fallback —
+      solid, but narrower.</li>
+    </ul>
+    <p class="sub rv" style="margin-top:26px">And structurally: both projects move
+    faster, because a new capability there is a <strong>feature question</strong>.
+    Here it is a <strong>kernel question</strong> — every new tool needs a verdict
+    that survives 164 adversarial cases.</p>
+  </div>
+</section>
+
+<section id="tabelle">
+  <div class="wrap">
+    <p class="sec-tag rv">§2 · the table</p>
+    <h2 class="rv">Row by row</h2>
+    <p class="sub rv">The left half of the table reads as if Talos were winning.
+    The right half says the opposite. <strong>Both are true</strong> — they are two
+    different questions.</p>
+    <div class="tw rv">
+      <table>
+        <thead>
+          <tr>
+            <th>Capability</th>
+            <th class="t">Talos</th>
+            <th>OpenClaw</th>
+            <th>Hermes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="k">Decision on every effect</td>
+            <td class="t">Deterministic policy kernel, deny-by-default. The model proposes, <code>decide()</code> judges — per call, bound to the exact arguments, valid for 30 seconds, once.</td>
+            <td>Approvals as settings and dialogs; no deterministic kernel as its own layer between model and effect.</td>
+            <td>Rights hang on the process; no policy layer binding each effect individually.</td>
+          </tr>
+          <tr>
+            <td class="k">Shell</td>
+            <td class="t">Sandboxed (bubblewrap / sandbox-exec): root read-only, network off, the workspace the only writable place. Without isolation: <strong>refuse</strong>, not run unprotected.</td>
+            <td>Full shell with the rights of the process.</td>
+            <td>Full shell with the rights of the process.</td>
+          </tr>
+          <tr>
+            <td class="k">Audit log</td>
+            <td class="t">Append-only, SHA-256 hash chain. <code>talos verify</code> proves nothing was edited after the fact; <code>talos anchor</code> pins the chain head against truncation.</td>
+            <td>Session logs exist, not tamper-evident.</td>
+            <td>Logs exist, not tamper-evident.</td>
+          </tr>
+          <tr>
+            <td class="k">Report vs. reality</td>
+            <td class="t">The final answer is held against the event log: failed tool calls appear in the reply, read from the log, not from the model's memory.</td>
+            <td>The model's answer is the report.</td>
+            <td>The model's answer is the report.</td>
+          </tr>
+          <tr>
+            <td class="k">Identities</td>
+            <td class="t">Channel-qualified allowlist, zero default identities. Mail senders only via our own server's <code>Authentication-Results</code>, fail-closed.</td>
+            <td>Pairing and configuration per channel.</td>
+            <td>Depends on configuration.</td>
+          </tr>
+          <tr>
+            <td class="k">Channels</td>
+            <td class="t">3 — Telegram (long-poll), mail (IMAP pull), CLI. Every way in fetches; none opens a port.</td>
+            <td>Many messengers, in both directions, incl. webhooks and companion apps.</td>
+            <td>WhatsApp broker with media pipeline, mail, more.</td>
+          </tr>
+          <tr>
+            <td class="k">Tools / skills</td>
+            <td class="t">18, each with a declared effect in the manifest. Without an entry in <code>TARGET_EXTRACTORS</code>: DENY by construction.</td>
+            <td>Plugin and skill ecosystem, in the hundreds.</td>
+            <td>Skill catalogue around a hundred, plus sub-agent CLIs.</td>
+          </tr>
+          <tr>
+            <td class="k">Browser</td>
+            <td class="t">Renders and reads, inside the resolver cage. Clicking, typing, forms: does not exist — such actions have no derivable target.</td>
+            <td>Full browser automation.</td>
+            <td>Browser automation available.</td>
+          </tr>
+          <tr>
+            <td class="k">Scheduled runs</td>
+            <td class="t">Schedules under <code>UnattendedCeiling</code>: whatever would need a human becomes DENY — nobody is watching, so nobody asks.</td>
+            <td>Cron jobs, used broadly and productively.</td>
+            <td>Cron fleets with watchdogs, used broadly.</td>
+          </tr>
+          <tr>
+            <td class="k">Models</td>
+            <td class="t">Provider routes with a fallback chain; one credential per provider, resolved at the moment of the call.</td>
+            <td>Routing across multiple sources, incl. local models.</td>
+            <td>Multi-stage fallback chains across multiple providers.</td>
+          </tr>
+          <tr>
+            <td class="k">Inbound webhooks</td>
+            <td class="t">None. Deliberately — a webhook turns an outbound-only process into a reachable one.</td>
+            <td>Present.</td>
+            <td>Possible.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note rv">
+      <b>Fairness</b>
+      <p>This comparison comes from the Talos project itself. Neutral it is not — honest
+      it is: as of 2026-08-26, from public documentation and our own use of all
+      three systems. OpenClaw and Hermes move fast; if a row is no longer
+      true, <a href="https://github.com/talos-kernel/talos/issues">tell us</a>.</p>
+    </div>
+  </div>
+</section>
+
+<section id="doktrin">
+  <div class="wrap">
+    <p class="sec-tag rv">§3 · why deliberately less</p>
+    <h2 class="rv">Every missing row has a reason</h2>
+    <p class="sub rv">None of this is backlog. Every entry was considered, rejected,
+    and the boundary next to it is held by a red-team case. Whoever “retrofits” one of
+    these rows is not building Talos plus a feature — they are building a different product.</p>
+    <div class="why-list rv">
+      <div class="why"><code>inbound webhook</code>
+        <span>Every way in <b>fetches</b>: Telegram long-polls, mail is pulled over
+        IMAP. A webhook needs a port the world can reach — an outbound-only process
+        would become a reachable one. That is why WhatsApp inbound does not exist,
+        and <code>poll()</code> returns empty there. Deliberate, not “not built
+        yet”.</span></div>
+      <div class="why"><code>browser automation</code>
+        <span>Clicking, typing and submitting have <b>no derivable target</b> — the
+        kernel could not judge what is about to happen. A tool without a target is
+        DENY by construction. So <code>browse</code> renders and reads, inside the
+        resolver cage, so that even a redirect cannot leave the host that was checked.</span></div>
+      <div class="why"><code>skill catalogue</code>
+        <span>Breadth is cheap — <b>gated breadth is not</b>. Every tool needs a
+        declared effect and a target extractor, otherwise there is nothing to
+        judge. The 19 tools are the ones where the kernel can justify every verdict;
+        tool number 19 must pass the same test.</span></div>
+      <div class="why"><code>yolo mode</code>
+        <span>The autonomy dial can only ever <b>tighten</b>, never widen. A mode
+        that grants rights next to the kernel would be a second source of permission —
+        exactly the problem capability tokens were built to remove.</span></div>
+      <div class="why"><code>plan approval</code>
+        <span>Approving a plan would mean approving actions <b>nobody has
+        seen</b>. A plan may set an order and an abort condition; every
+        step still passes the gate on its own. A plan can only end a run
+        earlier, never allow anything.</span></div>
+      <div class="why"><code>cron fleet</code>
+        <span>Unattended means: <b>NEEDS_HUMAN becomes DENY</b>. A question dropped
+        into a chat where a different conversation is going on is the most reliable way
+        to land a “yes” on the wrong thing. That is why the schedule list looks short —
+        it runs under the ceiling, not above it.</span></div>
+    </div>
+    <p class="doctrine-foot rv">The short version: <strong>the model proposes, it
+    never decides.</strong> Everything that would soften that order — a second
+    path to rights, a channel that receives, a tool without a verdict — is not missing,
+    it was rejected. Feature parity with OpenClaw or Hermes is explicitly not a goal.</p>
+  </div>
+</section>
+
+<section id="demo">
+  <div class="wrap">
+    <p class="sec-tag rv">§4 · type into policy.decide()</p>
+    <h2 class="rv">The difference, hands-on</h2>
+    <p class="sub rv">On an agent with a full shell, every one of these lines simply runs.
+    Here it walks through six steps, and the page shows <strong>where it gets
+    stuck</strong>. Nothing leaves the page.</p>
+    <div class="demo rv">
+      <div class="demo-head">
+        <span class="dot"></span><span>kernel.js · browser port of policy.py</span>
+        <span class="r">the Python original is authoritative</span>
+      </div>
+      <div class="demo-body">
+        <label class="prompt-line">
+          <span class="sig">$</span>
+          <input id="cmd" type="text" spellcheck="false" autocomplete="off" autocapitalize="off"
+                 value="cat ~/.ssh/id_ed25519" aria-label="Shell command for the kernel to judge">
+        </label>
+        <div class="samples" id="samples"></div>
+        <div class="verdict" id="verdict" aria-live="polite">
+          <span class="v-glyph" id="vGlyph"></span>
+          <span id="vWord"></span>
+          <span id="vWhy"></span>
+        </div>
+        <div class="chain" id="chain"></div>
+        <p class="demo-note">Steps and verdicts speak the machine console's language —
+        the console does not translate, not in the real Talos either. Simplified: the Python
+        original knows more patterns than this port, and the
+        164 adversarial cases run against the original on every install.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="wahl">
+  <div class="wrap">
+    <p class="sec-tag rv">§5 · which agent for what</p>
+    <h2 class="rv">The honest recommendation</h2>
+    <div class="pick rv">
+      <div>
+        <h3>OpenClaw or Hermes,</h3>
+        <p>if an agent is meant to carry your day-to-day: messengers in both directions,
+        browser flows, a broad skill catalogue, automation around the clock.
+        That breadth is real, it has matured, and Talos will not offer it.</p>
+      </div>
+      <div>
+        <h3>Talos,</h3>
+        <p>if an agent gets a shell on a machine where something can
+        break — and it must be provable afterwards what it did and what it
+        did not. Kernel, sandbox, hash chain: that is what it is built for, and for little else.</p>
+      </div>
+    </div>
+    <div class="note good rv">
+      <b>No contradiction</b>
+      <p>Running both at once is not a style break but the obvious
+      division: the broad agent for the work, the narrow one for the machine
+      you hand a shell to. This comparison is meant to sharpen the choice, not
+      replace it.</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <a href="https://talos-agent.ch">talos-agent.ch</a>
+    <a href="/docs/">Docs</a>
+    <a href="/dossier.html">Dossier</a>
+    <a href="/vergleich/">Compare</a>
+    <a href="/console.html">Console</a>
+    <a href="https://github.com/talos-kernel/talos">GitHub</a>
+    <span class="sp"></span>
+    <span>MIT · the gate is why the work can be trusted</span>
+  </div>
+</footer>
+
+<script src="../kernel.js"></script>
+<script>
+/* Reveals — rein kosmetisch, ohne JS ist einfach alles sichtbar. */
+(() => {
+  const io = new IntersectionObserver(es => es.forEach(e => {
+    if (!e.isIntersecting) return;
+    e.target.querySelectorAll('.rv:not(.in)').forEach((el, i) => {
+      el.style.transitionDelay = (i * 110) + 'ms';
+      el.classList.add('in');
+    });
+    io.unobserve(e.target);
+  }), {threshold: 0.12});
+  document.querySelectorAll('section, header.hero').forEach(el => io.observe(el));
+})();
+</script>
+</body>
+</html>

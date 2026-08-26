@@ -91,6 +91,10 @@ KEYS: tuple[Key, ...] = (
     Key("TALOS_WEB_ALLOWED_ADDRESSES", POLICY,
         "named exceptions to the network address filter — every entry is a hole "
         "in guard_url that somebody decided to make"),
+    Key("TALOS_AGENT_CONSULT_URL", POLICY,
+        "fixed endpoint for inter-agent consultation — changing it redirects private reports"),
+    Key("TALOS_AGENT_CONSULT_ALIASES", POLICY,
+        "private names that make explicit consultation requests mandatory"),
     # ⚠️ Die Basis-Adressen stehen nicht hier, sondern werden unten aus dem Katalog
     # erzeugt — eine pro Anbieter. Eine einzige `TALOS_API_BASE_URL` fuer alle war der
     # Weg, auf dem OpenAI-Anfragen an Anthropics Basis gingen (Befund 05.08.).
@@ -108,9 +112,15 @@ KEYS: tuple[Key, ...] = (
     Key("OPENAI_API_KEY", SECRET, "your own OpenAI-compatible key, if the provider needs one"),
     Key("TALOS_BRAVE_API_KEY", SECRET,
         "optional search key — without it the keyless provider answers"),
+    Key("TALOS_AGENT_CONSULT_TOKEN", SECRET,
+        "credential for the fixed inter-agent consultation endpoint"),
     # --- Einstellungen.
     Key("TALOS_MODEL_PROVIDER", SETTING, "which provider thinks", validate=_one_line),
     Key("TALOS_MODEL", SETTING, "which model of that provider", validate=_one_line),
+    Key("TALOS_MODEL_FALLBACKS", SETTING,
+        "comma-separated provider/model chain tried in order when a run fails with a "
+        "classified error (e.g. ollama/qwen3:27b,nvidia-nim/meta/llama-3.3-70b-instruct) "
+        "— the persisted model choice is never touched", validate=_one_line),
     Key("TALOS_OWNER_LABEL", SETTING, "how the agent addresses its operator",
         validate=_one_line),
     Key("TELEGRAM_BOT_USERNAME", SETTING, "shown in the greeting; purely cosmetic",
@@ -129,23 +139,23 @@ KEYS: tuple[Key, ...] = (
 )
 
 def _base_url_keys() -> tuple[Key, ...]:
-    """Eine Basis-Adresse pro schluesselpflichtigem Anbieter, aus dem Katalog erzeugt.
+    """Eine Basis-Adresse pro Anbieter mit eigenem Ziel, aus dem Katalog erzeugt.
 
-    ⚠️ POLICY, nicht SETTING: wer die Adresse biegt, schickt den Schluessel an eine
-    Maschine, die er nicht gewaehlt hat — und die Antwort kommt als Gedanke dieses
-    Agenten zurueck. Erzeugt statt getippt, weil eine handgepflegte Liste beim naechsten
-    Anbieter luecken haette, und eine Luecke hiesse hier: nicht schreibbar, aber auch
-    nicht als Geheimnis erkannt.
+    ⚠️ POLICY, nicht SETTING: wer die Adresse biegt, schickt den Schluessel — und bei
+    schluessellosen lokalen Anbietern wenigstens die PROMPTS — an eine Maschine, die er
+    nicht gewaehlt hat; die Antwort kommt als Gedanke dieses Agenten zurueck. Erzeugt
+    statt getippt, weil eine handgepflegte Liste beim naechsten Anbieter luecken haette,
+    und eine Luecke hiesse hier: nicht schreibbar, aber auch nicht als Geheimnis erkannt.
     """
     from . import catalog
     from .credentials import base_url_var
 
     return tuple(
         Key(base_url_var(info.slug), POLICY,
-            f"where {info.label} is reached — bending it sends that provider's key "
-            "to a machine you did not choose")
+            f"where {info.label} is reached — bending it sends this installation's "
+            "prompts and keys to a machine you did not choose")
         for info in catalog.PROVIDERS
-        if info.needs_key and info.env_key
+        if (info.needs_key and info.env_key) or info.auth == "local"
     )
 
 
@@ -195,6 +205,21 @@ def policy_keys() -> tuple[str, ...]:
     return tuple(key.name for key in KEYS if key.kind == POLICY)
 
 
+def worker_scope(name: str) -> bool:
+    """Gehoert dieser Schluessel im Worker-Modus in die Worker-Env statt ins Agent-Env?
+
+    Rein eine ORTS-Auskunft, keine vierte Klasse: ein Provider-Schluessel bleibt
+    SECRET — `config get` antwortet `[REDACTED]`, ob der Modell-Worker laeuft oder
+    nicht, und `config set` lehnt ihn weiter ab. Was sich im Worker-Modus aendert,
+    ist der erwartete Zustand der Agent-Umgebung: der Schluessel FEHLT dort
+    absichtlich (`/etc/talos/model.env`, UID `talos-model`), und dieses Fehlen ist
+    der Soll-Zustand, kein Mangel.
+    """
+    from .credentials import worker_scope_names
+
+    return str(name).strip() in worker_scope_names()
+
+
 __all__ = [
     "BY_NAME",
     "KEYS",
@@ -207,4 +232,5 @@ __all__ = [
     "policy_keys",
     "secrets",
     "unknown",
+    "worker_scope",
 ]

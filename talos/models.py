@@ -45,6 +45,11 @@ _NAME_OK = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@/-]*$")
 ENDPOINTS: dict[str, tuple[str, str]] = {
     "anthropic-api": ("https://api.anthropic.com/v1", "x-api-key"),
     "openai-api": ("https://api.openai.com/v1", "bearer"),
+    # Dieselben zwei Protokolle, dieselbe Tabelle: der ganze Unterschied ist die Adresse.
+    # Die Route aus `credentials` traegt sie ohnehin bereits — dies ist der Rueckhalt
+    # fuer Bestaende ohne Adresse.
+    "nvidia-nim": ("https://integrate.api.nvidia.com/v1", "bearer"),
+    "kimi": ("https://api.kimi.com/coding/v1", "bearer"),
 }
 ANTHROPIC_VERSION = "2023-06-01"
 

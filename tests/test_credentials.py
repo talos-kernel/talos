@@ -203,6 +203,39 @@ def test_from_lookup_keeps_the_keys_apart() -> None:
     assert bestand.route("openai-api").api_key == OPENAI
 
 
+def test_a_local_provider_gets_a_route_without_a_key() -> None:
+    """Ollama braucht keinen Schluessel — seine Route ist eine reine Adresse.
+
+    Frueher warf `route()` hier MissingKey, weil es nur Schluessel kannte; ein lokaler
+    Anbieter ohne Schluessel ist keine Luecke, sondern der Normalfall.
+    """
+    bestand = from_lookup(lambda name: "")
+    route = bestand.route("ollama")
+    assert route.api_key == ""
+    assert route.base_url == "http://localhost:11434/v1"
+    assert not bestand.has("ollama")  # „hat einen Schluessel" bleibt wahrheitsgemäss
+
+
+def test_a_local_providers_address_is_overridable() -> None:
+    werte = {"TALOS_BASE_URL_OLLAMA": "http://andere-kiste:11434/v1/"}
+    bestand = from_lookup(lambda name: werte.get(name, ""))
+    assert bestand.route("ollama").base_url == "http://andere-kiste:11434/v1"
+
+
+def test_a_keyed_provider_without_a_key_still_has_no_route() -> None:
+    """Fail-closed gilt unveraendert: nvidia-nim ohne NVIDIA_API_KEY gibt keine Route."""
+    bestand = from_lookup(lambda name: "")
+    with pytest.raises(MissingKey) as gefangen:
+        bestand.route("nvidia-nim")
+    assert "NVIDIA_API_KEY" in str(gefangen.value)
+
+
+def test_a_local_provider_without_any_entry_still_raises() -> None:
+    """Ein handgebauter Bestand, der den lokalen Anbieter gar nicht kennt, ratet nicht."""
+    with pytest.raises(MissingKey):
+        beide().route("ollama")
+
+
 def test_a_provider_without_a_key_is_absent_rather_than_empty() -> None:
     werte = {"ANTHROPIC_API_KEY": ANTHROPIC}
     bestand = from_lookup(lambda name: werte.get(name, ""))

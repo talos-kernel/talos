@@ -32,26 +32,67 @@ Anbieters kann deshalb nicht versehentlich durchrutschen.
 Paket aufgeblaeht und Abhaengigkeiten mitgebracht, die dieses Projekt nicht pruefen kann.
 Der Netzzugriff laeuft ausserdem ueber die injizierbare `http`-Abhaengigkeit, damit die
 Tests ohne Netz auskommen (Vertrag: siehe `HttpTransport`).
+
+**Schlüssellose Anbieter.** Der Katalog kennt lokale Anbieter (`auth="local"`, etwa
+Ollama), die bewusst keinen Schluessel haben: ihre Route aus `credentials.py` traegt nur
+eine Adresse, und die Anfrage geht ohne `Authorization`-Header raus — ein leerer Bearer
+waere ein mitgeschicktes Leer-Geheimnis. Schluesselpflichtige Anbieter bleiben
+fail-closed: ohne Schluessel wirft `CredentialStore.route` schon beim Bauen.
+
+**Fehler als Ausnahme, Text unveraendert.** Ein klassifizierter Fehlschlag (falscher
+Schluessel, Kontingent, Ueberlast, Netz, Timeout) wird intern als `ReasonerFailure`
+geworfen; `reason()` faengt sie und liefert EXAKT den bisherigen Meldungstext. Wer die
+Fehlerart maschinell braucht — die Laufzeit-Fallback-Kette in `fallback.py` — ruft
+`reason_strict()`. So bleibt der Vertrag mit e2e/redteam wortgleich, ohne dass die
+Kette an Texten raten muss.
+
+**Transport-Naht: direct oder socket.** Die Vorgabe ist der Direktweg (HTTP aus diesem
+Prozess). `TALOS_MODEL_WORKER=socket:///run/talos/model.sock` schaltet auf den
+UID-getrennten Modell-Worker (`modelworker.py`) um: die Anfrage geht als JSON-Zeile
+ueber einen Unix-Socket, der Schluessel liegt in der Worker-Env hinter einer anderen
+UID — der Agent haelt dann gar keinen mehr. Fail-closed in beide Richtungen: ein
+unerreichbarer Socket ist ein klassifizierter Netzfehler (die Fallback-Kette greift),
+NIE ein stiller Rueckfall auf einen Schluessel im Agent-Env; und ein gesetzter, aber
+unbekannter Variablenwert ist ein Fehler beim Bauen, keine stille Vorgabe.
 """
 from __future__ import annotations
 
 import json
+import os
 import re
+import socket
 import threading
 import time
 from typing import Any, Callable, Iterable, Mapping, Protocol
 
-from .credentials import CredentialStore, Route
-from . import instructions
-from .reasoner import CANCELLED_TEXT, PLAN_PROTOCOL, TOOL_PROTOCOL, skills_block
+from . import catalog
+from .credentials import WORKER_ENV_VAR, CredentialStore, Route, parse_worker_socket
+from .identity import load_soul
+from .reasoner import CANCELLED_TEXT, TOOL_PROTOCOL, skills_block
 from .stream import OnText
 from .usage import Run, UsageMeter
 
-__all__ = ["ApiReasoner", "HttpResponse", "HttpTransport", "SUPPORTED_PROVIDERS"]
+__all__ = [
+    "ApiReasoner",
+    "FALLBACKABLE_KINDS",
+    "HttpResponse",
+    "HttpTransport",
+    "ReasonerFailure",
+    "SUPPORTED_PROVIDERS",
+]
 
 PROVIDER_ANTHROPIC = "anthropic-api"
 PROVIDER_OPENAI = "openai-api"
-SUPPORTED_PROVIDERS: tuple[str, ...] = (PROVIDER_ANTHROPIC, PROVIDER_OPENAI)
+# Neben den beiden klassischen API-Wegen die Katalog-Anbieter, die derselbe Reasoner
+# ohne Zusatzcode sprechen kann: alles OpenAI-kompatible. `ollama` ist der lokale,
+# schlüssellose Fall — seine Route traegt nur eine Adresse (siehe `credentials.py`).
+SUPPORTED_PROVIDERS: tuple[str, ...] = (
+    PROVIDER_ANTHROPIC,
+    PROVIDER_OPENAI,
+    "ollama",
+    "nvidia-nim",
+    "kimi",
+)
 
 ANTHROPIC_BASE_URL = "https://api.anthropic.com"
 ANTHROPIC_VERSION = "2023-06-01"
@@ -76,6 +117,46 @@ NETWORK_FAILED = "(Reasoner error: network failure — {detail})"
 HTTP_FAILED = "(Reasoner error: HTTP {status} — {detail})"
 TIMED_OUT = "(Timed out while thinking — please try again.)"
 EMPTY_ANSWER = "(Empty answer.)"
+
+# Dieselben Ursachen als maschinenlesbare Art. Die Meldung ist fuer den Menschen und
+# bleibt wortgleich; das `kind` ist fuer die Fallback-Kette (`fallback.py`), die danach
+# entscheidet, ob ein zweiter Anbieter ueberhaupt eine Chance hat.
+KIND_KEY_REJECTED = "key_rejected"
+KIND_RATE_LIMITED = "rate_limited"
+KIND_OVERLOADED = "overloaded"
+KIND_NETWORK_FAILED = "network_failed"
+KIND_TIMED_OUT = "timed_out"
+KIND_HTTP_FAILED = "http_failed"
+
+# Ein 4xx-Fachfehler (HTTP_FAILED) loest die Kette bewusst NICHT aus: das Modell hat die
+# Anfrage verstanden und fachlich abgelehnt — der naechste Anbieter bekaeme dieselbe
+# Anfrage und loeste denselben Fehler aus, nur teurer. Alles andere ist Infrastruktur.
+FALLBACKABLE_KINDS: frozenset[str] = frozenset({
+    KIND_KEY_REJECTED,
+    KIND_RATE_LIMITED,
+    KIND_OVERLOADED,
+    KIND_NETWORK_FAILED,
+    KIND_TIMED_OUT,
+})
+
+# Die Arten, die der Modell-Worker ueber den Socket melden darf — exakt dieselbe
+# Taxonomie, damit die Kette ueber den Socket unveraendert funktioniert. Eine Art
+# ausserhalb (etwa `invalid_request` des Workers) ist kein Anbieter-Urteil und wird
+# als HTTP_FAILED behandelt: nicht fallbackbar, weil jeder Hop denselben Frame
+# ablehnen wuerde.
+_WORKER_KINDS: frozenset[str] = frozenset({
+    KIND_KEY_REJECTED,
+    KIND_RATE_LIMITED,
+    KIND_OVERLOADED,
+    KIND_NETWORK_FAILED,
+    KIND_TIMED_OUT,
+    KIND_HTTP_FAILED,
+})
+
+# Antwort-Deckel der Worker-Leitung. Der fertige Antworttext reist als EINE JSON-Zeile;
+# die Grenze ist Puffer gegen einen Worker, der unbegrenzt kippt — keine inhaltliche
+# Begrenzung (16 MiB Text sind weit ueber jedem Modell-Output).
+_WORKER_MAX_LINE = 16 * 1024 * 1024
 
 # Alles, was nach einem Geheimnis aussieht, faellt aus jeder ausgegebenen Zeile heraus —
 # nicht nur der eigene Schluessel. HTTP-Bibliotheken zitieren gern Header oder URLs, und
@@ -116,13 +197,31 @@ class HttpTransport(Protocol):
     ) -> HttpResponse: ...
 
 
+class ReasonerFailure(Exception):
+    """Ein klassifizierter Denk-Fehlschlag — strukturiert, ohne den Text zu aendern.
+
+    `message` ist EXAKT die bisherige, bereits bereinigte Betreiber-Meldung: Wer die
+    Ausnahme nur abfaengt und ihren Text ausliefert, verhaelt sich wortgleich wie vor
+    ihrer Einfuehrung (e2e/redteam assertieren auf diese Texte). `kind` ist die
+    maschinelle Form derselben Ursache, damit eine Fallback-Kette entscheiden kann,
+    ob ein weiterer Versuch sinnvoll ist — ohne an der Meldung zu raten.
+    """
+
+    def __init__(self, message: str, *, kind: str, note: str = "") -> None:
+        super().__init__(message)
+        self.message = message
+        self.kind = kind
+        self.note = note
+
+
 class _ApiFailure(Exception):
     """Ein Fehlschlag mit fertiger, bereits bereinigter Meldung fuer den Betreiber."""
 
-    def __init__(self, message: str, note: str) -> None:
+    def __init__(self, message: str, note: str, kind: str = KIND_HTTP_FAILED) -> None:
         super().__init__(note)
         self.message = message
         self.note = note
+        self.kind = kind
 
 
 class _TextSink:
@@ -250,6 +349,7 @@ class ApiReasoner:
         meter: UsageMeter | None = None,
         skills: Callable[[], str] | None = None,
         http: HttpTransport | None = None,
+        worker: str | None = None,
     ) -> None:
         if provider not in SUPPORTED_PROVIDERS:
             raise ValueError(f"Unbekannter API-Anbieter: {provider!r}")
@@ -257,14 +357,27 @@ class ApiReasoner:
             raise ValueError("Modellname fehlt")
         self.provider = provider
         self.model = model.strip()
+        # Die Transport-Naht. `worker=None` heisst: die Umgebung entscheidet
+        # (`TALOS_MODEL_WORKER`); ein expliziter Wert gewinnt — auch der leere, mit
+        # dem der Modell-Worker selbst den Direktweg ERZwingt (sonst kettete ein
+        # versehentlich gesetztes TALOS_MODEL_WORKER in seiner Umgebung Anfragen
+        # ueber einen Socket weiter, und die UID-Trennung loefe im Kreis).
+        self._worker_socket = parse_worker_socket(
+            os.environ.get(WORKER_ENV_VAR, "") if worker is None else worker
+        )
         # ⚠️ Der BESTAND, nicht der Wert. Aufgeloest wird in `_route()` bei jedem Aufruf:
         # ein eingefrorener Schluessel gehoert dem Anbieter, der beim Bauen ausgewaehlt
         # war — und `/model` wechselt den im laufenden Prozess.
         self._credentials = credentials
-        # Fail closed, und zwar SOFORT: der Router baut vor dem Umschalten (`_build_validated`),
-        # also faellt ein fehlender Schluessel als abgelehnter Wechsel auf, nicht als
-        # kaputter Zug mitten im Gespraech. Die alte Auswahl bleibt dabei stehen.
-        credentials.route(provider)
+        if not self._worker_socket:
+            # Fail closed, und zwar SOFORT: der Router baut vor dem Umschalten
+            # (`_build_validated`), also faellt ein fehlender Schluessel als abgelehnter
+            # Wechsel auf, nicht als kaputter Zug mitten im Gespraech. Die alte Auswahl
+            # bleibt dabei stehen. Im Worker-Modus entfaellt die Pruefung absichtlich:
+            # dort ist ein Bestand OHNE Schluessel der Soll-Zustand (der Schluessel
+            # liegt in der Worker-Env hinter einer anderen UID), und die Pruefung wuerde
+            # genau diesen Zustand als abgelehnten Wechsel melden.
+            credentials.route(provider)
         self._timeout_s = timeout_s
         self._meter = meter
         self._skills = skills
@@ -296,17 +409,14 @@ class ApiReasoner:
     def _compose(self, prompt: str) -> tuple[str, str]:
         """(stehende Anweisungen, Nachricht) — pro Zug gelesen, nicht beim Start eingefroren.
 
-        Derselbe Builder wie im CLI-Pfad ordnet SOUL, AGENTS, USER, Werkzeug-/Planprotokoll
-        und Skill-Katalog. Hier gehen die stehenden Anweisungen ins System-Feld statt in
-        den Nutzerzug. Grund ist nicht Kosmetik: liegen Persona, Werkzeugprotokoll und die
-        Nachricht des Betreibers im selben Nutzerzug, kann das Modell beides nicht mehr
-        auseinanderhalten — und fremder Nachrichtentext sieht dann wie eine stehende Regel aus.
+        Inhalt und Reihenfolge sind dieselben wie im CLI-Pfad (`load_soul()` +
+        `TOOL_PROTOCOL` + Skill-Katalog + Nachricht), aber die stehenden Anweisungen gehen
+        ins System-Feld statt in den Nutzerzug. Grund ist nicht Kosmetik: liegen Persona,
+        Werkzeugprotokoll und die Nachricht des Betreibers im selben Nutzerzug, kann das
+        Modell beides nicht mehr auseinanderhalten — und Text, den ein Fremder in die
+        Nachricht schreibt, sieht dann aus wie eine stehende Regel.
         """
-        return instructions.assemble_system_prompt(
-            tool_protocol=TOOL_PROTOCOL,
-            plan_protocol=PLAN_PROTOCOL,
-            skills=self._skills_text(),
-        ), prompt
+        return f"{load_soul()}{TOOL_PROTOCOL}{self._skills_text()}", prompt
 
     def _route(self) -> Route:
         """Schluessel und Adresse dieses Anbieters — bei JEDEM Aufruf frisch aufgeloest.
@@ -314,8 +424,20 @@ class ApiReasoner:
         Der Grund steht in `credentials.py`: ein Wert, der im Objekt liegt, gehoert dem
         Anbieter von damals. Hier gehoert er dem, an den gerade gesprochen wird.
         """
+        if self._worker_socket:
+            # Laut statt still: im Worker-Modus HAT der Agent keine Route — ein Aufruf
+            # hier waere ein Programmfehler, und ein Rueckfall auf einen Schluessel im
+            # Agent-Env waere genau der Zustand, den der Worker abschafft.
+            raise RuntimeError("Worker-Modus: der Agent-Prozess haelt keine Provider-Route")
         eintrag = self._credentials.route(self.provider)
-        vorgabe = ANTHROPIC_BASE_URL if self.provider == PROVIDER_ANTHROPIC else OPENAI_BASE_URL
+        if self.provider == PROVIDER_ANTHROPIC:
+            vorgabe = ANTHROPIC_BASE_URL
+        else:
+            # Die Vorgabe des Katalogs gilt vor der des Protokolls: ein Katalog-Anbieter
+            # (ollama, nvidia-nim, kimi) traegt seine Adresse bereits, und ein
+            # handgebauter Bestand ohne Adresse soll dort landen — nicht bei OpenAI.
+            info = catalog.get(self.provider)
+            vorgabe = (info.base_url if info is not None else "") or OPENAI_BASE_URL
         return Route(eintrag.provider, eintrag.api_key,
                      (eintrag.base_url or vorgabe).rstrip("/"))
 
@@ -341,10 +463,16 @@ class ApiReasoner:
             return url, headers, body
         url = f"{route.base_url}/chat/completions"
         headers = {
-            "authorization": f"Bearer {route.api_key}",
             "content-type": "application/json",
             "accept": "text/event-stream",
         }
+        # ⚠️ Lokale Anbieter (ollama) haben BEWUSST keinen Schluessel: ein leerer
+        # `Bearer`-Header waere keine Neutralitaet, sondern ein mitgeschicktes
+        # Leer-Geheimnis — und manche Server lehnen genau das ab. Kein Schluessel,
+        # kein Header. Schluesselpflichtige Anbieter kommen ohnehin gar nicht ohne
+        # Schluessel durch `credentials.route`.
+        if route.api_key:
+            headers["authorization"] = f"Bearer {route.api_key}"
         messages = [{"role": "system", "content": system}] if system else []
         messages.append({"role": "user", "content": message})
         return url, headers, {
@@ -361,8 +489,35 @@ class ApiReasoner:
     # --- Lauf --------------------------------------------------------------------
 
     def reason(self, prompt: str, on_text: OnText | None = None) -> str:
+        """Der bisherige Vertrag: ein klassifizierter Fehler kommt als Meldungstext.
+
+        Wer die Kette braucht, ruft `reason_strict` — derselbe Lauf, aber der Fehler
+        fliegt als `ReasonerFailure`, statt hier zum Text zu werden.
+        """
+        try:
+            return self.reason_strict(prompt, on_text)
+        except ReasonerFailure as failure:
+            return failure.message
+
+    def reason_strict(self, prompt: str, on_text: OnText | None = None) -> str:
+        """Wie `reason`, aber ein klassifizierter Fehlschlag wird GEWORFEN.
+
+        Fuer die Laufzeit-Fallback-Kette: nur eine Ausnahme traegt die Fehlerart
+        (`kind`) unverfaelscht — am Meldungstext entlangzuparsen waere Raten.
+        """
         system, message = self._compose(prompt)
         return self._run(system, message, on_text)
+
+    def reason_composed(self, system: str, message: str) -> str:
+        """Ein Zug, dessen System- und Nutzerteil BEREITS komponiert sind.
+
+        Fuer den Modell-Worker (`modelworker.py`): Persona, Werkzeugprotokoll und
+        Skill-Katalog hat der Agent hineingeschrieben, BEVOR die Anfrage ueber den
+        Socket ging — `_compose` wuerde sie hier ein zweites Mal ankleben. Fehler
+        fliegen als `ReasonerFailure`, damit der Worker die Art ueber das Protokoll
+        zurueckmelden kann.
+        """
+        return self._run(system, message, None)
 
     def _run(self, system: str, message: str, on_text: OnText | None) -> str:
         with self._lock:
@@ -375,7 +530,11 @@ class ApiReasoner:
             parser = self._exchange(system, message, _TextSink(on_text))
         except _ApiFailure as failure:
             self._record(started, ok=False, note=failure.note)
-            return failure.message
+            # Geworfen, nicht zurueckgegeben: der Aufrufer entscheidet, ob er den Text
+            # ausliefert (`reason`) oder die Kette weiterschaltet (`fallback.py`).
+            # `from None` wie unten beim Transportfehler: die Note duerfen Logs sehen,
+            # eine verkettete Ausnahme mit Transport-Details nicht.
+            raise ReasonerFailure(failure.message, kind=failure.kind, note=failure.note) from None
         finally:
             with self._lock:
                 self._active = False
@@ -391,6 +550,8 @@ class ApiReasoner:
         self, system: str, message: str, sink: _TextSink
     ) -> _AnthropicStream | _OpenAiStream | None:
         """Ein Aufruf. `None` heisst: abgebrochen. Fehler kommen als `_ApiFailure`."""
+        if self._worker_socket:
+            return self._exchange_via_worker(system, message, sink)
         url, headers, body = self._request(system, message)
         # Die Zeitgrenze laeuft ab dem Absenden, nicht ab der ersten Zeile: `timeout` einer
         # HTTP-Bibliothek ist eine Pause-zwischen-Paketen und beginnt bei jedem Byte neu.
@@ -405,7 +566,10 @@ class ApiReasoner:
             # Ausnahme kann den Header samt Schluessel tragen. Bliebe sie als `__cause__`
             # haengen, stuende sie im naechsten Traceback — bereinigt waere dann nur der
             # Satz, den ohnehin niemand liest.
-            raise _ApiFailure(NETWORK_FAILED.format(detail=self._scrub(error)), "Netzfehler") from None
+            raise _ApiFailure(
+                NETWORK_FAILED.format(detail=self._scrub(error)), "Netzfehler",
+                KIND_NETWORK_FAILED,
+            ) from None
         with self._lock:
             if self._cancelled:
                 _close(response)
@@ -433,7 +597,7 @@ class ApiReasoner:
                 if cancelled:
                     return None
                 if time.monotonic() > deadline:
-                    raise _ApiFailure(TIMED_OUT, "Zeitüberschreitung")
+                    raise _ApiFailure(TIMED_OUT, "Zeitüberschreitung", KIND_TIMED_OUT)
                 payload = _sse_payload(raw)
                 if payload is None:
                     continue
@@ -453,16 +617,150 @@ class ApiReasoner:
             if cancelled:
                 return None  # `cancel()` hat die Leitung geschlossen — das ist kein Fehler
             raise _ApiFailure(
-                NETWORK_FAILED.format(detail=self._scrub(error)), "Netzfehler"
+                NETWORK_FAILED.format(detail=self._scrub(error)), "Netzfehler",
+                KIND_NETWORK_FAILED,
             ) from None
         return parser
+
+    # --- Worker-Transport ----------------------------------------------------------
+
+    def _exchange_via_worker(
+        self, system: str, message: str, sink: _TextSink
+    ) -> _OpenAiStream | None:
+        """Ein Aufruf ueber den Modell-Worker statt direkt ans Netz.
+
+        Dieselbe Fehler-Taxonomie wie der Direktweg: der Worker antwortet mit Text
+        oder einer klassifizierten Art (`modelworker.py`), und beides wird hier in
+        genau die `_ApiFailure`-Form uebersetzt, die `_run`, `_record` und
+        `fallback.py` bereits sprechen. Fail-closed: ein unerreichbarer Socket ist
+        ein Netzfehler — NIE ein stiller Rueckfall auf einen Schluessel im
+        Agent-Env (dort liegt im Worker-Modus ohnehin keiner).
+        """
+        messages = ([{"role": "system", "content": system}] if system else [])
+        messages.append({"role": "user", "content": message})
+        frame = json.dumps({
+            "provider": self.provider,
+            "model": self.model,
+            "messages": messages,
+            "params": {"timeout_s": self._timeout_s},
+        }).encode("utf-8") + b"\n"
+        # Wie beim Direktweg laeuft die Wanduhr ab dem Absenden: `settimeout` allein
+        # waere eine Pause-zwischen-Paketen und beginnt bei jedem recv neu.
+        deadline = time.monotonic() + max(1.0, float(self._timeout_s))
+        verbindung = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        try:
+            verbindung.settimeout(max(1.0, deadline - time.monotonic()))
+            try:
+                verbindung.connect(self._worker_socket)
+                verbindung.sendall(frame)
+            except OSError as error:
+                raise _ApiFailure(
+                    NETWORK_FAILED.format(detail=self._scrub(error)),
+                    "Worker nicht erreichbar",
+                    KIND_NETWORK_FAILED,
+                ) from None
+            with self._lock:
+                if self._cancelled:
+                    return None
+                # In `self._response`, damit `cancel()` die Leitung schliessen kann —
+                # `_close` spricht duck-typisiert `close()`, und das kann ein Socket.
+                self._response = verbindung  # type: ignore[assignment]
+            roh = self._read_worker_line(verbindung, deadline)
+        finally:
+            _close(verbindung)  # type: ignore[arg-type]
+        if roh is None:
+            return None  # abgebrochen
+        try:
+            antwort = json.loads(roh)
+        except ValueError:
+            antwort = None
+        if not isinstance(antwort, dict):
+            # Ein Worker, der kein Protokoll spricht, ist kaputte Infrastruktur —
+            # dieselbe Klasse wie eine Leitung, die mitten im Satz abbricht.
+            raise _ApiFailure(
+                NETWORK_FAILED.format(detail="unreadable frame from the model worker"),
+                "Worker-Protokollfehler",
+                KIND_NETWORK_FAILED,
+            )
+        if antwort.get("ok") is True:
+            text = antwort.get("text")
+            if not isinstance(text, str):
+                raise _ApiFailure(
+                    NETWORK_FAILED.format(detail="model worker answer without text"),
+                    "Worker-Protokollfehler",
+                    KIND_NETWORK_FAILED,
+                )
+            sink.emit(text)
+            # Der synthetische Parser traegt Text und Modell in dieselbe Form, die
+            # `_finish` und `_record` vom Direktweg kennen. Token-Zaehler bleiben 0:
+            # ueber den Socket reist nur Text (dokumentiert in docs/model-worker.md).
+            parser = _OpenAiStream(sink)
+            modell = antwort.get("model")
+            if isinstance(modell, str) and modell:
+                parser.model = modell
+            return parser
+        kind = antwort.get("kind")
+        kind = kind if kind in _WORKER_KINDS else KIND_HTTP_FAILED
+        # `_scrub` auch hier: die Worker-Meldung ist bereits bereinigt gebaut, aber
+        # die Leitung ist eine Grenze — Vertrauen endet am Socket, nicht am Format.
+        meldung = self._scrub(antwort.get("message") or "") or (
+            f"(Reasoner error: model worker failed — {kind})"
+        )
+        raise _ApiFailure(meldung, f"Worker: {kind}", kind)
+
+    def _read_worker_line(self, verbindung: socket.socket, deadline: float) -> bytes | None:
+        """Eine Antwort-Zeile vom Worker. `None` heisst: abgebrochen."""
+        puffer = bytearray()
+        while len(puffer) <= _WORKER_MAX_LINE:
+            with self._lock:
+                if self._cancelled:
+                    return None
+            rest = deadline - time.monotonic()
+            if rest <= 0:
+                raise _ApiFailure(TIMED_OUT, "Zeitüberschreitung", KIND_TIMED_OUT)
+            # Kurze Scheiben, damit `cancel()` nicht eine ganze Timeout-Laenge haengt.
+            verbindung.settimeout(min(rest, 1.0))
+            try:
+                stueck = verbindung.recv(65536)
+            except socket.timeout:
+                continue
+            except OSError as error:
+                with self._lock:
+                    if self._cancelled:
+                        return None  # `cancel()` hat die Leitung geschlossen
+                raise _ApiFailure(
+                    NETWORK_FAILED.format(detail=self._scrub(error)), "Netzfehler",
+                    KIND_NETWORK_FAILED,
+                ) from None
+            if not stueck:
+                raise _ApiFailure(
+                    NETWORK_FAILED.format(
+                        detail="model worker closed the connection without an answer"
+                    ),
+                    "Netzfehler",
+                    KIND_NETWORK_FAILED,
+                )
+            puffer += stueck
+            if b"\n" in puffer:
+                return bytes(puffer.split(b"\n", 1)[0])
+        raise _ApiFailure(
+            NETWORK_FAILED.format(detail="model worker answer exceeded the frame limit"),
+            "Netzfehler",
+            KIND_NETWORK_FAILED,
+        )
 
     def validate(self) -> None:
         """Beweist Schluessel, Modell und Erreichbarkeit, bevor der Router umschaltet."""
         with self._lock:
             if self._active:
                 raise RuntimeError("API-Reasoner laeuft bereits")
-        answer = self._run("", f"Answer with exactly {READY_MARKER}.", None)
+        try:
+            answer = self._run("", f"Answer with exactly {READY_MARKER}.", None)
+        except ReasonerFailure as failure:
+            # Dieselbe Meldung wie vor der Ausnahme: die Probe lieferte Fehlertext statt
+            # des Markers. Der Router liest nur "Validation gescheitert" — der Wortlaut
+            # des Grundes bleibt dabei exakt der alte.
+            answer = failure.message
         if READY_MARKER not in answer:
             raise RuntimeError(f"API-Modellprobe ohne Bereitschaftsmarker: {answer[:160]}")
 
@@ -557,15 +855,20 @@ def _finish(parser: _AnthropicStream | _OpenAiStream) -> tuple[str, str]:
     return text, ""
 
 
-def _classify(status: int, detail: str) -> tuple[str, str]:
-    """Vier Ursachen, vier Meldungen. Wer sie zusammenlegt, schickt den Betreiber irre."""
+def _classify(status: int, detail: str) -> tuple[str, str, str]:
+    """Vier Ursachen, vier Meldungen, vier Arten. Wer sie zusammenlegt, schickt den
+    Betreiber irre — und die Fallback-Kette auf eine falsche Faehrte."""
     if status in (401, 403):
-        return KEY_REJECTED.format(status=status), f"HTTP {status}"
+        return KEY_REJECTED.format(status=status), f"HTTP {status}", KIND_KEY_REJECTED
     if status == 429:
-        return RATE_LIMITED, "HTTP 429"
+        return RATE_LIMITED, "HTTP 429", KIND_RATE_LIMITED
     if status in (500, 502, 503, 529):
-        return OVERLOADED.format(status=status), f"HTTP {status}"
-    return HTTP_FAILED.format(status=status, detail=detail or "unknown"), f"HTTP {status}"
+        return OVERLOADED.format(status=status), f"HTTP {status}", KIND_OVERLOADED
+    return (
+        HTTP_FAILED.format(status=status, detail=detail or "unknown"),
+        f"HTTP {status}",
+        KIND_HTTP_FAILED,
+    )
 
 
 def _error_detail(error: object) -> str:

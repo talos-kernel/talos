@@ -24,7 +24,7 @@ from typing import Callable
 
 import requests
 
-from . import tools
+from . import consult, tools
 from .api_reasoner import SUPPORTED_PROVIDERS, ApiReasoner
 from .approval import ApprovalPicker, ApprovalStore
 from .autonomy import AutonomyGovernor, GovernedKernel, restore_level
@@ -36,6 +36,7 @@ from .conductor import Conductor, reply_starter
 from .config import ENTITIES_FILE, MODEL_CACHE, PIPER_BIN, RECALL_DB, SCHEDULE_DB, TRANSCRIPT_DB, VOICE_DIR, load_config
 from .eventlog import Event, EventLog, new_run_id
 from .executor import Executor
+from .fallback import FallbackReasoner, parse_chain
 from .memory import Memory
 from .intelligence import EntityRegistry, IntelligenceLayer, make_entity_status_runner
 from .policy import WORKSPACE_DIR, PolicyKernel
@@ -231,6 +232,16 @@ def run(once: bool = False, ask: str = "", chat: bool = False) -> None:
         log,
         fallback=fallback_selection,
     )
+    # Die Laufzeit-Fallback-Kette liegt UM den Router: sie entscheidet nur ueber den
+    # einzelnen Lauf, laesst die persistierte Wahl (`model.selected`) unangetastet und
+    # reicht alles andere (current/select/cancel/can_select) an den Router durch. Ohne
+    # konfigurierte Kette liefert sie exakt den bisherigen Fehlertext — der Wrapper
+    # ist deshalb IMMER davor, nicht nur wenn `TALOS_MODEL_FALLBACKS` gesetzt ist: der
+    # Router gibt klassifizierte Fehler jetzt als Ausnahme weiter, und sie muss die
+    # Stelle sein, die daraus wieder den alten Text macht.
+    reasoner = FallbackReasoner(
+        reasoner, parse_chain(config.model_fallbacks), build_reasoner, log
+    )
     model_picker = ModelPicker(model_registry, reasoner, can_select=reasoner.can_select)
     kernel = PolicyKernel(
         manifest=tools.default_manifest(),
@@ -270,28 +281,21 @@ def run(once: bool = False, ask: str = "", chat: bool = False) -> None:
     # ohne Archiv weiter (fail-open, wie Recall).
     transcript_store = TranscriptStore(TRANSCRIPT_DB)
     entity_registry = EntityRegistry.from_path(ENTITIES_FILE)
-    intelligence = IntelligenceLayer(entity_registry)
+    intelligence = IntelligenceLayer(
+        entity_registry,
+        consult_aliases=config.agent_consult_aliases,
+    )
     network_runners = web.make_web_runners(
         search_api_key=config.brave_api_key,
         allow_http=config.web_allow_http,
         allowed_addresses=config.web_allowed_addresses,
     )
-    # Nicht ins Werkzeugmanifest aufnehmen: dieser Runner ist ausschliesslich fuer
-    # feste, operator-owned Registry-Statusquellen. Freie web_fetch-URLs bleiben
-    # weiterhin an `config.web_allow_http` (produktiv: HTTPS-only) gebunden.
-    status_http_runner = web.make_web_runners(
-        search_api_key=config.brave_api_key,
-        allow_http=True,
-        allowed_addresses=config.web_allowed_addresses,
-    )["web_fetch"]
     runners = {
         **tools.RUNNERS,
         **tools.make_vault_runners(config.vault_dir, config.qmd_bin),
         "undo_last": tools.make_undo_runner(log),
         "entity_status": make_entity_status_runner(
-            entity_registry,
-            web_fetch=network_runners["web_fetch"],
-            web_fetch_http=status_http_runner,
+            entity_registry, web_fetch=network_runners["web_fetch"]
         ),
         # Der Rückweg wird erst beim Aufruf gebunden (`conductor` entsteht weiter
         # unten) — dieselbe Auflösung des Zyklus wie beim Worker.
@@ -314,6 +318,12 @@ def run(once: bool = False, ask: str = "", chat: bool = False) -> None:
             ceiling=delegated,
             propose=delegate_propose(reasoner),
             run_id=new_run_id,
+        ),
+        # Fester Betreiber-Endpunkt; URL und Token kommen aus der Dienstumgebung,
+        # niemals aus Modelltext. Die Antwort bleibt Beratung und erteilt keine Rechte.
+        "agent_consult": consult.make_agent_consult_runner(
+            config.agent_consult_url,
+            config.agent_consult_token,
         ),
         # Netz. Die Grenze liegt in `web.guard_url`, nicht im Pfad-Floor: ein Werkzeug,
         # das beliebige URLs holt, ist sonst ein Tor ins interne Netz.

@@ -128,7 +128,7 @@ class IntelligenceProbe:
         self.contexts.append((text, snapshot))
         return "[Intelligence context]\nEntity: Atlas API != Cache Worker\n"
 
-    def review(self, text: str, answer: str, history=()):
+    def review(self, text: str, answer: str, history=(), **_kwargs):
         from types import SimpleNamespace
 
         snapshot = tuple(history)

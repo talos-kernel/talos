@@ -15,13 +15,13 @@
 </p>
 
 <p align="center">
-  <!-- ⚠️ Bewusst „tests", nicht „passing": die Zahl kommt aus dem Einsammeln (1618).
+  <!-- ⚠️ Bewusst „tests", nicht „passing": die Zahl kommt aus dem Einsammeln (1699).
        Plattformabhaengige Sandbox- und Repository-Pruefungen koennen uebersprungen werden;
        `test_site_claims` prueft deshalb die gesammelte Zahl statt ein Umgebungsresultat. -->
-  <img src="https://img.shields.io/badge/tests-1618-2e7d32.svg" alt="Tests">
-  <img src="https://img.shields.io/badge/red%20team-166%2F166-2e7d32.svg" alt="Red team">
-  <img src="https://img.shields.io/badge/gate%20path-544%20lines-8a4318.svg" alt="Gate path">
-  <img src="https://img.shields.io/badge/tools-18%20gated-8a4318.svg" alt="Tools">
+  <img src="https://img.shields.io/badge/tests-1699-2e7d32.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/red%20team-164%2F164-2e7d32.svg" alt="Red team">
+  <img src="https://img.shields.io/badge/gate%20path-532%20lines-8a4318.svg" alt="Gate path">
+  <img src="https://img.shields.io/badge/tools-19%20gated-8a4318.svg" alt="Tools">
   <img src="https://img.shields.io/badge/default%20identities-0-c62828.svg" alt="Default identities">
   <img src="https://img.shields.io/badge/python-3.11%2B-1565c0.svg" alt="Python">
   <img src="https://img.shields.io/badge/licence-MIT-616161.svg" alt="MIT">
@@ -103,7 +103,7 @@ authorised individually, bound to its exact arguments and targets, valid once, f
 seconds. Forgetting to call the gate does not produce an unchecked effect — it produces no
 effect at all, because the raw runners are unreachable without a token.
 
-That design is testable, and it is tested: 166 adversarial scenarios run on every change and
+That design is testable, and it is tested: 164 adversarial scenarios run on every change and
 try to get an effect past the kernel. They are in [`redteam.py`](redteam.py). Read them
 before you trust anything written above.
 
@@ -170,8 +170,8 @@ pip install -r requirements.txt
 
 python -m talos setup                    # asks three things, writes a file, stops
 python -m talos doctor                   # what is still missing
-python -m pytest tests/ -q               # 1618 tests
-python redteam.py                        # 166 adversarial cases
+python -m pytest tests/ -q               # 1699 tests
+python redteam.py                        # 164 adversarial cases
 python -m talos                          # run it
 ```
 
@@ -201,9 +201,11 @@ A full walkthrough — install, identity, the session, every command, and the on
 missing on purpose — is at **[talos-agent.ch/docs](https://talos-agent.ch/docs/)**.
 
 `ask` is not a second way in — it is a **channel like any other**, with the same protocol
-and no special right. Two consequences follow, and both are the point of it. Whoever types
-there must be in the allowlist as `cli:<uid>`, exactly like a Telegram number; a shell next
-to the agent is not an argument for granting it anything. And the turn always runs under
+and no special right. Two consequences follow, and both are the point of it. While the
+allowlist is empty the local caller is admitted as `cli:<uid>` automatically, so the first
+run works; the moment the list names one identity it becomes exhaustive, and the uid must
+appear as `cli:<uid>` exactly like a Telegram number — a shell next to the agent is not an
+argument for granting it anything. And the turn always runs under
 the **unattended ceiling**: a one-liner waits for nothing, so `NEEDS_HUMAN` becomes `DENY`
 and says so. Approve in the chat, where somebody is actually looking.
 
@@ -495,13 +497,10 @@ is data, bounded like any tool result, never an instruction.
 ## Identity
 
 `SOUL.md` carries the agent's **name and character**. Its first heading is the name —
-change `# TALOS` to `# ARGUS` and the agent is renamed everywhere, including the header
-of the live display. There is no second place where the name lives.
+change `# TALOS` to `# ARGUS`, restart, and the agent is renamed everywhere, including the
+header of the live display. There is no second place where the name lives.
 
-`AGENTS.md` carries durable operating discipline; `USER.md` carries stable preferences
-for the operator. All three reload on the next message, have explicit context limits, are
-protected by the persistence floor, and survive updates as operator-owned state. Missing
-`AGENTS.md` or `USER.md` is harmless; a missing or broken `SOUL.md` uses the safe fallback.
+The file also sets the language rule: the agent answers in the language you wrote in.
 
 ## What a run looks like
 
@@ -543,6 +542,7 @@ tool that skips the kernel — a tool without a target extractor is `DENY` by co
 | `vault_search` / `vault_get` / `vault_write_note` | a markdown knowledge base, if you point it at one |
 | `session_search` | what was said in earlier turns |
 | `delegate` | a sub-run that can only read |
+| `agent_consult` | bounded advice from a second, operator-configured agent — data, never permission |
 | `ask_operator` | the one way it can ask you something on purpose |
 
 ### Operator-owned entity knowledge
@@ -589,7 +589,7 @@ executing anything. It is the fastest way to understand the kernel.
 
 ## Architecture
 
-Small modules on purpose. The gate path (`policy.py`, 544 lines) has to be readable in one
+Small modules on purpose. The gate path (`policy.py`, 532 lines) has to be readable in one
 sitting — a gate you cannot read is not a gate.
 
 | Module | Role |
@@ -610,7 +610,7 @@ sitting — a gate you cannot read is not a gate.
 | `identity.py` / `ux.py` | name and glyphs |
 | `telegram.py` / `mail.py` / `whatsapp.py` | channels — every way in fetches, none listens |
 | `vision.py` / `hearing.py` / `speech.py` / `frames.py` | reading a picture, hearing a recording, speaking, one still out of a video — ordinary READ/WRITE with a target |
-| `cli.py` / `doctor.py` / `configcli.py` / `schema.py` | the nine subcommands: diagnose, read and change settings — the schema decides what may be written, and the allowlist and the network exceptions never are |
+| `cli.py` / `doctor.py` / `configcli.py` / `schema.py` | the subcommands: diagnose, read and change settings — the schema decides what may be written, and the allowlist and the network exceptions never are |
 | `askcli.py` | `talos ask` — one turn from a script, as a channel with no special right |
 | `models.py` | live model lists, cached on disk, added to the curated catalogue and never replacing it |
 | `updater.py` | update beside the old tree, both suites in the new one, switch only if green |
@@ -633,7 +633,7 @@ sitting — a gate you cannot read is not a gate.
 4. **Ownership as the boundary, not just the floor.** While the agent and its config file
    belong to the same writable user, the floor and the sandbox are code in the same
    process. A separate user for the model worker would make it a real separation. On the
-   hardened deployment the config already belongs to root and the agent may only read it.
+   private deployment the config already belongs to root and the agent may only read it.
 
 Landed since this list was first written: the sandbox for `run_shell` (bubblewrap /
 `sandbox-exec`, see [What it does not do](#what-it-does-not-do)), streaming replies,

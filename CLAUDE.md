@@ -7,16 +7,19 @@ Guidance for Claude Code (and any other coding agent) working in this repository
 An autonomous agent that takes instructions over a chat channel, reasons with a language
 model, and executes tools — but only after a deterministic security kernel has ruled on
 the action. Full architecture in `README.md`. The agent's name and character live in
-`SOUL.md`; durable operating discipline lives in `AGENTS.md`, and stable operator
-preferences live in `USER.md`. All three are operator-owned prompt state and reload live.
+`SOUL.md`.
 
 | | |
 |---|---|
-| Gate path | `policy.py` — has to stay readable in one sitting |
-| Tools | every shipped tool is gated |
-| Suites | unit, adversarial and opt-in end-to-end |
+| Gate path | `policy.py`, **532 lines** — has to stay readable in one sitting |
+| Tools | **19**, every one gated |
+| Suites | **1699** tests · **164** adversarial · 44 end-to-end |
 | Home | <https://talos-agent.ch> · docs at `/docs/` |
-| Repository | `talos-kernel/talos` is the public source tree |
+| Repos | `talos-kernel/talos` published · a separate private one holds the full history (`git remote -v`) |
+
+⚠️ **`public` is blocked for pushing.** Its push url is a deliberate dead end — the
+published state is only ever produced by `scripts/sync-public.sh` into a separate clone.
+A direct push from here would carry 108 commits and a real author address across.
 
 ## The rule everything rests on
 
@@ -191,9 +194,9 @@ In practice:
 ```bash
 python3 -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt
 
-python -m pytest tests/ -q   # full unit suite
-python redteam.py            # adversarial suite — mandatory for any kernel change
-python e2e.py                # opt-in checks against a real model (costs tokens and time)
+python -m pytest tests/ -q   # 1699 tests, ~8s
+python redteam.py            # 164 adversarial cases — mandatory for any kernel change
+python e2e.py                # 44 cases against a real model (costs tokens and time)
 python -m talos --once       # single cycle, for diagnosis
 python -m talos              # run
 
@@ -201,6 +204,7 @@ python -m talos doctor       # what is missing — changes nothing, no network w
 python -m talos config list  # keys, their kind, whether they are set
 python -m talos models       # the catalogue; --refresh asks the providers
 python -m talos status       # what the event log says it did last
+python -m talos health       # runs, errors, schedules, last anchor — no network, exit 1 on a broken chain
 python -m talos report       # the event log as a record a third party can read
 python -m talos review       # what this installation should change — writes nothing
 python -m talos ask "…"      # one turn, no chat — cli:<uid> must be in the allowlist
@@ -208,6 +212,7 @@ python -m talos chat         # a session here; the ceiling hangs on the tty, not
 python -m talos events       # what happened — read-only, filterable
 python -m talos why <id>     # why that was allowed or refused, and what came of it
 python -m talos verify       # prove the event log was not edited after the fact (exit 1 if it was)
+python -m talos anchor       # pin the chain head — exit 1 if the log shrank (--send mails the digest)
 ```
 
 ## Traps that have already cost time
@@ -225,7 +230,7 @@ python -m talos verify       # prove the event log was not edited after the fact
 6. **The status display must not appear for tool-free answers.** A plain reply gets no
    header — that is a deliberate decision, not a style preference.
 7. **A green suite can miss a broken service.** `run()` once read a name that does not
-   exist; the suite stayed green while the process crash-looped. `tests/test_media.py`
+   exist; 1215 tests stayed green while the process crash-looped. `tests/test_media.py`
    now checks the composition root with `symtable` — but that sees names, **not
    attributes**. A second check reads the runner map out of `run()` with `ast` and holds
    it against the manifest, so a tool that is offered but not wired fails here instead of
@@ -235,15 +240,31 @@ python -m talos verify       # prove the event log was not edited after the fact
    that did not survive an update makes a deliberately configured install answer with the
    shipped default. The fallback stays, but it leaves a trace — and a real deployment
    names its model in `talos.env` so the fallback is *its* model, not this repo's.
-9. **Keep this public tree self-contained.** Repository guidance must describe only the
-   files and release process present here. Machine-specific configuration, remotes and
-   operator notes do not belong in tracked documentation.
+9. **Two repositories, and the remotes say which is which.** In this working tree
+   `private` carries the full history and the real author address; `public` is
+   `talos-kernel/talos`, an own clean history from zero. Run `git remote -v` for the
+   addresses — ⚠️ they are deliberately **not** written out here, because this file is
+   published with the tree, and the private one has no business being in it. The
+   deployment target is neither: it is a running instance fed by `rsync`, and a third
+   remote for it no longer exists.
+   ⚠️ Moved into the organisation on 2026-08-06 by pushing fresh, **not** by transfer:
+   a transfer leaves a permanent redirect from the personal account, and with zero stars
+   it would have bought nothing. The old repo was deleted, so no redirect exists.
+   ⚠️ **`public` is blocked
+   for pushing** — its push url is a deliberate dead end. The public state is only ever
+   produced by `scripts/sync-public.sh` into a separate clone; a direct push from here
+   would carry the whole private history across.
+10. **A private deployment is not this repo.** The instance on the operator's machine has
+   its own `SOUL.md` (its first heading is the agent's *name*), its own `CLAUDE.md`,
+   its own env file and its own `data/`. Sync the **package** (`talos/` → `talos/`), never
+   the repository root, or the deployment gets renamed and loses its event log — which is
+   also where the chosen model lives.
 
 ## Conventions
 
 - Comments and docstrings explain **why**, especially where a rule looks counterintuitive.
   Those are the ones that get argued away six months later.
-- Small modules. The gate path (`policy.py`) must stay readable in one sitting.
+- Small modules. The gate path (`policy.py`, 532 lines) must stay readable in one sitting.
 - Glyphs come from `talos/ux.py` only, one meaning each, **never inside an answer's prose**.
 - Telegram edit interval stays ≥ 1.2 s; the API tolerates roughly one edit per second
   per chat.

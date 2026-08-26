@@ -39,9 +39,12 @@ __all__ = [
     "MissingKey",
     "Route",
     "CredentialStore",
+    "WORKER_ENV_VAR",
     "base_url_var",
     "key_var",
     "from_lookup",
+    "parse_worker_socket",
+    "worker_scope_names",
 ]
 
 # Der Praefix, unter dem eine anbietergebundene Basis-Adresse steht. Mechanisch aus dem
@@ -59,6 +62,48 @@ LEGACY_MESSAGE = (
     "how a key ends up at the wrong company. Name the provider — for example "
     f"{BASE_URL_PREFIX}OPENAI_API — and remove the old variable."
 )
+
+# Die Transport-Naht des Reasoners: `TALOS_MODEL_WORKER=socket:///run/talos/model.sock`
+# verlagert das Denken in den UID-getrennten Modell-Worker (`modelworker.py`). Leer
+# heisst: Direktweg, wie bisher — die Vorgabe auf jeder Dev-Maschine.
+WORKER_ENV_VAR = "TALOS_MODEL_WORKER"
+WORKER_SCHEME = "socket://"
+
+
+def parse_worker_socket(value: str) -> str:
+    """Den Socket-Pfad aus `TALOS_MODEL_WORKER` — oder "" fuer den Direktweg.
+
+    Fail-closed bei unbekannten Werten: wer `sock://…` tippt und still auf dem
+    Direktweg landet, haelt den Schluessel wieder im Agenten-Prozess — genau der
+    Zustand, den der Worker abschaffen soll, nur diesmal unbemerkt. Ein gesetzter,
+    unlesbarer Wert ist deshalb ein Fehler, kein Rueckfall.
+    """
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    if text.startswith(WORKER_SCHEME):
+        pfad = text[len(WORKER_SCHEME):].strip()
+        if pfad:
+            return pfad
+    raise ValueError(
+        f"{WORKER_ENV_VAR} kennt nur die Form 'socket:///pfad/zum.sock' — gelesen "
+        f"wurde {text[:40]!r}. Es wurde nichts gewaehlt; der Direktweg waere hier "
+        "ein stiller Rueckfall."
+    )
+
+
+def worker_scope_names() -> tuple[str, ...]:
+    """Die Namen aller Provider-Schluessel laut Katalog.
+
+    Im Worker-Modus gehoeren ihre WERTE in die Worker-Env (`/etc/talos/model.env`,
+    UID `talos-model`) — nicht in die Umgebung des Agenten. Aus dem Katalog
+    abgeleitet statt handgepflegt: eine zweite Liste driftet beim naechsten
+    Anbieter, und eine vergessene Zeile hiesse hier „Schluessel im Agent-Env
+    erwartet, obwohl der Worker laeuft".
+    """
+    return tuple(
+        info.env_key for info in catalog.PROVIDERS if info.needs_key and info.env_key
+    )
 
 
 class MissingKey(ValueError):
@@ -104,6 +149,14 @@ class CredentialStore:
         eintrag = self.routes.get(provider)
         if eintrag is not None and eintrag.api_key:
             return eintrag
+        # ⚠️ Ein LOKALER Anbieter (auth="local", etwa Ollama) hat bewusst keinen
+        # Schluessel: die Route ist nur eine Adresse, und das ist keine Luecke. Nur bei
+        # ihm darf eine Route ohne Schluessel das Haus verlassen — schluesselpflichtige
+        # Anbieter bleiben fail-closed. `from_lookup` legt solche Routen mit leerem
+        # Schluessel an; ein handgebauter Bestand ohne Eintrag landet weiter unten.
+        info = catalog.get(provider)
+        if eintrag is not None and info is not None and not info.needs_key:
+            return eintrag
         name = key_var(provider)
         gesucht = name or f"a key for {provider}"
         raise MissingKey(
@@ -124,19 +177,28 @@ class CredentialStore:
 def from_lookup(lookup) -> CredentialStore:
     """Baut den Bestand aus einer Namensauflösung (Umgebung + Geheimnisdatei).
 
-    Gelesen wird nur, was der Katalog als schluesselpflichtig fuehrt. Ein Anbieter ohne
-    hinterlegten Schluessel taucht gar nicht erst auf — „vorhanden, aber leer" ist ein
-    Zustand, den niemand braucht.
+    Gelesen wird bei schluesselpflichtigen Anbietern nur, was der Katalog als solchen
+    fuehrt. Ein Anbieter ohne hinterlegten Schluessel taucht gar nicht erst auf —
+    „vorhanden, aber leer" ist ein Zustand, den niemand braucht.
+
+    Lokale Anbieter (auth="local", etwa Ollama) bekommen eine Route OHNE Schluessel:
+    ihre Route ist eine reine Adresse, und genau dafuer ist sie da. Wer keine Adresse
+    kennt (weder Katalog-Vorgabe noch `TALOS_BASE_URL_<PROVIDER>`), taucht ebenfalls
+    nicht auf — eine Route ohne Ziel waere eine Einladung zum Raten.
     """
     routen: dict[str, Route] = {}
     for info in catalog.PROVIDERS:
-        if not info.needs_key or not info.env_key:
-            continue
-        schluessel = str(lookup(info.env_key) or "").strip()
-        if not schluessel:
-            continue
-        adresse = str(lookup(base_url_var(info.slug)) or "").strip()
-        routen[info.slug] = Route(
-            info.slug, schluessel, (adresse or info.base_url).rstrip("/")
-        )
+        if info.needs_key and info.env_key:
+            schluessel = str(lookup(info.env_key) or "").strip()
+            if not schluessel:
+                continue
+            adresse = str(lookup(base_url_var(info.slug)) or "").strip()
+            routen[info.slug] = Route(
+                info.slug, schluessel, (adresse or info.base_url).rstrip("/")
+            )
+        elif info.auth == "local":
+            adresse = str(lookup(base_url_var(info.slug)) or "").strip()
+            ziel = (adresse or info.base_url).rstrip("/")
+            if ziel:
+                routen[info.slug] = Route(info.slug, "", ziel)
     return CredentialStore(routen)

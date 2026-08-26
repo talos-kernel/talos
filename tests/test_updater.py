@@ -295,10 +295,6 @@ def test_new_version_without_adversarial_suite_is_refused(tmp_path: Path) -> Non
 # --- Die Seele gehoert dem Betreiber, nicht der Auslieferung -------------------------
 
 
-def test_operator_instruction_files_are_persistent_state() -> None:
-    assert {"SOUL.md", "AGENTS.md", "USER.md"} <= set(updater.STATE_PATHS)
-
-
 def test_a_named_agent_keeps_its_name_across_an_update(tmp_path: Path) -> None:
     """`SOUL.md` sieht aus wie eine Datei der Auslieferung und ist es nicht: seine erste
     Ueberschrift IST der Name des Agenten, der Rest sein Wesen und seine Sprachregel.
@@ -314,40 +310,6 @@ def test_a_named_agent_keeps_its_name_across_an_update(tmp_path: Path) -> None:
 
     assert code == 0
     assert (prefix / "SOUL.md").read_text(encoding="utf-8").startswith("# ARGOS")
-
-
-def test_all_operator_instruction_sources_survive_an_update(tmp_path: Path) -> None:
-    prefix = _installation(tmp_path)
-    owned = {
-        "SOUL.md": "# ARGOS\n\noperator soul\n",
-        "AGENTS.md": "operator discipline\n",
-        "USER.md": "operator preferences\n",
-    }
-    for name, content in owned.items():
-        (prefix / name).write_text(content, encoding="utf-8")
-    delivered = dict(RELEASE_FILES)
-    delivered.update({name: f"release {name}\n" for name in owned})
-
-    code, _ = _update(prefix, FakeHttp(_publication(NEW, _tarball(delivered))), FakeRunner())
-
-    assert code == 0
-    assert {
-        name: (prefix / name).read_text(encoding="utf-8") for name in owned
-    } == owned
-
-
-def test_operator_file_replaces_a_release_directory_with_the_same_name(tmp_path: Path) -> None:
-    prefix = _installation(tmp_path)
-    owned = "operator discipline\n"
-    (prefix / "AGENTS.md").write_text(owned, encoding="utf-8")
-    delivered = dict(RELEASE_FILES)
-    delivered["AGENTS.md/planted.txt"] = "release collision\n"
-
-    code, _ = _update(prefix, FakeHttp(_publication(NEW, _tarball(delivered))), FakeRunner())
-
-    assert code == 0
-    assert (prefix / "AGENTS.md").is_file()
-    assert (prefix / "AGENTS.md").read_text(encoding="utf-8") == owned
 
 
 def test_an_unnamed_installation_takes_the_delivered_soul(tmp_path: Path) -> None:

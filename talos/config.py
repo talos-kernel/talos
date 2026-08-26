@@ -9,7 +9,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .channel import Principal
-from .credentials import LEGACY_BASE_URL, LEGACY_MESSAGE, CredentialStore, from_lookup
+from .credentials import (
+    LEGACY_BASE_URL,
+    LEGACY_MESSAGE,
+    CredentialStore,
+    from_lookup,
+    parse_worker_socket,
+)
 from .web import parse_allowed_addresses
 
 HOME = Path.home()
@@ -149,6 +155,20 @@ class TalosConfig:
     hermes_models: Path = HERMES_MODELS
     model_provider: str = DEFAULT_MODEL_PROVIDER
     model_name: str = DEFAULT_MODEL
+    # Die Laufzeit-Fallback-Kette (TALOS_MODEL_FALLBACKS), kommagetrennt als
+    # `provider/model`. Leer heisst: kein Fallback, ein Fehler ist ein Fehler.
+    # Sie gilt pro Lauf und ruehrt die persistierte Modellwahl nie an.
+    model_fallbacks: str = ""
+    # Der Socket des Modell-Workers (TALOS_MODEL_WORKER=socket://…). Leer heisst:
+    # Direktweg — Vorgabe. Gesetzt heisst: der Agent haelt KEINE Provider-Schluessel
+    # mehr; `api_credentials` ist dann absichtlich leer, und das ist der Soll-Zustand.
+    model_worker: str = ""
+    # Fester, operator-owned Beratungskanal zu einem zweiten Agenten. Das Token bleibt
+    # in der Secret-Datei und wird nie Bestandteil eines Tool-Arguments.
+    agent_consult_url: str = ""
+    agent_consult_token: str = ""
+    # Private Namen/Aliase des konsultierbaren Agenten; nur fuer explizite Handoff-Erkennung.
+    agent_consult_aliases: tuple[str, ...] = ()
     status_style: str = STATUS_STYLE
     shell_needs_human: bool = SHELL_NEEDS_HUMAN
     skills_dirs: tuple[Path, ...] = SKILLS_DIRS
@@ -272,7 +292,7 @@ def load_config(*, require_channel: bool = True) -> TalosConfig:
     if _value(LEGACY_BASE_URL):
         raise ValueError(LEGACY_MESSAGE)
 
-    return TalosConfig(
+    konfig = TalosConfig(
         skills_dirs=skills_dirs,
         whatsapp_token=_value("WHATSAPP_TOKEN"),
         whatsapp_phone_id=_value("WHATSAPP_PHONE_ID"),
@@ -319,6 +339,24 @@ def load_config(*, require_channel: bool = True) -> TalosConfig:
             os.environ.get("TALOS_MODEL")
             or secrets.get("TALOS_MODEL", DEFAULT_MODEL)
         ),
+        model_fallbacks=_value("TALOS_MODEL_FALLBACKS"),
+        # ⚠️ Bewusst NUR das Prozess-Env, nicht die Env-Dateien: `ApiReasoner` liest
+        # dieselbe Variable beim Bauen aus `os.environ` (die Naht gehoert dem
+        # Reasoner, nicht diesem Modul). Zwei Quellen hiesse: in `talos.env`
+        # gesetzt, im Reasoner ignoriert — ein stiller Rueckfall auf den Direktweg,
+        # also Schluessel im Agenten, obwohl der Betreiber den Worker glaubt.
+        # Der installierte Weg ist die Agent-Unit (`Environment=`), siehe
+        # `docs/model-worker.md`.
+        model_worker=parse_worker_socket(os.environ.get("TALOS_MODEL_WORKER", "")),
+        agent_consult_url=_value("TALOS_AGENT_CONSULT_URL"),
+        agent_consult_token=_value("TALOS_AGENT_CONSULT_TOKEN"),
+        agent_consult_aliases=tuple(
+            dict.fromkeys(
+                part.strip()[:64]
+                for part in _value("TALOS_AGENT_CONSULT_ALIASES").split(",")
+                if part.strip()
+            )
+        )[:8],
         status_style=(
             os.environ.get("TALOS_STATUS_STYLE")
             or secrets.get("TALOS_STATUS_STYLE", STATUS_STYLE)
@@ -328,3 +366,13 @@ def load_config(*, require_channel: bool = True) -> TalosConfig:
             or secrets.get("TALOS_WEB_ALLOWED_ADDRESSES", "")
         ),
     )
+    # Das Bridge-Token gehoert in KEINEN Kinderprozess: alles, was der Agent spaeter
+    # startet (CLI-Reasoner, Browser, STT/TTS), erbt os.environ mit, und die Sandbox
+    # deckt nur run_shell ab. Die Secret-Datei bleibt die Quelle — von dort kommt der
+    # Wert bei jedem Laden erneut, das Prozess-Env darf ihn also verlieren. Traegt
+    # NUR das Env ihn (keine Datei), bleibt er stehen: dann ist die Weitergabe an
+    # Kinder die ausdrueckliche Konfiguration des Betreibers, und der zweite
+    # Ladevorgang in run() braeche sonst den Kanal.
+    if secrets.get("TALOS_AGENT_CONSULT_TOKEN"):
+        os.environ.pop("TALOS_AGENT_CONSULT_TOKEN", None)
+    return konfig

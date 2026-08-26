@@ -291,9 +291,33 @@ def _admits_uncertainty(answer: str) -> bool:
     )
 
 
+_CONSULT_VERB = re.compile(
+    r"\b(?:konsultier|eskalier|frag|frage|befrag|aufsuch|consult|escalat|ask)\w*\b",
+    re.IGNORECASE,
+)
+_GENERIC_AGENT = re.compile(
+    r"\b(?:agent(?:en|in)?|assistant|assistent(?:en|in)?|second agent|ander(?:e|en|er) agent)\b",
+    re.IGNORECASE,
+)
+
+
+def _consult_requested(text: str, aliases: Sequence[str]) -> bool:
+    """Expliziten Agent-Handoff erkennen, ohne private Namen in Code zu verdrahten."""
+    if _CONSULT_VERB.search(text) is None:
+        return False
+    if _GENERIC_AGENT.search(text) is not None:
+        return True
+    return any(
+        re.search(rf"(?<!\w){re.escape(alias)}(?!\w)", text, re.IGNORECASE)
+        for alias in aliases
+        if alias
+    )
+
+
 class IntelligenceLayer:
-    def __init__(self, entities: EntityRegistry) -> None:
+    def __init__(self, entities: EntityRegistry, *, consult_aliases: Sequence[str] = ()) -> None:
         self.entities = entities
+        self.consult_aliases = tuple(alias.strip() for alias in consult_aliases if alias.strip())
 
     def profile(self, text: str) -> TaskTier:
         return task_tier(text)
@@ -313,6 +337,10 @@ class IntelligenceLayer:
                     "[entity_status -> done]" in joined and entity.name.casefold() in joined
                 ):
                     lines.append(f"Open verification: {entity.name} needs entity_status")
+        if _consult_requested(user_text, self.consult_aliases):
+            joined = "\n".join(str(item) for item in history).casefold()
+            if "[agent_consult -> done]" not in joined:
+                lines.append("Open consultation: operator explicitly requires agent_consult")
         if self.profile(user_text) is TaskTier.DEEP:
             lines.extend(
                 (
@@ -326,10 +354,41 @@ class IntelligenceLayer:
         parts.append("\n".join(lines))
         return "\n\n".join(part for part in parts if part) + "\n\n"
 
-    def review(self, user_text: str, answer: str, history: Sequence[str] = ()) -> Review:
+    def _consult_evidenced(self, joined: str, consult_done: Callable[[], bool] | None) -> bool:
+        """Beleg fuer eine erfolgte Beratung.
+
+        Mit verdrahteter Quelle (Produktivbetrieb: das Event-Log des Laufs) zaehlt
+        NUR deren Antwort. Der Marker '[agent_consult -> done]' steht in einer
+        Historie, in die auch Modellprosa gelangt — ein Text, der den Marker
+        behauptet, waere sonst sein eigener Beweis. Ohne Quelle (Unit-Tests) bleibt
+        der Marker das Kriterium.
+        """
+        if consult_done is not None:
+            try:
+                return bool(consult_done())
+            except Exception:
+                return False
+        return "[agent_consult -> done]" in joined
+
+    def review(
+        self,
+        user_text: str,
+        answer: str,
+        history: Sequence[str] = (),
+        *,
+        consult_done: Callable[[], bool] | None = None,
+    ) -> Review:
+        joined = "\n".join(str(item) for item in history).casefold()
+        if _consult_requested(user_text, self.consult_aliases) and not self._consult_evidenced(
+            joined, consult_done
+        ):
+            return Review(
+                False,
+                "operator explicitly requested another-agent consultation; call agent_consult "
+                "before giving a final answer",
+            )
         if not _verification_requested(user_text) or _admits_uncertainty(answer):
             return Review(True)
-        joined = "\n".join(str(item) for item in history).casefold()
         missing = []
         for entity in _status_entities(self.entities, user_text):
             if entity.status is None:

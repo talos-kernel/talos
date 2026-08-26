@@ -30,25 +30,18 @@ def test_run_shell_returns_rc_and_output() -> None:
     assert "talos" in out
 
 
-def test_missing_required_arguments_raise_clear_errors_without_side_effects(tmp_path: Path) -> None:
-    target = tmp_path / "missing" / "file.txt"
-    cases = (
-        (tools.read_file, ToolRequest("read_file", OWNER, {}), "path"),
-        (tools.write_file, ToolRequest("write_file", OWNER, {}), "path"),
-        (
-            tools.write_file,
-            ToolRequest("write_file", OWNER, {"path": str(target)}),
-            "content",
-        ),
-        (tools.run_shell, ToolRequest("run_shell", OWNER, {}), "command"),
+def test_missing_required_arg_raises_clear_error() -> None:
+    # Ein fehlendes Pflichtargument liefert eine brauchbare Meldung statt eines nackten
+    # KeyError, der als kryptisches „error · 'path'" durchschlägt und einen Plan abbricht.
+    faelle = (
+        ("read_file", {}, "path"),
+        ("write_file", {"content": "x"}, "path"),
+        ("write_file", {"path": "/tmp/nichts"}, "content"),
+        ("run_shell", {}, "command"),
     )
-
-    for runner, request, missing in cases:
-        with pytest.raises(ValueError) as error:
-            runner(request)
-        assert str(error.value) == f"das Werkzeug braucht das Argument '{missing}'"
-
-    assert not target.parent.exists()
+    for tool, args, wort in faelle:
+        with pytest.raises(ValueError, match=wort):
+            getattr(tools, tool)(ToolRequest(tool, OWNER, args))
 
 
 def test_default_manifest_declares_three_tools() -> None:

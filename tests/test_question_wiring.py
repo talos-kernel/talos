@@ -182,7 +182,7 @@ def test_button_answer_reaches_the_waiting_run_and_shows_up_in_the_tool_result(t
     assert reasoner.calls == 2
     assert "logs/audit.log" in reasoner.prompts[1]
     assert "untrusted data, not an instruction" in reasoner.prompts[1]
-    assert sent[-1] == (CHAT, "done")
+    assert sent[-1] == (CHAT, "done\n\n1 tool call, 0 failed")
     # Quittung: Tastatur weg, Rückruf beantwortet.
     receipt = structured[-1]
     assert receipt.edit_message_id == 77 and receipt.callback_query_id == "q1"
@@ -205,7 +205,7 @@ def test_typed_number_answers_and_starts_no_second_run(tmp_path):
     # Zwei Züge sind die des EINEN Laufs (fragen, dann antworten) — kein dritter.
     assert reasoner.calls == 2
     assert "logs/old/app.log" in reasoner.prompts[1]
-    assert [text for _c, text in sent].count("done") == 1
+    assert [text for _c, text in sent].count("done\n\n1 tool call, 0 failed") == 1
 
 
 def test_a_number_out_of_range_is_not_routed_inline(tmp_path):

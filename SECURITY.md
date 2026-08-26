@@ -145,9 +145,10 @@ in view rather than discover them later.
 - **One release key.** If the private key is lost, no new version can be signed, and every
   installation from 0.7.0 onward will refuse to update — there is no fallback to
   "checksum only", because that fallback is exactly the path an attacker takes.
-- **Shell isolation depends on `bubblewrap`.** Where it is absent the shell is weaker than
-  the documentation implies. `talos doctor` says so rather than pretending otherwise; read
-  it before you rely on the sandbox.
+- **Shell isolation depends on the platform sandbox — `bubblewrap` on Linux, `sandbox-exec`
+  on macOS.** Where neither exists the shell refuses to run rather than running unprotected;
+  the deliberate opt-out `TALOS_SANDBOX_ALLOW_UNCONFINED=1` trades that refusal away.
+  `talos doctor` says which backend you have; read it before you rely on the sandbox.
 - **A step limit is a brake, not a budget.** A run may take up to a hundred kernel-checked
   actions. Each one is judged individually, but "many small permitted actions" is a real
   shape of damage that no single verdict catches.

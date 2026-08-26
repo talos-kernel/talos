@@ -1,0 +1,25 @@
+# Beispiel-Einheit fuer den Anker-Versand — Doku-Qualitaet, vor Gebrauch anpassen.
+#
+# Was sie tut: einmalig `talos anchor --send` ausfuehren — die Hash-Kette wird
+# verifiziert, der Kopf append-only in data/anchors.jsonl festgehalten und der Digest
+# an den Owner-Chat gesendet. Damit liegt der Kettenkopf auch ausserhalb der Maschine:
+# ein nachtraeglich gekuerztes Log faellt beim naechsten Vergleich auf.
+#
+# Sinnvoll VOR dem Briefing (siehe talos-briefing.timer): der Anker von 06:30 ist das,
+# dessen Alter das Briefing von 07:00 meldet. Wer den Digest zusaetzlich per Mail will,
+# haengt `--mail` an ExecStart — Empfaenger ist der Mail-Eintrag der Allowlist.
+#
+# Gestartet von talos-anchor.timer. Pfade, Benutzer und Env-Datei sind Platzhalter —
+# siehe talos-briefing.service.
+[Unit]
+Description=Talos chain anchor — pin the event-log head and ship the digest
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=talos
+WorkingDirectory=/opt/talos
+EnvironmentFile=-/etc/talos/talos.env
+ExecStart=/usr/bin/python3 -m talos anchor --send
+Nice=10

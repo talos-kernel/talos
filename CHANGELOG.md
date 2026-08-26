@@ -6,7 +6,85 @@ they make possible that was not possible before — or, more often, what they ta
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions are alpha: the kernel's rules are stable, the surface around them is not.
 
-## [Unreleased]
+## [0.10.0-alpha] — 2026-08-26
+
+### Security
+
+- **UID separation for provider credentials (model worker).** A new daemon,
+  `talos/modelworker.py`, speaks JSON-lines over a Unix socket and runs as its own
+  OS user; API keys and base urls move to `/etc/talos/model.env` (0600, owned by
+  that user). `ApiReasoner` gains a transport seam: direct (unchanged default) or
+  socket via `TALOS_MODEL_WORKER`. Fail-closed on both sides: a dead socket is a
+  classified `network_failed` — the fallback chain works unchanged across the
+  socket — and the reasoner *never* silently falls back to a key from the agent's
+  own env while worker mode is on; a test proves zero direct HTTP attempts in
+  exactly that situation. Error kinds are the real `ReasonerFailure` taxonomy.
+  What this takes away: a compromised agent process could previously read the
+  provider keys. Honest limits in `docs/model-worker.md`: OAuth/CLI reasoners
+  cannot move into the worker, and there is no streaming across the socket. The
+  split is an install-time choice (`deploy/talos-model.service`), no setuid in
+  code; `redteam.py` adds a host check that the agent user cannot read the
+  credential file (honest SKIP where no worker is installed).
+
+### Added
+
+- **Morning briefing as a product.** `talos briefing` reports from persistent
+  sources — chain state, failures in the last 24 h, pending approvals, anchor
+  age — and says so explicitly when the log is broken, never silently.
+  `talos briefing --install` registers it through the existing `schedule.py`
+  path (`UnattendedCeiling`, no new rights); the model-free send path is the
+  systemd timer pair in `deploy/`.
+- `talos anchor --send --mail` additionally mails the chain digest to the mail
+  principal in the allowlist.
+- **Outcome totals line.** Every final answer of a run that used tools now
+  carries "N tool calls, M failed", counted from the event log by `run_id` —
+  the failure list alone had a hole: an invented success leaves no error event,
+  only the number gives it away. Fail-open preserved; tool-free answers stay
+  clean.
+- `scripts/deploy-pi.sh`: guarded rsync deploy of the package only (SOUL.md,
+  CLAUDE.md, `*.env`, `data/` stay deployment-owned), dry-run default, target
+  guards, `--backup`/`--rollback`, post-deploy verification with zero remaining
+  diff, tests run in the project venv beforehand.
+- `scripts/backup-data.sh`: off-device backup of `data/` over SSH into a
+  timestamped archive; refuses plaintext without an explicit `--insecure-plain`,
+  encrypts with `age` otherwise, rotates with a sha256 receipt.
+- `scripts/deploy-site.sh`: site deploy in the same guard discipline.
+- **Comparison page** `site/vergleich/` — Talos vs. OpenClaw vs. Hermes, the
+  honest version: kernel, sandbox, hash chain and report-vs-reality against
+  their feature breadth, the gap framed as doctrine, not backlog. The sitemap
+  now lists all six pages.
+
+### Changed
+
+- All pages, README badges and CLAUDE.md state the real numbers again:
+  1680 tests, 164 adversarial cases, 529 kernel lines.
+
+## [0.9.5-alpha] — 2026-08-20
+
+### Added
+
+- A runtime fallback chain for the model (`TALOS_MODEL_FALLBACKS`, comma-separated
+  provider/model specs). When a run fails with a *classified* error — rejected key,
+  quota, overload, network, timeout, never a factual 4xx — the run retries the next
+  entry in order and every attempt lands in the audit trail as a
+  `model.fallback.runtime` event: a silent fallback would be an invisible model change.
+  The persisted model choice is never touched; the next run starts with the primary
+  again. Local providers like `ollama` need no key; `nvidia-nim` and `kimi` join the
+  catalogue with their own keys and base urls.
+- `talos anchor [--send]` pins the event log's hash-chain head (head hash, entry
+  count, timestamp) append-only in `data/anchors.jsonl` and alarms when a later run
+  finds fewer entries than a previous anchor — the tail truncation a local chain
+  cannot see, now caught with the head provable off this machine.
+- `talos health [--json]` answers "is it well" in one command — runs and failures,
+  the newest error entry, schedules and the anchor state — from sources already
+  wired in. Exit 1 only on a broken chain.
+- `talos events --since 4h` filters the audit trail by age (durations like `30m`, `4h`,
+  `2d`), not just by tool, type or run — "what happened tonight" no longer needs manual
+  database digging. An unreadable duration is refused, never guessed.
+- `/health` answers the traffic-light question right in the chat: runs and failures from
+  the usage meter, the newest error entry from the event log, queue state, pending
+  approval, channels and dial — everything from sources already wired in. No network
+  call, no write: a health display that had an effect of its own would not be a display.
 
 ### Fixed
 
@@ -20,16 +98,19 @@ Versions are alpha: the kernel's rules are stable, the surface around them is no
   happened via the event log. The wall-clock self-review is disabled in the harness:
   it delivered its report right after the answer into the same sink, and the harness
   read the report as the reply.
-
-### Added
-
-- `talos events --since 4h` filters the audit trail by age (durations like `30m`, `4h`,
-  `2d`), not just by tool, type or run — "what happened tonight" no longer needs manual
-  database digging. An unreadable duration is refused, never guessed.
-- `/health` answers the traffic-light question right in the chat: runs and failures from
-  the usage meter, the newest error entry from the event log, queue state, pending
-  approval, channels and dial — everything from sources already wired in. No network
-  call, no write: a health display that had an effect of its own would not be a display.
+- The website was audited page by page against the code and corrected where it
+  drifted: both interactive kernel demos now model the shipped default (sandboxed
+  shell — clean commands run, the legacy every-command-asks mode was presented as
+  product behaviour), the decision chains show the real orders including the
+  identity step, and stale claims were replaced (environment variable names that
+  exist nowhere, the pre-sandbox mail trust logic, a command table three entries
+  short, invented glyph counts). `tests/test_site_claims.py` now guards the numbers
+  on **every** page of the site, not just the landing page — the drift it caught
+  immediately is the reason it exists.
+- `SECURITY.md` describes the sandbox as it is (bubblewrap on Linux, `sandbox-exec`
+  on macOS, fail-closed, the deliberate opt-out named); the README gains the
+  first-run nuance for `cli:<uid>` and loses a subcommand count that had long
+  drifted.
 
 ## [0.9.4-alpha] — 2026-08-12
 
@@ -212,13 +293,18 @@ Versions are alpha: the kernel's rules are stable, the surface around them is no
 
 ### Fixed
 
-- **The shipped guidance no longer includes environment-specific repository or deployment
-  details.** `CLAUDE.md` travels with the tree, so operational addresses and operator notes
-  do not belong there. ⚠️ 0.8.0 and 0.8.1 are deliberately **not** replaced:
+- **The shipped guidance no longer names the private repository.** `CLAUDE.md` travels with
+  the tree, so it is in the tarball and in the public repo — and it wrote out what the
+  private repository is called and what the private deployment is. No secret (the account
+  name is in the author field of every public commit anyway), but nothing that belongs
+  there either: addresses live in `git remote -v`, operational detail in the operator's own
+  notes. ⚠️ 0.8.0 and 0.8.1 still carry the old text and are deliberately **not** replaced:
   publishing different bytes under a version that was already signed is exactly the swap
   the signature exists to prevent.
-- **A guard now checks published files instead of trusting a comment.** It uses generic
-  secret, endpoint and publication-pattern checks with explicit synthetic allowlists.
+- **A guard now checks the published files instead of trusting a comment.** It reads the
+  forbidden markers from `git remote -v` rather than spelling them out — a guard that
+  writes down what it protects against leaks the same thing somewhere else, and this test
+  ships too. It also follows a rename by itself instead of quietly rusting.
 
 ## [0.8.1-alpha] — 2026-08-06
 
@@ -226,7 +312,7 @@ Versions are alpha: the kernel's rules are stable, the surface around them is no
 
 - **A dead symlink in the workspace no longer stops an update.** Found the only way it
   could be: by running the real path. On the Pi, 0.7.0 → 0.8.0 downloaded, verified its
-  signature, built a venv, passed both required suites in the new
+  signature, built a venv, passed 1485 tests and all 149 adversarial cases in the new
   tree — and then broke in the second-to-last step. `_carry_state` used `copytree`
   without `symlinks=True`, so it *followed* every link and copied the target; two links
   left behind by an earlier test run pointed nowhere, and a `FileNotFoundError` ended a

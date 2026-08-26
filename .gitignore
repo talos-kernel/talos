@@ -23,3 +23,13 @@ __pycache__/
 # Editor / OS noise
 .DS_Store
 *.swp
+
+# Release-Tarballs werden lokal gebaut, nie committed — alte Staende darin enthalten
+# veraltete Doku, die nicht unter einer neuen Versionsnummer raus darf.
+dist/
+
+# Die Betriebs-Skripte selbst sind generisch und getrackt; die privaten Ziele
+# (Hostnamen/Pfade der privaten Instanz) leben in *.local-Ueberschreibungen,
+# die nicht in den Baum gehoeren, aus dem sync-public.sh das oeffentliche Repo fuellt.
+scripts/*.local
+backups/

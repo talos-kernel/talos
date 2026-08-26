@@ -311,7 +311,7 @@ def test_tool_turn_stays_silent_and_only_the_prose_turn_shows(tmp_path) -> None:
     assert sent == []
     assert client.messages == 1
     assert all("TOOL" not in text for text in client.texts)
-    assert client.edited[-1][2] == "Steht drin: kalt."
+    assert client.edited[-1][2] == "Steht drin: kalt.\n\n1 tool call, 0 failed"
 
 
 def test_an_approval_run_leaves_no_stray_answer_message(tmp_path) -> None:

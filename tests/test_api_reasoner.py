@@ -15,6 +15,7 @@ from talos.api_reasoner import (
     CANCELLED_TEXT,
     EMPTY_ANSWER,
     ApiReasoner,
+    ReasonerFailure,
 )
 from talos.credentials import CredentialStore, Route
 from talos.usage import UsageMeter
@@ -437,7 +438,7 @@ def test_without_a_meter_the_reasoner_still_works() -> None:
 
 def test_an_unknown_provider_is_refused() -> None:
     with pytest.raises(ValueError):
-        ApiReasoner("ollama", "qwen3", store(), timeout_s=30, http=FakeHttp())
+        ApiReasoner("gibts-nicht", "qwen3", store(), timeout_s=30, http=FakeHttp())
 
 
 def test_a_missing_key_is_refused_before_anything_is_sent() -> None:
@@ -461,3 +462,91 @@ def test_validate_rejects_a_reply_without_the_marker() -> None:
     reasoner, _http, _response = build(ANTHROPIC_LINES)
     with pytest.raises(RuntimeError):
         reasoner.validate()
+
+
+# --- Die Katalog-Anbieter: ollama, nvidia-nim, kimi ---------------------------------
+
+
+def test_ollama_builds_without_a_key_and_sends_no_authorization_header() -> None:
+    """Ein lokaler Anbieter hat keinen Schluessel — und bekommt deshalb keinen Header.
+
+    Ein leerer `Bearer` waere kein neutraler Zustand: manche Server lehnen genau ihn ab,
+    und ein mitgeschicktes Leer-Geheimnis ist eins zu viel.
+    """
+    bestand = CredentialStore({"ollama": Route("ollama", "", "http://localhost:11434/v1")})
+    http = FakeHttp(response=FakeResponse(OPENAI_LINES))
+    reasoner = ApiReasoner("ollama", "qwen3:27b", bestand, timeout_s=30, http=http)
+    assert reasoner.reason("Status?") == "Der VPS läuft."
+    call = http.calls[-1]
+    assert call["url"] == "http://localhost:11434/v1/chat/completions"
+    assert "authorization" not in call["headers"]
+    assert http.body["model"] == "qwen3:27b"
+
+
+def test_ollama_falls_back_to_the_catalog_address_when_the_route_has_none() -> None:
+    """Ein handgebauter Bestand ohne Adresse landet beim Katalog, nicht bei OpenAI."""
+    bestand = CredentialStore({"ollama": Route("ollama", "", "")})
+    http = FakeHttp(response=FakeResponse(OPENAI_LINES))
+    ApiReasoner("ollama", "qwen3:27b", bestand, timeout_s=30, http=http).reason("x")
+    assert http.calls[-1]["url"] == "http://localhost:11434/v1/chat/completions"
+
+
+def test_kimi_and_nvidia_build_with_their_own_keys() -> None:
+    for slug, key, base in (
+        ("kimi", "kimi-eigener-key-123", "https://api.kimi.com/coding/v1"),
+        ("nvidia-nim", "nvapi-eigener-key-456", "https://integrate.api.nvidia.com/v1"),
+    ):
+        bestand = CredentialStore({slug: Route(slug, key, base)})
+        http = FakeHttp(response=FakeResponse(OPENAI_LINES))
+        reasoner = ApiReasoner(slug, "irgendein-modell", bestand, timeout_s=30, http=http)
+        assert reasoner.reason("x") == "Der VPS läuft."
+        assert http.calls[-1]["url"] == f"{base}/chat/completions"
+        assert http.calls[-1]["headers"]["authorization"] == f"Bearer {key}"
+
+
+def test_their_base_url_is_overridable_per_provider_variable() -> None:
+    """Dieselbe Konvention wie ueberall: `TALOS_BASE_URL_<PROVIDER>` schlaegt den Katalog."""
+    bestand = CredentialStore({
+        "kimi": Route("kimi", "kimi-eigener-key-123", "https://gateway.example/kimi/"),
+    })
+    http = FakeHttp(response=FakeResponse(OPENAI_LINES))
+    ApiReasoner("kimi", "k2", bestand, timeout_s=30, http=http).reason("x")
+    assert http.calls[-1]["url"] == "https://gateway.example/kimi/chat/completions"
+
+
+def test_a_keyed_catalog_provider_without_a_key_stays_fail_closed() -> None:
+    with pytest.raises(ValueError):
+        ApiReasoner("kimi", "k2", store(), timeout_s=30, http=FakeHttp())
+
+
+# --- Strukturierte Fehler: dieselbe Ursache, als Ausnahme -----------------------------
+
+
+def test_reason_strict_raises_the_classified_failure_reason_returns_its_text() -> None:
+    """`reason()` bleibt wortgleich; `reason_strict()` traegt die Art derselben Ursache."""
+    reasoner, _http, _r = build([], status=429, text="rate limit")
+    with pytest.raises(ReasonerFailure) as caught:
+        reasoner.reason_strict("x")
+    assert caught.value.kind == "rate_limited"
+    assert reasoner.reason("x") == caught.value.message
+
+
+def test_every_classified_failure_carries_its_kind() -> None:
+    for status, kind in ((401, "key_rejected"), (429, "rate_limited"),
+                         (503, "overloaded"), (418, "http_failed")):
+        reasoner, _h, _r = build([], status=status, text="x")
+        with pytest.raises(ReasonerFailure) as caught:
+            reasoner.reason_strict("x")
+        assert caught.value.kind == kind, status
+    offline, _h, _r = build(error=OSError("Name or service not known"))
+    with pytest.raises(ReasonerFailure) as caught:
+        offline.reason_strict("x")
+    assert caught.value.kind == "network_failed"
+
+
+def test_a_failure_text_never_carries_the_key_along_the_exception_path() -> None:
+    reasoner, _http, _r = build([], status=400, text=f"invalid api key: {KEY}")
+    with pytest.raises(ReasonerFailure) as caught:
+        reasoner.reason_strict("Status?")
+    assert KEY not in str(caught.value)
+    assert "SUPERGEHEIM" not in caught.value.message

@@ -1,0 +1,26 @@
+# Beispiel-Einheit fuer das Morgen-Briefing — Doku-Qualitaet, vor Gebrauch anpassen.
+#
+# Was sie tut: einmalig `talos briefing --send` ausfuehren — das Briefing wird aus den
+# haltbaren Quellen (Event-Log, Zeitplan-DB, Anker-Datei) zusammengesetzt und an den
+# Owner-Chat gesendet. KEIN Agentenlauf, kein Modell, keine Werkzeuge: der Text kommt
+# aus der Datenbank, nicht aus einem Reasoner.
+#
+# Gestartet wird sie von talos-briefing.timer, nicht von Hand im Dauerbetrieb.
+# Pfade, Benutzer und Env-Datei sind Platzhalter: WorkingDirectory zeigt auf die
+# Installation (das Verzeichnis mit dem `talos`-Paket), User auf das Konto, unter dem
+# Talos laeuft, EnvironmentFile auf die talos.env dieser Installation (Token,
+# Allowlist). Ohne sie findet der Befehl weder Daten noch Empfaenger.
+[Unit]
+Description=Talos morning briefing — health, chain, approvals, anchor age
+# Kein Netz-Zwang beim Start: ein Versandfehler ist ein sichtbarer Exit 1, kein Hänger.
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=talos
+WorkingDirectory=/opt/talos
+EnvironmentFile=-/etc/talos/talos.env
+ExecStart=/usr/bin/python3 -m talos briefing --send
+# Das Briefing liest nur und sendet nur; es braucht keine weitere Macht.
+Nice=10

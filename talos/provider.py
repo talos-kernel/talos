@@ -166,7 +166,12 @@ class ModelRouter:
             reasoner = self._reasoner
             self._active_reasoner = reasoner
         try:
-            method = getattr(reasoner, "reason")
+            # `reason_strict` zuerst: ein Reasoner, der seine Fehler klassifiziert
+            # (ApiReasoner), soll sie als Ausnahme nach oben geben, damit eine davor
+            # haengende Fallback-Kette die Art kennt. Ohne Kette faengt sie der Aufrufer
+            # und liefert exakt denselben Text wie bisher — der Vertrag aendert sich
+            # nur fuer den, der ihn brauchen kann.
+            method = getattr(reasoner, "reason_strict", None) or getattr(reasoner, "reason")
             if on_text is not None and _takes_sink(method):
                 return str(method(prompt, on_text=on_text))
             return str(method(prompt))

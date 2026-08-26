@@ -5,9 +5,11 @@ angelegt", während das Protokoll desselben Laufs zwei gescheiterte Schreibversu
 keinen erfolgreichen zeigte. Der Kernel hatte fehlerfrei gearbeitet — der Bericht ueber
 den Lauf nicht, und dagegen faengt kein Gate.
 
-Diese Datei haelt zwei Dinge fest: dass der Hinweis kommt, wenn etwas scheiterte — und
-dass er ausbleibt, wenn nichts scheiterte oder der Fehlschlag im selben Lauf behoben
-wurde. Der zweite Teil ist der, an dem solche Hinweise sonst zu Moebeln werden.
+Diese Datei haelt drei Dinge fest: dass die Totals-Zeile jeden Lauf mit Werkzeugen
+quittiert (ein erfundener Erfolg hinterlaesst kein `error`-Ereignis — nur die Zahl
+verraet ihn), dass der Warnblock kommt, wenn etwas scheiterte — und dass er ausbleibt,
+wenn nichts scheiterte oder der Fehlschlag im selben Lauf behoben wurde. Der letzte
+Teil ist der, an dem solche Hinweise sonst zu Moebeln werden.
 """
 from __future__ import annotations
 
@@ -40,21 +42,58 @@ def test_the_run_that_claimed_a_write_it_never_made() -> None:
     assert text.count("Frontmatter") == 2
 
 
-def test_a_clean_run_says_nothing() -> None:
-    """Eine Quittung, die unter jeder Antwort „alles gut" meldet, wird nach dreissig
-    Wiederholungen ueberlesen — und dann auch die eine, die zaehlt."""
-    assert outcome.note([_intent("read_file"), _result("read_file", "DONE")]) == ""
+# --- Die Totals-Zeile -------------------------------------------------------------
+def test_a_clean_run_gets_the_count_and_nothing_more() -> None:
+    """Jeder Lauf mit Werkzeugen bekommt die Zahl — auch der saubere. Ein erfundener
+    Erfolg hinterlaesst kein `error`-Ereignis; nur der Vergleich „die Antwort nennt
+    drei Aktionen, das Protokoll zeigt einen Aufruf" verraet ihn.
+
+    Aber kein ⚠ ohne Fehlschlag: eine Quittung, die unter jeder Antwort Alarm malt,
+    wird nach dreissig Wiederholungen ueberlesen — und dann auch die eine, die zaehlt.
+    """
+    text = outcome.note([_intent("read_file"), _result("read_file", "DONE")])
+    assert text == "1 tool call, 0 failed"
+
+
+def test_the_totals_count_every_call_and_every_unrecovered_failure() -> None:
+    lauf = [
+        _result("read_file", "DONE"),
+        _result("web_fetch", "error", "timeout"),
+        _result("run_shell", "DONE"),
+    ]
+    text = outcome.note(lauf)
+    assert text.splitlines()[0] == "3 tool calls, 1 failed"
+    assert "web_fetch" in text and "timeout" in text
+
+
+def test_the_totals_count_failures_individually_even_when_the_list_summarises() -> None:
+    """Die Detail-Liste fasst gleiche Befunde zusammen (gegen Moebel) — die Zahl nicht.
+    Eine halbierte Zahl waere dieselbe Sorte falsche Quittung, gegen die das Modul
+    existiert."""
+    lauf = [
+        _result("web_fetch", "error", "timeout"),
+        _result("web_fetch", "error", "timeout"),
+    ]
+    text = outcome.note(lauf)
+    assert "2 tool calls, 2 failed" in text
 
 
 def test_an_empty_run_says_nothing() -> None:
     assert outcome.note([]) == ""
 
 
-def test_a_failure_that_later_succeeded_is_not_reported() -> None:
-    """Er hat den Lauf nichts gekostet. Ein Hinweis auf etwas bereits Behobenes ist
-    dieselbe Sorte Moebel, gegen die `lessons.py` und `review.py` anschreiben."""
+def test_a_tool_free_answer_gets_no_line() -> None:
+    """⚠️ Eine Antwort ohne Werkzeugaufruf bleibt clean — keine Zeile, kein Moebel."""
+    assert outcome.note([{"type": "run.answer", "payload": {"text": "fertig"}}]) == ""
+
+
+def test_a_failure_that_later_succeeded_is_counted_but_not_warned() -> None:
+    """Er hat den Lauf nichts gekostet. Ein Warnblock ueber etwas bereits Behobenes ist
+    dieselbe Sorte Moebel, gegen die `lessons.py` und `review.py` anschreiben. Gezaehlt
+    wird der Lauf trotzdem: zwei Aufrufe, keiner offen."""
     lauf = [_result("web_fetch", "error", "timeout"), _result("web_fetch", "DONE")]
-    assert outcome.note(lauf) == ""
+    text = outcome.note(lauf)
+    assert text == "2 tool calls, 0 failed"
 
 
 def test_two_different_tools_are_counted_separately() -> None:

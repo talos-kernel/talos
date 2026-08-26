@@ -122,6 +122,40 @@ def test_the_site_states_the_real_number_of_tools() -> None:
     assert not fehlend, f"Die Seite listet diese Werkzeuge nicht: {fehlend}"
 
 
+# --- Jede Seite, nicht nur die Startseite ------------------------------------------
+# ⚠️ Am 20.08. driftete genau das: index.html war aktuell (dieser Test zwang sie dazu),
+# waehrend dossier.html 1590 Tests und docs/ 1548 nannte — zwei Seiten derselben Site,
+# drei verschiedene Wahrheiten. Der Test las nur eine Datei, also sah er eine Wahrheit.
+# Seitdem gilt die Pflicht fuer jede Seite des Auftritts; die Werkzeug-NAMEN bleiben
+# der Startseite vorbehalten (sie ist die einzige, die das Inventar auflistet).
+EXTRA_PAGES = (
+    ROOT / "site" / "dossier.html",
+    ROOT / "site" / "console.html",
+    ROOT / "site" / "docs" / "index.html",
+)
+
+
+def _page_claims(seite: Path) -> list[int]:
+    return [int(value) for value in _COUNTER.findall(seite.read_text(encoding="utf-8"))]
+
+
+def test_every_page_of_the_site_states_the_real_numbers() -> None:
+    erwartet = {
+        "Tests": _collected_tests(),
+        "Adversarial-Faelle": _redteam_cases(),
+        "Kernel-Zeilen": len(KERNEL.read_text(encoding="utf-8").splitlines()),
+    }
+    for seite in (SITE, *EXTRA_PAGES):
+        if not seite.exists():
+            continue
+        claims = _page_claims(seite)
+        for label, zahl in erwartet.items():
+            assert zahl in claims, (
+                f"{seite.relative_to(ROOT)} nennt {label} nicht (hat {claims}, "
+                f"echt ist {zahl})."
+            )
+
+
 # --- Das README zaehlt genauso mit wie die Seite ---------------------------------------
 README = ROOT / "README.md"
 # ⚠️ Die Abzeichen sind URL-kodiert: `red%20team-130%2F130`. Ein Suchen-und-Ersetzen nach

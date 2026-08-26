@@ -1,0 +1,17 @@
+# Beispiel-Timer fuer das Morgen-Briefing — Doku-Qualitaet, vor Gebrauch anpassen.
+#
+# Taeglich um 07:00. Persistent=true holt einen verpassten Lauf nach (die Maschine war
+# um 07:00 aus) — ein Briefing ist ein Kalendertermin, kein Intervall: lieber spaet als
+# nie, aber nicht doppelt.
+#
+# Aktivieren:  systemctl enable --now talos-briefing.timer
+# Naechster Lauf: systemctl list-timers talos-briefing.timer
+[Unit]
+Description=Daily Talos morning briefing
+
+[Timer]
+OnCalendar=*-*-* 07:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

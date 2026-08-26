@@ -251,6 +251,15 @@ PROVIDERS: tuple[ProviderInfo, ...] = (
         notes="Mainland China endpoint; keys are not interchangeable with the global one.",
     ),
     ProviderInfo(
+        slug="kimi",
+        label="Kimi (coding plan)",
+        auth="api-key",
+        wire="openai",
+        base_url="https://api.kimi.com/coding/v1",
+        env_key="KIMI_API_KEY",
+        notes="Kimi coding endpoint; needs its own KIMI_API_KEY, the Moonshot keys do not apply here.",
+    ),
+    ProviderInfo(
         slug="minimax",
         label="MiniMax (API key, global)",
         auth="api-key",
@@ -308,6 +317,10 @@ PROVIDERS: tuple[ProviderInfo, ...] = (
         wire="openai",
         base_url="https://integrate.api.nvidia.com/v1",
         env_key="NVIDIA_API_KEY",
+        # Handkuratiert wie die anderen Listen: ein schneller und ein grosser Name,
+        # beides belegte IDs aus dem NIM-Katalog. Der Rest kommt live ueber
+        # `talos models --refresh` — geraten wird hier nichts.
+        models=("meta/llama-3.3-70b-instruct", "nvidia/llama-3.3-nemotron-super-49b-v1.5"),
         notes="Needs an NVIDIA build.nvidia.com key; pick a model id from their catalog.",
     ),
     ProviderInfo(
