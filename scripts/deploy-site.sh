@@ -87,8 +87,13 @@ command -v rsync >/dev/null || { echo "FEHLER: rsync nicht gefunden." >&2; exit 
 # ── rsync. README.md ist Repo-Doku, keine Seite; .DS_Store ist macOS-Beifang.
 # --delete gehoert dazu: eine geloeschte Seite, die am Ziel weiterlebt, ist eine
 # Seite, die niemand mehr pflegt und jeder noch findet.
+# /dist/ traegt die SIGNIERTEN Release-Tarballs — sie werden nie aus diesem Baum
+# erzeugt und duerfen vom Abgleich unberuehrt bleiben. Die Hex-.txt im Wurzel-
+# verzeichnis ist die Domain-Verifikation des Hosters (robots.txt faellt nicht
+# unter das Muster: 'r','o','s','t' sind keine Hex-Zeichen).
 RSYNC_ARGS=(-rlptz --delete --itemize-changes
-  --exclude README.md --exclude .DS_Store)
+  --exclude README.md --exclude .DS_Store
+  --exclude '/dist/' --exclude '/[0-9a-f]*.txt')
 
 if [ "$APPLY" -eq 1 ]; then
   echo "▸ Deploy: $QUELLE/ → $TARGET"

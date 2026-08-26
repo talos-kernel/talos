@@ -1,0 +1,23 @@
+# Was auf dem alten Host die Caddy-Konfiguration erledigte.
+# ⚠️ BEWUSST KURZ: ein langer Header (insbesondere eine ausfuehrliche
+# Content-Security-Policy) laesst den Apache dieses Shared Hostings mit 500 aussteigen.
+# Das ist hier schon einmal passiert; die Regel steht deshalb im Vault.
+
+# install.sh soll im Browser LESBAR sein, nicht heruntergeladen werden — wer ein Skript
+# in seine Shell pipen soll, muss es vorher ansehen koennen.
+<FilesMatch "\.sh$">
+  ForceType text/plain
+</FilesMatch>
+
+# Der Quell-Tarball ist erreichbar, gehoert aber in keinen Suchindex.
+<IfModule mod_headers.c>
+  <FilesMatch "\.(tar\.gz|sig|sha256)$">
+    Header set X-Robots-Tag "noindex"
+  </FilesMatch>
+</IfModule>
+
+# Schriften sind unveraenderlich benannt und duerfen lange liegen bleiben.
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType font/woff2 "access plus 1 year"
+</IfModule>
