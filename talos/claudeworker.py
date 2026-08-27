@@ -132,21 +132,31 @@ class BrowserMcp:
     laufen. `headless` ist Vorgabe AN — ein sichtbares Fenster auf einem
     Server ohne Display waere ohnehin nur ein zusaetzlicher Fehlermodus.
     `chrome_path` pinnt die Binary, wenn npx sie nicht selbst findet (Pi:
-    /usr/bin/chromium)."""
+    /usr/bin/chromium). `command` ersetzt den npx-Aufruf durch eine fest
+    installierte Binary — im Job ist der npm-Cache naemlich schreibgeschuetzt
+    (Workspace-only), und ein `npx @latest` pro Job heisst: jeder Browser-Job
+    laedt das Paket erneut in seinen wegwerfbaren HOME."""
     enabled: bool = False
     headless: bool = True
     chrome_path: str = ""
+    command: str = ""
 
 
 def browser_mcp_config(settings: BrowserMcp) -> dict:
     """Die MCP-Konfiguration fuer `claude --mcp-config` — reine Struktur,
-    keine Geheimnisse. Gestartet wird per npx; Netz hat der Job ohnehin."""
-    args = [BROWSER_MCP_PACKAGE]
+    keine Geheimnisse. Vorgabe: Start per npx; mit `command` eine fest
+    installierte Binary (der Job hat Netz, aber keinen schreibbaren
+    npm-Cache ausserhalb seines wegwerfbaren HOME)."""
+    args = []
     if settings.headless:
         args.append("--headless=true")
     if settings.chrome_path:
         args.append(f"--executablePath={settings.chrome_path}")
-    return {"mcpServers": {BROWSER_MCP_SERVER: {"command": "npx", "args": args}}}
+    if settings.command:
+        befehl = {"command": settings.command, "args": args}
+    else:
+        befehl = {"command": "npx", "args": [BROWSER_MCP_PACKAGE] + args}
+    return {"mcpServers": {BROWSER_MCP_SERVER: befehl}}
 
 # Ruhe-Takt des Stream-Lesers: ein schweigendes Kind darf die Deadline-Pruefung
 # des Aufrufers nicht blockieren (Herzschlag = None aus events()).
@@ -692,6 +702,7 @@ def serve(socket_path: str = DEFAULT_SOCKET, env_path: str = DEFAULT_ENV, *,
         enabled=cfg("TALOS_CLAUDE_WORKER_BROWSER_MCP") == "1",
         headless=cfg("TALOS_CLAUDE_WORKER_BROWSER_HEADLESS", "1") != "0",
         chrome_path=cfg("TALOS_CLAUDE_WORKER_BROWSER_CHROME"),
+        command=cfg("TALOS_CLAUDE_WORKER_BROWSER_CMD"),
     )
     jobs = _Jobs(max_parallel=max_parallel, worker_home=worker_home,
                  browser=browser)

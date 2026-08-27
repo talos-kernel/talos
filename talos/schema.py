@@ -168,6 +168,11 @@ KEYS: tuple[Key, ...] = (
     Key("TALOS_CLAUDE_WORKER_BROWSER_CHROME", SETTING,
         "pinned Chrome/Chromium binary for the browser MCP server; empty lets "
         "chrome-devtools-mcp find one itself", default="", validate=_one_line),
+    Key("TALOS_CLAUDE_WORKER_BROWSER_CMD", SETTING,
+        "fixed installed browser-MCP binary instead of npx — the job has "
+        "network but no writable npm cache outside its disposable HOME, so "
+        "'npx @latest' would re-download the package into every job", default="",
+        validate=_one_line),
     Key("TALOS_COMPLETION_PUSH", SETTING,
         "proactive factual message when a delegated job finishes", default="1",
         validate=_bool01),

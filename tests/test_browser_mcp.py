@@ -42,6 +42,20 @@ def test_mcp_config_headless_off_and_chrome_path():
     assert "--executablePath=/usr/bin/chromium" in args
 
 
+def test_mcp_config_fixed_command_replaces_npx():
+    """Auf dem Pi ist der npm-Cache im Job schreibgeschuetzt (Workspace-only):
+    ein `npx @latest` pro Job laedt das Paket in jedes wegwerfbare HOME erneut.
+    Die fest installierte Binary ersetzt den Wrapper — Flags bleiben gleich."""
+    cfg = claudeworker.browser_mcp_config(
+        claudeworker.BrowserMcp(enabled=True, chrome_path="/usr/bin/chromium",
+                                command="/usr/local/bin/chrome-devtools-mcp"))
+    server = cfg["mcpServers"]["chrome-devtools"]
+    assert server["command"] == "/usr/local/bin/chrome-devtools-mcp"
+    assert "chrome-devtools-mcp@latest" not in server["args"]
+    assert server["args"] == ["--headless=true", "--executablePath=/usr/bin/chromium"]
+    assert "env" not in server
+
+
 def test_mcp_config_carries_no_secret_values():
     kanari = "KANARI-oauth-token-123"
     cfg = claudeworker.browser_mcp_config(
