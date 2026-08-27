@@ -89,6 +89,7 @@ MAX_JOB_TIMEOUT_S = 3600
 MAX_PARALLEL = 2
 MAX_PROMPT_CHARS = 20000
 MAX_SUMMARY_CHARS = 6000
+MAX_ERROR_CHARS = 2000
 MAX_FILES = 200
 
 KIND_INVALID = "invalid_request"
@@ -220,12 +221,17 @@ class _Job:
         self.summary = ""
         self.files: list[str] = []
         self.returncode = -1
+        self.error = ""
         self.schloss = threading.Lock()
 
-    def beenden(self, state: str, *, returncode: int = -1) -> None:
+    def beenden(self, state: str, *, returncode: int = -1, fehler: str = "") -> None:
         with self.schloss:
             self.state = state
             self.returncode = returncode
+            if fehler:
+                # Ein `failed` ohne Spur ist un-debuggbar — gemessen am ersten
+                # Live-E2E, als stderr im Nichts landete und nur raten blieb.
+                self.error = fehler[-MAX_ERROR_CHARS:]
 
     def merke(self, summary: str | None, datei: str | None) -> None:
         with self.schloss:
@@ -276,6 +282,10 @@ class _Jobs:
                 antwort["summary"] = job.summary
                 antwort["files"] = list(job.files)
                 antwort["returncode"] = job.returncode
+            if job.state in ("failed", "timeout"):
+                antwort["returncode"] = job.returncode
+                if job.error:
+                    antwort["error"] = job.error
             return antwort
 
 
@@ -287,18 +297,18 @@ def _run_job(job: _Job, worker_home: str, spawn: Spawn,
     workspace = Path(job.workspace)
     try:
         workspace.mkdir(parents=True, exist_ok=True)
-    except OSError:
-        job.beenden("failed")
+    except OSError as ungueltig:
+        job.beenden("failed", fehler=f"workspace not creatable: {ungueltig}")
         return
     job.beenden("running", returncode=-1)
     argv = _job_argv(job.prompt)
     env = job_env(worker_home, workspace)
     try:
         handle = spawn(argv, workspace, env, limits)
-    except Exception:
+    except Exception as ungueltig:
         # Kein Backend, kein Binary, kein Start — der Job ist gescheitert,
-        # der Daemon nicht.
-        job.beenden("failed")
+        # der Daemon nicht. Der Grund landet im Record, nicht im Nichts.
+        job.beenden("failed", fehler=f"spawn failed: {ungueltig}")
         return
     try:
         events: Iterator[Any] = handle.events()
@@ -310,20 +320,23 @@ def _run_job(job: _Job, worker_home: str, spawn: Spawn,
                         toeten()
                     except Exception:
                         pass
-                job.beenden("timeout")
+                job.beenden("timeout", fehler="overall job deadline reached")
                 return
             try:
                 event = next(events)
             except StopIteration as ende:
                 rc = ende.value if isinstance(ende.value, int) else -1
-                job.beenden("done" if rc == 0 else "failed", returncode=rc)
+                spur = str(getattr(handle, "stderr_tail", "") or "")
+                job.beenden("done" if rc == 0 else "failed",
+                            returncode=rc,
+                            fehler="" if rc == 0 else (spur or f"exit code {rc}, no stderr"))
                 return
             if event is None:
                 continue  # Herzschlag — nur die Uhr lief weiter
             summary, datei = parse_stream_event(event, workspace)
             job.merke(summary, datei)
-    except Exception:
-        job.beenden("failed")
+    except Exception as ungueltig:
+        job.beenden("failed", fehler=f"job loop failed: {ungueltig}")
 
 
 class _ProcHandle:
@@ -334,8 +347,32 @@ class _ProcHandle:
     def __init__(self, proc: subprocess.Popen) -> None:
         self._proc = proc
         self._zeilen: queue.Queue = queue.Queue()
+        self._fehler: list[str] = []
         self._pumpe = threading.Thread(target=self._pumpen, daemon=True)
         self._pumpe.start()
+        self._fehlerpumpe = threading.Thread(target=self._fehler_pumpen, daemon=True)
+        self._fehlerpumpe.start()
+
+    def _fehler_pumpen(self) -> None:
+        # stderr laeuft mit, begrenzt auf die letzten Zeilen: ein `failed`
+        # ohne Spur ist un-debuggbar (gemessen am ersten Live-E2E — bwrap
+        # starb stumm, und nur raten blieb). Auch hier immer weiterlesen,
+        # damit kein Kind an einer vollen Pipe haengt.
+        if self._proc.stderr is None:
+            return
+        with self._proc.stderr:
+            for roh in self._proc.stderr:
+                try:
+                    zeile = roh.decode("utf-8", "replace").rstrip()
+                except AttributeError:
+                    zeile = str(roh)
+                self._fehler.append(zeile)
+                if len("".join(self._fehler)) > MAX_ERROR_CHARS * 2:
+                    self._fehler = ["".join(self._fehler)[-MAX_ERROR_CHARS:]]
+
+    @property
+    def stderr_tail(self) -> str:
+        return "\n".join(self._fehler)[-MAX_ERROR_CHARS:]
 
     def _pumpen(self) -> None:
         # Immer weiterlesen, auch wenn niemand konsumiert: ein Kind an einer
@@ -390,7 +427,7 @@ def make_spawn(claude_bin: str = DEFAULT_BIN, *, platform: str = sys.platform) -
         proc = subprocess.Popen(
             list(voll),
             stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
             cwd=str(workspace),
             env=dict(env),
             start_new_session=True,

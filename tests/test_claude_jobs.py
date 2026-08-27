@@ -77,3 +77,10 @@ def test_main_run_registers_both_delegate_runners_behind_the_flag():
     assert "delegate_status" in verdrahtet
     rumpf = ast.get_source_segment(quelle, lauf)
     assert "claude_worker_enabled" in rumpf
+
+
+def test_delegate_status_prints_error_for_failed_job():
+    fx = FakeExchange([b'{"ok": true, "state": "failed", "returncode": 1, "error": "bwrap: no proc"}\n'])
+    run = tools.make_delegate_status_runner(socket_path="/s/c.sock", exchange=fx)
+    out = run(_req("delegate_status", {"job_id": "f1"}))
+    assert "failed" in out and "bwrap: no proc" in out and "returncode: 1" in out

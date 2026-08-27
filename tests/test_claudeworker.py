@@ -262,3 +262,66 @@ def test_parse_stream_event_extracts_summary_and_files(tmp_path):
             files.append(f)
     assert summary == "created note.md"
     assert files == ["note.md", "sub/a.py"]      # /etc/passwd dropped
+
+
+class _FailHandle:
+    """Ein Job, der mit rc != 0 endet — und eine stderr-Spur hinterlässt."""
+
+    def __init__(self, rc=1, tail="bwrap: Can't mount proc on /newroot/proc"):
+        self._rc = rc
+        self.stderr_tail = tail
+
+    def events(self):
+        if False:
+            yield None
+        return self._rc
+
+
+def _frame_submit(jobs, jid, workspace, spawn, timeout_s=30):
+    from talos.sandbox import SandboxLimits
+    roh = json.dumps({"op": "submit", "job_id": jid, "prompt": "p",
+                      "workspace": str(workspace)}).encode()
+    return claudeworker.handle_frame(roh, jobs, spawn=spawn,
+                                     limits=SandboxLimits(timeout_s=timeout_s))
+
+
+def _warte_auf(jobs, jid, zustand, sekunden=5.0):
+    ende = time.monotonic() + sekunden
+    while time.monotonic() < ende:
+        s = claudeworker.handle_frame(
+            json.dumps({"op": "status", "job_id": jid}).encode(), jobs)
+        if s.get("state") == zustand:
+            return s
+        time.sleep(0.05)
+    return s
+
+
+def test_failed_job_carries_stderr_tail_and_returncode(tmp_path):
+    """Ein gescheiterter Job, der nichts sagt, ist un-debuggbar — gemessen am
+    ersten Live-E2E: `failed` ohne jede Spur, weil stderr im Nichts landete."""
+    jobs = claudeworker._Jobs(worker_home=str(tmp_path))
+    r1 = _frame_submit(jobs, "f1", tmp_path / "job-f1",
+                       lambda a, c, e, l: _FailHandle())
+    assert r1["ok"] and r1["state"] == "accepted"
+    s = _warte_auf(jobs, "f1", "failed")
+    assert s["state"] == "failed"
+    assert s["returncode"] == 1
+    assert "Can't mount proc" in s["error"]
+
+
+def test_failed_job_without_spawn_carries_the_exception(tmp_path):
+    def kaputt(argv, cwd, env, limits):
+        raise OSError("claude binary not found")
+    jobs = claudeworker._Jobs(worker_home=str(tmp_path))
+    _frame_submit(jobs, "f2", tmp_path / "job-f2", kaputt)
+    s = _warte_auf(jobs, "f2", "failed")
+    assert s["state"] == "failed"
+    assert "claude binary not found" in s["error"]
+
+
+def test_done_job_has_no_error_field(tmp_path):
+    jobs = claudeworker._Jobs(worker_home=str(tmp_path))
+    _frame_submit(jobs, "ok1", tmp_path / "job-ok1", _spawn_ok)
+    s = _warte_auf(jobs, "ok1", "done")
+    assert s["state"] == "done"
+    assert "error" not in s

@@ -32,7 +32,11 @@ ProtectSystem=strict
 ProtectHome=read-only
 PrivateTmp=yes
 PrivateDevices=yes
-ProtectKernelTunables=yes
+# ProtectKernelTunables fehlt ABSICHTLICH in dieser Liste: es macht Teile von
+# /proc read-only und verhindert damit bubblewraps eigenen /proc-Mount —
+# jeder Job stuerbe mit "bwrap: Can't mount proc on /newroot/proc" ab
+# (gemessen per Bisect auf dem ersten Live-System). Die Konfinement-Grenze
+# der Jobs traegt die Sandbox, nicht die Unit; Modules/ControlGroups bleiben.
 ProtectKernelModules=yes
 ProtectControlGroups=yes
 RestrictSUIDSGID=yes

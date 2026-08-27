@@ -40,6 +40,12 @@ Versions are alpha: the kernel's rules are stable, the surface around them is no
   connect to API" — measured on this release's first live E2E. The bubblewrap
   profile now re-binds `resolv.conf`/`nsswitch.conf`/`hosts` (realpath) when
   and only when the network is shared.
+- **`ProtectKernelTunables` dropped from the worker unit** (incompatible with
+  bubblewrap's own `/proc` mount — every job died silently; found by bisect)
+  and **failed/timeout jobs now carry an `error` field** (stderr tail or
+  spawn reason, capped at 2000 chars) plus the returncode through
+  `delegate_status` — the first live run proved a silent `failed` is
+  undebuggable.
 
 ### Added
 

@@ -145,3 +145,11 @@ Unbeaufsichtigte Deckel (unattended ceilings) verschärfen wie bisher.
   `RuntimeDirectory=talos-claude` samt abweichendem Socket-Pfad geben.
 - Der Worker importiert `config.py` nicht und liest nur seine eigene Env-Datei.
   Er ist ein Job-Rahmen, kein Agent.
+- **`ProtectKernelTunables=yes` ist mit bubblewrap unverträglich** (macht Teile
+  von `/proc` read-only; bwraps eigener `/proc`-Mount scheitert dann mit
+  "Can't mount proc" und jeder Job stirbt stumm — per Bisect gemessen). Die
+  Unit lässt es darum weg; die Konfinement-Grenze der Jobs trägt die Sandbox.
+- **Fehlschläge kommen mit Spur zurück.** `failed`/`timeout` liefern im
+  Status ein `error`-Feld (stderr-Tail bzw. Spawn-Grund, begrenzt auf 2000
+  Zeichen) und den Returncode — der erste Live-Lauf zeigte, dass ein stummes
+  `failed` un-debuggbar ist.

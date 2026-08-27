@@ -465,6 +465,10 @@ def make_delegate_status_runner(
             dateien = antwort.get("files") or []
             zeilen.append(f"files: {', '.join(dateien) if dateien else '(none)'}")
             zeilen.append(f"returncode: {antwort.get('returncode')}")
+        if antwort.get("state") in ("failed", "timeout"):
+            zeilen.append(f"returncode: {antwort.get('returncode')}")
+            if antwort.get("error"):
+                zeilen.append(f"error: {antwort.get('error')}")
         return "\n".join(zeilen)
 
     return delegate_status
