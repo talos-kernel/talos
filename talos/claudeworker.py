@@ -135,11 +135,15 @@ class BrowserMcp:
     /usr/bin/chromium). `command` ersetzt den npx-Aufruf durch eine fest
     installierte Binary — im Job ist der npm-Cache naemlich schreibgeschuetzt
     (Workspace-only), und ein `npx @latest` pro Job heisst: jeder Browser-Job
-    laedt das Paket erneut in seinen wegwerfbaren HOME."""
+    laedt das Paket erneut in seinen wegwerfbaren HOME. `chrome_args` reicht
+    Start-Flags an Chrome weiter (--chromeArg) — unter bubblewrap braucht
+    Chrome typischerweise --no-sandbox, weil es keine eigenen Namespaces
+    anlegen darf; leer heisst: keine Aufweichung."""
     enabled: bool = False
     headless: bool = True
     chrome_path: str = ""
     command: str = ""
+    chrome_args: str = ""
 
 
 def browser_mcp_config(settings: BrowserMcp) -> dict:
@@ -152,6 +156,8 @@ def browser_mcp_config(settings: BrowserMcp) -> dict:
         args.append("--headless=true")
     if settings.chrome_path:
         args.append(f"--executablePath={settings.chrome_path}")
+    for flag in settings.chrome_args.split():
+        args.append(f"--chromeArg={flag}")
     if settings.command:
         befehl = {"command": settings.command, "args": args}
     else:
@@ -703,6 +709,7 @@ def serve(socket_path: str = DEFAULT_SOCKET, env_path: str = DEFAULT_ENV, *,
         headless=cfg("TALOS_CLAUDE_WORKER_BROWSER_HEADLESS", "1") != "0",
         chrome_path=cfg("TALOS_CLAUDE_WORKER_BROWSER_CHROME"),
         command=cfg("TALOS_CLAUDE_WORKER_BROWSER_CMD"),
+        chrome_args=cfg("TALOS_CLAUDE_WORKER_BROWSER_CHROME_ARGS"),
     )
     jobs = _Jobs(max_parallel=max_parallel, worker_home=worker_home,
                  browser=browser)

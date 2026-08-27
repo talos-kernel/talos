@@ -56,6 +56,24 @@ def test_mcp_config_fixed_command_replaces_npx():
     assert "env" not in server
 
 
+def test_mcp_config_chrome_args_become_chrome_arg_flags():
+    """Gemessen auf dem Pi (27.08.): Chrome im Job-Sandbox stirbt mit 'Target
+    closed' — unter bubblewrap darf es keine eigenen Namespaces anlegen und
+    braucht --no-sandbox als --chromeArg."""
+    cfg = claudeworker.browser_mcp_config(
+        claudeworker.BrowserMcp(enabled=True,
+                                chrome_args="--no-sandbox --disable-dev-shm-usage"))
+    args = cfg["mcpServers"]["chrome-devtools"]["args"]
+    assert "--chromeArg=--no-sandbox" in args
+    assert "--chromeArg=--disable-dev-shm-usage" in args
+
+
+def test_mcp_config_default_carries_no_chrome_args():
+    cfg = claudeworker.browser_mcp_config(claudeworker.BrowserMcp(enabled=True))
+    args = cfg["mcpServers"]["chrome-devtools"]["args"]
+    assert not any(a.startswith("--chromeArg=") for a in args)
+
+
 def test_mcp_config_carries_no_secret_values():
     kanari = "KANARI-oauth-token-123"
     cfg = claudeworker.browser_mcp_config(
