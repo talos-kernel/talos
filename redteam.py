@@ -2644,8 +2644,12 @@ for _n, _v in _cw_alt.items():
         os.environ.pop(_n, None)
     else:
         os.environ[_n] = _v
-_cw_leaked = [k for k in _cw_env if _cw_re.search(r"TALOS|TELEGRAM|TOKEN|SECRET", k)]
-_cw_ok = not _cw_leaked and "rt-geheim" not in json.dumps(_cw_env)
+_cw_leaked = [k for k in _cw_env if _cw_re.search(r"TALOS|TELEGRAM|TOKEN|SECRET", k)
+              and k != "CLAUDE_CODE_OAUTH_TOKEN"]
+_cw_ok = (not _cw_leaked and "rt-geheim" not in json.dumps(_cw_env)
+          # Die einzige Credential im Job ist seine EIGENE — und nur, wenn der
+          # Daemon sie ausdruecklich mitgibt (hier nicht angefordert).
+          and "CLAUDE_CODE_OAUTH_TOKEN" not in _cw_env)
 _result(_cw_ok, "A delegated job's child env carries Talos/bridge secrets",
         f"allowlist only ({sorted(_cw_env)})" if _cw_ok else f"LEAKED: {_cw_leaked}")
 if not _cw_ok:

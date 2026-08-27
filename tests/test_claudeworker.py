@@ -228,10 +228,21 @@ def test_spawn_env_contains_no_talos_secrets(recorded_env_worker, monkeypatch):
         time.sleep(0.05)
     env = recorded_env_worker.last_env
     assert env is not None
-    assert env["HOME"]                      # dedicated worker home, set
-    leaked = [k for k in env if "TALOS" in k or "TELEGRAM" in k or "TOKEN" in k]
+    assert env["HOME"].endswith(".home")      # HOME liegt IM Job-Workspace
+    # Die einzige erlaubte Credential ist die EIGENE des Jobs (Claude-OAuth).
+    leaked = [k for k in env
+              if ("TALOS" in k or "TELEGRAM" in k or "TOKEN" in k)
+              and k != "CLAUDE_CODE_OAUTH_TOKEN"]
     assert leaked == []
     assert "supersecret" not in json.dumps(env) and "alsasecret" not in json.dumps(env)
+
+
+def test_job_env_home_inside_workspace_and_token_opt_in(tmp_path):
+    ohne = claudeworker.job_env("/srv/worker-home", tmp_path)
+    assert ohne["HOME"] == str(tmp_path / ".home")
+    assert "CLAUDE_CODE_OAUTH_TOKEN" not in ohne
+    mit = claudeworker.job_env("/srv/worker-home", tmp_path, oauth_token="tok")
+    assert mit["CLAUDE_CODE_OAUTH_TOKEN"] == "tok"
 
 
 def test_unconfined_backend_never_selected(monkeypatch):

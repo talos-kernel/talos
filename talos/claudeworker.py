@@ -142,21 +142,27 @@ def job_backends(platform: str) -> list[sandbox.Sandbox]:
             if b.name not in ("unconfined", "none")]
 
 
-def job_env(worker_home: str, workspace: Path) -> dict[str, str]:
+def job_env(worker_home: str, workspace: Path, *, oauth_token: str = "") -> dict[str, str]:
     """Die Umgebung eines Job-Kindes — positive Allowlist, sonst nichts.
 
     Kein Talos-Geheimnis, kein Bridge-Token, keine Deployment-Env darf in ein
-    Job gelangen. HOME ist das dedizierte Worker-Home (dort liegt nur der
-    Claude-OAuth-Status), TMPDIR/PWD zeigen in den Arbeitsbereich — der einzige
-    Ort, an dem das Kind ohnehin schreiben darf.
+    Job gelangen. HOME liegt IM Arbeitsbereich (`.home`): der einzige Ort, an
+    dem das Kind schreiben darf — Claude braucht ein beschreibbares HOME fuer
+    State (`~/.claude`, `~/.claude.json`), und das Worker-HOME ist im Sandbox
+    read-only (gemessen am zweiten Live-E2E: Bash starb am ro-Dateisystem).
+    Der Claude-OAuth-Token kommt als Wert in die Env — er ist die EIGENE
+    Credential des Jobs, kein Talos-Secret; die Token-DATEI bleibt draussen.
     """
-    return {
+    env = {
         "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
-        "HOME": worker_home,
+        "HOME": str(Path(workspace) / ".home"),
         "LANG": "C.UTF-8",
         "TMPDIR": str(workspace),
         "PWD": str(workspace),
     }
+    if oauth_token:
+        env["CLAUDE_CODE_OAUTH_TOKEN"] = oauth_token
+    return env
 
 
 def parse_stream_event(line: dict, workspace: Path) -> tuple[str | None, str | None]:
@@ -289,6 +295,18 @@ class _Jobs:
             return antwort
 
 
+def _lies_oauth_token(worker_home: str) -> str:
+    """Den Claude-OAuth-Token frisch aus dem Worker-HOME — pro Job gelesen,
+    damit ein ausserhalb erneuerter Token sofort gilt. Leer, wenn nichts da
+    ist: der Job startet dann ohne Credential und scheitert ehrlich am API-
+    Aufruf, statt dass der Daemon ratet."""
+    try:
+        return (Path(worker_home) / ".claude" / "oauth-token").read_text(
+            encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
 def _run_job(job: _Job, worker_home: str, spawn: Spawn,
              limits: SandboxLimits, deadline: float) -> None:
     """Thread-Rumpf eines Jobs. Hält die Gesamt-Deadline ueber ALLEM — die
@@ -297,12 +315,14 @@ def _run_job(job: _Job, worker_home: str, spawn: Spawn,
     workspace = Path(job.workspace)
     try:
         workspace.mkdir(parents=True, exist_ok=True)
+        (workspace / ".home").mkdir(exist_ok=True)
     except OSError as ungueltig:
         job.beenden("failed", fehler=f"workspace not creatable: {ungueltig}")
         return
     job.beenden("running", returncode=-1)
     argv = _job_argv(job.prompt)
-    env = job_env(worker_home, workspace)
+    env = job_env(worker_home, workspace,
+                  oauth_token=_lies_oauth_token(worker_home))
     try:
         handle = spawn(argv, workspace, env, limits)
     except Exception as ungueltig:

@@ -46,6 +46,12 @@ Versions are alpha: the kernel's rules are stable, the surface around them is no
   spawn reason, capped at 2000 chars) plus the returncode through
   `delegate_status` — the first live run proved a silent `failed` is
   undebuggable.
+- **The job's HOME moved into the job workspace** (`<workspace>/.home`):
+  Claude needs a writable HOME for state, and the workspace is the only
+  writable place — measured on the second live E2E, where Claude's Bash died
+  on the read-only filesystem. The OAuth token is now read fresh per job by
+  the daemon and passed as a `CLAUDE_CODE_OAUTH_TOKEN` value (the job's own
+  credential); the token file never enters the sandbox.
 
 ### Added
 

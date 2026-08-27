@@ -115,9 +115,12 @@ Unbeaufsichtigte Deckel (unattended ceilings) verschärfen wie bisher.
   `unconfined`-Backend heraus, und `TALOS_SANDBOX_ALLOW_UNCONFINED` gilt hier
   **nicht** — ein unconfined fremder Agent ist keine Degradation, sondern ein
   anderes Produkt.
-- Job-Umgebung ist eine positive Allowlist (`PATH`, `HOME` = Worker-HOME,
-  Locale, `TMPDIR`/`PWD` im Workspace). Kein Talos-Geheimnis, kein
-  Bridge-Token, kein Deployment-Env erreicht einen Job.
+- Job-Umgebung ist eine positive Allowlist (`PATH`, Locale, `TMPDIR`/`PWD` im
+  Workspace, `HOME` = `<workspace>/.home`). Kein Talos-Geheimnis, kein
+  Bridge-Token, kein Deployment-Env erreicht einen Job. Die einzige
+  Credential ist die eigene des Jobs: der Daemon liest den Claude-OAuth-Token
+  frisch aus dem Worker-HOME und gibt ihn als `CLAUDE_CODE_OAUTH_TOKEN`-Wert
+  mit — die Token-DATEI betritt das Sandbox nie.
 - Jeder Job hat eine Gesamt-Deadline (Default 900 s, hart gedeckelt); auf
   Timeout wird die Prozessgruppe gekillt, der Zustand ist `timeout`.
 
@@ -129,7 +132,11 @@ Unbeaufsichtigte Deckel (unattended ceilings) verschärfen wie bisher.
   schreibbar), nicht das Netz.
 - **Das dedizierte HOME hält nur den Claude-OAuth-State** — und genau deshalb
   darf es kein Talos-Geheimnis enthalten und muss dem Worker gehören. Ein
-  kompromittierter Job sieht die Claude-Session, nichts aus Talos.
+  kompromittierter Job sieht die Claude-Session (als Env-Wert), nichts aus
+  Talos. Das eigene HOME des Jobs liegt als `.home` IM Job-Workspace: Claude
+  braucht ein beschreibbares HOME für State (`~/.claude`, `~/.claude.json`),
+  und der Workspace ist der einzige beschreibbare Ort — gemessen am zweiten
+  Live-E2E, als Claudes Bash am read-only Dateisystem starb.
 - **Job-Workspaces sind Wegwerf-Verzeichnisse.** Kontinuität (was wurde
   delegiert, was kam zurück) lebt im Event-Log des Agenten, nicht im Worker:
   ein neu gestarteter Worker weiss nichts, und das ist Absicht.
