@@ -1,0 +1,6 @@
+{
+  "name": "daily-reflection",
+  "description": "Every evening: the day from the event log — what was learned, which walls were hit, which notes belong in the vault",
+  "when": "every evening 21:30",
+  "prompt": "Tagesreflexion: Lies im Event-Log die Laeufe des Tages — was lief, wo brannte ein Werkzeugaufruf, welche Ablehnungen wiederholten sich, welche Freigaben kamen mehrfach vor. Halte Wiederverwendbares mit vault_write_note fest (Gotchas, Entscheidungen, Maschineneigenheiten), soweit das Gate es erlaubt; berichte danach knapp, was gelernt wurde und was davon neu im Vault steht. Nur berichten und dokumentieren, nichts sonst ausfuehren."
+}
