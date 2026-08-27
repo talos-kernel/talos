@@ -26,7 +26,9 @@ Sie ist darum eine `property` ohne Setter: nicht zu heben, auch nicht versehentl
 """
 from __future__ import annotations
 
+import mimetypes
 import re
+from pathlib import Path
 from typing import Any, NoReturn, Protocol, runtime_checkable
 
 import requests
@@ -43,7 +45,10 @@ ENV_TO = "WHATSAPP_TO"                # Zielnummer, nur Ziffern, im internationa
 
 GRAPH_API_VERSION = "v21.0"
 _ENDPOINT = "https://graph.facebook.com/{version}/{phone_id}/messages"
+_UPLOAD_ENDPOINT = "https://graph.facebook.com/{version}/{phone_id}/media"
 DEFAULT_TIMEOUT_S = 30.0
+# Ein Upload darf laenger dauern als eine Text-Meldung: 20 MB auf einer Pi-Leitung.
+UPLOAD_TIMEOUT_S = 120.0
 
 # Die Cloud API nimmt hoechstens 4096 Zeichen im Textkoerper. Laengeres kommt garantiert
 # als 400 zurueck — deshalb wird geteilt statt gesendet und gehofft.
@@ -86,6 +91,7 @@ __all__ = [
     "WINDOW_MESSAGE",
     "HttpResponse",
     "HttpPost",
+    "HttpUpload",
     "WhatsAppError",
     "OutsideWindowError",
     "WhatsAppChannel",
@@ -141,6 +147,38 @@ def _requests_post(
 ) -> HttpResponse:
     """Vorgabe-Transport. `requests` ist bereits Abhaengigkeit; es kommt keine dazu."""
     return requests.post(url, json=json, headers=headers, timeout=timeout)
+
+
+@runtime_checkable
+class HttpUpload(Protocol):
+    """Der ZWEITE Netz-Vertrag: ein Multipart-POST auf den Media-Endpunkt.
+
+    Eigenes Protokoll statt `HttpPost` aufzuweiten: ein Datei-Upload ist ein anderer
+    Aufruf (Bytes statt JSON), und wer nur Text sendet, soll ihn gar nicht erst in
+    der Hand halten. Dieselbe Schmalheit wie `HttpPost` — genau dieser eine Aufruf.
+    """
+
+    def __call__(
+        self,
+        url: str,
+        *,
+        data: dict[str, str],
+        files: dict[str, Any],
+        headers: dict[str, str],
+        timeout: float,
+    ) -> HttpResponse: ...
+
+
+def _requests_upload(
+    url: str,
+    *,
+    data: dict[str, str],
+    files: dict[str, Any],
+    headers: dict[str, str],
+    timeout: float,
+) -> HttpResponse:
+    """Vorgabe-Transport fuer Uploads. `requests` ist bereits Abhaengigkeit."""
+    return requests.post(url, data=data, files=files, headers=headers, timeout=timeout)
 
 
 def number_of(conversation: str) -> str:
@@ -248,6 +286,7 @@ class WhatsAppChannel:
         phone_id: str,
         *,
         post: HttpPost = _requests_post,
+        upload: HttpUpload = _requests_upload,
         api_version: str = GRAPH_API_VERSION,
         timeout_s: float = DEFAULT_TIMEOUT_S,
         text_limit: int = WHATSAPP_TEXT_LIMIT,
@@ -259,7 +298,9 @@ class WhatsAppChannel:
         self._token = str(token).strip()
         self._phone_id = str(phone_id).strip()
         self._post = post
+        self._upload = upload
         self._url = _ENDPOINT.format(version=api_version, phone_id=self._phone_id)
+        self._upload_url = _UPLOAD_ENDPOINT.format(version=api_version, phone_id=self._phone_id)
         self._timeout_s = float(timeout_s)
         self._text_limit = max(1, int(text_limit))
 
@@ -304,6 +345,61 @@ class WhatsAppChannel:
         also kein Komfort, sondern eine falsche Zusage im wichtigsten Moment.
         """
         self.send(conversation, message.text)
+
+    def send_file(self, conversation: str, path: str) -> None:
+        """Ein Dokument als echter Anhang: erst der Upload, dann die Dokument-Meldung.
+
+        Die Cloud API nimmt Dateien nur in zwei Schritten — Upload gegen den
+        Media-Endpunkt, dann eine Nachricht mit der vergebene Medien-Kennung. Der Pfad
+        ist hier laengst gegatet (`attachment.resolve`); dieser Kanal liest die Datei
+        nur noch und schiebt sie hinaus. Fehler fliegen wie beim Text: laut.
+        """
+        number = number_of(conversation)
+        media_id = self._upload_media(Path(path))
+        payload = {
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": number,
+            "type": "document",
+            "document": {"id": media_id, "filename": Path(path).name},
+        }
+        headers = {
+            "Authorization": f"Bearer {self._token}",
+            "Content-Type": "application/json",
+        }
+        try:
+            response = self._post(
+                self._url, json=payload, headers=headers, timeout=self._timeout_s
+            )
+        except Exception as error:
+            self._fail(f"WhatsApp delivery failed: {_scrub(error, self._token)}")
+        self._check(response)
+
+    def _upload_media(self, path: Path) -> str:
+        """Laedt die Datei hoch und gibt die Medien-Kennung zurueck — oder wirft."""
+        mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+        try:
+            response = self._upload(
+                self._upload_url,
+                data={"messaging_product": "whatsapp", "type": mime},
+                files={"file": (path.name, path.read_bytes(), mime)},
+                headers={"Authorization": f"Bearer {self._token}"},
+                timeout=UPLOAD_TIMEOUT_S,
+            )
+        except Exception as error:
+            self._fail(f"WhatsApp media upload failed: {_scrub(error, self._token)}")
+        if not 200 <= self._status_of(response) < 300:
+            codes, detail = _api_error(response)
+            if codes & WINDOW_ERROR_CODES:
+                raise OutsideWindowError(WINDOW_MESSAGE)
+            self._fail(f"WhatsApp media upload failed: {_scrub(detail, self._token)}")
+        try:
+            media_id = str((response.json() or {}).get("id") or "")
+        except Exception:
+            media_id = ""
+        if not media_id:
+            self._fail("WhatsApp media upload returned no media id")
+        return media_id
 
     # ------------------------------------------------------------------ intern
     def _deliver(self, number: str, text: str) -> None:

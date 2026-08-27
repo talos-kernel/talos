@@ -56,7 +56,7 @@ TOOL_PROTOCOL = (
     '- session_search {"query": "…", "limit": 1..10}\n'
     '- delegate {"question": "…"}\n'
     '- agent_consult {"question": "…", "attempted": "…", "failure": "…"}\n'
-    '- delegate_code {"prompt": "…"} — hand a bounded coding task to the confined Claude worker; returns a job_id\n'
+    '- delegate_code {"prompt": "…", "browser": true|false} — hand a bounded coding task to the confined Claude worker; returns a job_id. browser=true adds chrome-devtools-mcp inside the job sandbox (only when the operator enabled it)\n'
     '- delegate_status {"job_id": "…"} — read a delegated job\'s state and result\n'
     '- browse {"url": "https://…"}\n'
     '- see_image {"path": "…", "question": "…"}\n'

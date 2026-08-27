@@ -136,10 +136,33 @@ def test_the_correction_reaches_the_next_step_of_the_real_loop(tmp_path) -> None
     Er haette das Loch gefunden, das die Einzeltests offen liessen: Postfach gruen,
     Agentenschleife gruen, und dazwischen nichts verdrahtet.
     """
-    from tests.test_agent_loop import OWNER, _executor
+    # OWNER und der Executor entsprechen denen aus test_agent_loop, stehen aber
+    # hier eigenstaendig: ein Testmodul importiert nicht aus einem anderen (der
+    # oeffentliche Baum laeuft mit einem Python, in dem `tests` ein fremdes
+    # site-packages-Paket sein kann).
+    from talos import tools
     from talos.agent_loop import AgentStatus, run_agent
+    from talos.capability import CapabilityMint, GrantedRunner
+    from talos.eventlog import EventLog
+    from talos.executor import Executor
+    from talos.policy import PolicyKernel
+    from talos.snapshot import Snapshotter
 
-    conductor = _laufend(uid=OWNER.user_id, conversation="chat-7")
+    besitzer = Principal("telegram", "100000001")
+
+    def executor(wurzel) -> Executor:
+        log = EventLog(wurzel / "ev.db")
+        kernel = PolicyKernel(tools.default_manifest(), frozenset({besitzer}))
+        mint = CapabilityMint(kernel)
+        return Executor(
+            policy=kernel,
+            log=log,
+            snapshotter=Snapshotter(wurzel / ".snap"),
+            runner=GrantedRunner(mint=mint, runners=dict(tools.RUNNERS)),
+            mint=mint,
+        )
+
+    conductor = _laufend(uid=besitzer.user_id, conversation="chat-7")
     gesehen: list[list[str]] = []
 
     def propose(history: list[str]) -> str:
@@ -148,15 +171,15 @@ def test_the_correction_reaches_the_next_step_of_the_real_loop(tmp_path) -> None
             # Die Nachricht kommt herein, waehrend der Lauf denkt — auf demselben Weg
             # wie im Betrieb, ueber die Entscheidungsfunktion des Poll-Loops.
             eingegangen = replace(
-                _update(uid=OWNER.user_id, conversation="chat-7"),
-                principal=OWNER,
+                _update(uid=besitzer.user_id, conversation="chat-7"),
+                principal=besitzer,
             )
             assert _steers_the_running_task(conductor, FakeDesk(), eingegangen) is True
             return 'TOOL_CALL: {"tool": "read_file", "args": {"path": "/tmp/a"}}'
         return "fertig"
 
     ergebnis = run_agent(
-        propose, _executor(tmp_path), OWNER, "run-weg",
+        propose, executor(tmp_path), besitzer, "run-weg",
         redirect=conductor.redirect, max_steps=4,
     )
 

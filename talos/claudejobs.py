@@ -79,13 +79,20 @@ def _anfrage(socket_path: str, obj: dict, *, timeout_s: float,
 
 
 def submit_job(socket_path: str, job_id: str, prompt: str, workspace: str, *,
-               timeout_s: float = 30.0, exchange: Exchange | None = None) -> dict:
-    """Meldet einen Job an. Die Antwort ist der Worker-Frame (accepted/busy/…)."""
-    return _anfrage(
-        socket_path,
-        {"op": "submit", "job_id": job_id, "prompt": prompt, "workspace": workspace},
-        timeout_s=timeout_s, exchange=exchange,
-    )
+               timeout_s: float = 30.0, exchange: Exchange | None = None,
+               browser_mcp: bool = False) -> dict:
+    """Meldet einen Job an. Die Antwort ist der Worker-Frame (accepted/busy/…).
+
+    `browser_mcp=True` fordert chrome-devtools-mcp IM Job an — das Flag steht
+    nur dann im Frame, wenn es gemeint ist: der Vorgabe-Frame bleibt Byte fuer
+    Byte der alte, und der Worker lehnt eine Anforderung ab, die er nicht
+    freigeschaltet hat.
+    """
+    frame = {"op": "submit", "job_id": job_id, "prompt": prompt,
+             "workspace": workspace}
+    if browser_mcp:
+        frame["browser_mcp"] = True
+    return _anfrage(socket_path, frame, timeout_s=timeout_s, exchange=exchange)
 
 
 def job_status(socket_path: str, job_id: str, *, timeout_s: float = 30.0,

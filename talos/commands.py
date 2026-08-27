@@ -132,6 +132,8 @@ Accountability
 /remember <text> — keep something across restarts
 /memory — what is kept · /forget <id|all> — drop it
 /every <min> or <M H DOM MON DOW> <task> — recurring job · /schedules · /unschedule <id>
+/blueprints — installable automations with plain-language schedules
+  (/blueprint install|remove|enable|disable|status <name>)
 /skills — what is loaded, what was refused
 /tools — which tools exist and how they are gated
 /whoami — your ID and whether it is allowed
@@ -195,6 +197,11 @@ class CommandCenter:
     # Betreibers gebunden — es gibt bewusst kein Werkzeug dafuer: ein Modell, das sich
     # selbst einen wiederkehrenden Auftrag anlegen kann, verlaengert seine eigene Leine.
     schedules: object | None = None
+    # Blueprints (talos/blueprints.py) — installierbare Automatisierungen mit
+    # menschenlesbarer Zeitangabe. Dasselbe Argument wie bei den Zeitplaenen: NUR der
+    # Kommando-Pfad installiert, und ein installierter Blueprint laeuft ueber denselben
+    # ScheduleStore wie `/every` — Kernel und UnattendedCeiling inklusive.
+    blueprints: object | None = None
     # Woher die Skills kommen. Leer heisst: keine geladen — dann sagt `/skills` das auch,
     # statt eine leere Liste zu zeigen, die nach „kaputt" aussieht.
     skills_dirs: tuple[Path, ...] = ()
@@ -256,6 +263,8 @@ class CommandCenter:
             return CommandResult(reply=self._schedules(conversation))
         if name in ("unschedule", "cancel_job"):
             return CommandResult(reply=self._unschedule(rest, conversation))
+        if name in ("blueprint", "blueprints"):
+            return CommandResult(reply=self._blueprints(rest, principal, conversation))
         if name == "skills":
             return CommandResult(reply=self._skills())
         if name == "tools":
@@ -448,6 +457,99 @@ class CommandCenter:
         if not target:
             return "Which one? /schedules lists them."
         return "Dropped it." if self.schedules.remove(target, conversation=conversation) else "No schedule with that id in this chat."
+
+    def _blueprints(self, rest: str, principal: Principal, conversation: str) -> str:
+        """`/blueprints` und `/blueprint <verb> <name>` — installierbare Automatisierungen.
+
+        Dieselbe Disziplin wie bei `/every`: die Bestaetigung sagt sofort, dass der
+        Lauf unbeaufsichtigt WENIGER darf als ein getippter Auftrag — sonst wundert
+        sich der Betreiber spaeter ueber einen Bericht statt eines Vollzugs.
+        """
+        if self.blueprints is None:
+            return "No blueprint registry wired."
+        from .blueprints import BlueprintError, describe_next
+
+        teile = rest.split()
+        verb = teile[0].lower() if teile else "list"
+        ziel = teile[1] if len(teile) > 1 else ""
+        try:
+            if verb in ("list", "ls"):
+                return self._blueprint_list()
+            if not ziel:
+                return (
+                    "Which one? Usage: /blueprint install|remove|enable|disable|status <name>\n"
+                    "/blueprints lists what is available."
+                )
+            if verb in ("install", "add"):
+                task = self.blueprints.install(
+                    ziel, conversation=conversation, principal=str(principal)
+                )
+                return (
+                    f"Installed '{ziel}' — first run: {describe_next(task.next_run)}.\n"
+                    "It fires as an unattended run: anything that would need your approval "
+                    "is reported, never performed. Nothing was granted here.\n"
+                    f"/blueprint disable {ziel} pauses it, /blueprint remove {ziel} takes it out."
+                )
+            if verb in ("remove", "uninstall"):
+                self.blueprints.remove(ziel)
+                return f"Removed '{ziel}' — the schedule entry is gone with it."
+            if verb in ("enable", "activate", "on"):
+                task = self.blueprints.enable(ziel)
+                return f"Active again: '{ziel}' — next run: {describe_next(task.next_run)}."
+            if verb in ("disable", "deactivate", "off"):
+                self.blueprints.disable(ziel)
+                return f"Paused: '{ziel}'. It stays installed — /blueprint enable {ziel} switches it back on."
+            if verb == "status":
+                return self._blueprint_status(ziel)
+            return f"Unknown verb '{verb}'. Try: list, install, remove, enable, disable, status."
+        except BlueprintError as error:
+            return str(error)
+
+    def _blueprint_list(self) -> str:
+        from .blueprints import describe_next
+
+        catalog = self.blueprints.catalog()
+        stand = self.blueprints.installed()
+        lines: list[str] = []
+        if catalog.blueprints:
+            lines.append(f"{len(catalog.blueprints)} blueprint(s) available:")
+            for blueprint in catalog.blueprints:
+                eintrag = stand.get(blueprint.name)
+                if eintrag is None:
+                    zustand = "not installed"
+                elif eintrag.get("enabled"):
+                    zustand = f"installed, next run {describe_next(self.blueprints.next_run(blueprint.name))}"
+                else:
+                    zustand = "installed, paused"
+                beschreibung = f" — {blueprint.description}" if blueprint.description else ""
+                lines.append(f"  {blueprint.name} ({blueprint.when}){beschreibung} [{zustand}]")
+        else:
+            lines.append("No blueprints available.")
+        if catalog.rejected:
+            lines.append("")
+            lines.append(f"{len(catalog.rejected)} refused:")
+            lines += [f"  {grund}" for grund in catalog.rejected[:10]]
+        lines.append("")
+        lines.append("/blueprint install <name> installs one · /blueprint status <name> shows it.")
+        return "\n".join(lines)
+
+    def _blueprint_status(self, name: str) -> str:
+        from .blueprints import describe_next
+
+        blueprint = self.blueprints.catalog().get(name)  # wirft BlueprintError
+        stand = self.blueprints.installed().get(blueprint.name)
+        lines = [
+            f"{blueprint.name} — {blueprint.description or '(no description)'}",
+            f"when: {blueprint.when}",
+            f"task: {blueprint.prompt}",
+        ]
+        if stand is None:
+            lines.append(f"state: not installed — /blueprint install {blueprint.name}")
+        elif stand.get("enabled"):
+            lines.append(f"state: active — next run {describe_next(self.blueprints.next_run(blueprint.name))}")
+        else:
+            lines.append(f"state: paused — /blueprint enable {blueprint.name} switches it back on")
+        return "\n".join(lines)
 
     def _skills(self) -> str:
         """Was geladen ist, was verworfen wurde — und was Talos bewusst ignoriert.

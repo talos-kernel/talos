@@ -252,6 +252,22 @@ class ChannelRegistry:
         starter = getattr(channel, "begin_activity", None)
         return None if starter is None else starter(conversation)
 
+    def send_file(self, conversation: str, path: str) -> bool:
+        """Dateianhang, falls der Kanal das kann. `False` heisst: kann er nicht.
+
+        Gleiche Bauart wie `begin_activity`: fehlende Unterstützung ist kein
+        Zustellfehler, sondern ein ehrliches „nein", das der Aufrufer dem Betreiber
+        weitersagt. Ein Kanal ohne `send_file` muss nichts imitieren.
+        """
+        name, sep, _ = conversation.partition(_SEP)
+        if not sep:
+            raise ValueError(f"conversation ohne Kanal: {conversation!r}")
+        sender = getattr(self.get(name), "send_file", None)
+        if sender is None:
+            return False
+        sender(conversation, path)
+        return True
+
     def send_structured(self, conversation: str, message: StructuredMessage) -> None:
         """Nutzt Kanal-UI, falls vorhanden; sonst wird der ehrliche Text-Fallback gesendet."""
         name, sep, _ = conversation.partition(_SEP)

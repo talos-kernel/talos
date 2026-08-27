@@ -28,12 +28,15 @@ from __future__ import annotations
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 import inspect
+from pathlib import Path
 import threading
 import time
 from typing import Callable, Iterator, Protocol
 
 from .agent_loop import AgentStatus, run_agent, tool_history_entry
 from .approval import ApprovalPicker, ApprovalStore, Pending, is_affirmative, is_always, is_negative
+from .attachment import extract as extract_media
+from .attachment import resolve as resolve_media
 from .capability import action_fingerprint
 from .channel import Activity, Inbound, Principal, StructuredMessage, Trust
 from .commands import CommandCenter, is_command, parse
@@ -177,6 +180,10 @@ class Conductor:
     # Kanaele ohne Live-Bearbeitung (Mail, CLI, Tests) liefern hier schlicht nichts.
     begin_reply: ReplyBegin | None = None
     send_structured: StructuredSender | None = None
+    # Dateianhaenge aus MEDIA:-Tags (`attachment.py`): (conversation, gegateter Pfad)
+    # -> bool. `False` heisst: der Kanal kann keine Dateien — ein ehrliches Nein, kein
+    # Fehler. Injiziert wie `send_structured`; `None` = kein Weg verdrahtet.
+    send_file: "Callable[[str, str], bool] | None" = None
     # Liefert die Quittungszeile unter den Verlauf (Werkzeuge, Dauer, Token, Modell).
     # Injiziert statt aus dem Meter gezogen: der Conductor soll die Messung nicht kennen,
     # und Tests brauchen dafuer keinen echten Reasoner.
@@ -814,11 +821,18 @@ class Conductor:
             )
         else:
             reply = _final_answer(result.text) if result.status is AgentStatus.ANSWERED else result.text
+            # MEDIA:-Tags NUR aus den eigenen Worten des Agenten loesen — und zwar hier,
+            # BEVOR Quittung und Notizen angehaengt werden: eine Notiz kann Zeilen aus
+            # Werkzeugausgaben tragen, und was ein Werkzeug oder eine Webseite "sagt",
+            # darf nie einen Anhang ausloesen (siehe attachment.py).
+            reply, media = extract_media(reply)
             reply = _append_note(reply, self._what_failed(run_id))
             reply = _append_note(reply, trailing_note)
             if leading_note:
                 reply = f"{leading_note}\n\n{reply}"
-            sent = self._deliver(update, run_id, reply, stream, approval_reply=approval_reply)
+            sent = self._deliver(
+                update, run_id, reply, stream, approval_reply=approval_reply, media=media
+            )
         if activity is not None:
             if sent:
                 activity.succeed(self._usage_footer())
@@ -1123,29 +1137,102 @@ class Conductor:
         stream: ReplyStream | None,
         *,
         approval_reply: bool,
+        media: tuple[str, ...] = (),
     ) -> bool:
-        """Stellt die Antwort zu — als GENAU eine Nachricht.
+        """Stellt die Antwort zu — als GENAU eine Nachricht, plus ihre Anhaenge.
 
         Wuchs waehrend des Denkens bereits eine, wird sie an Ort und Stelle zur
         endgueltigen Antwort. Erst wenn das nicht geht (nichts gestreamt, Bearbeitung
         abgelehnt), geht sie normal raus. Die Antwort ist kein Komfort: scheitert das
         Streaming vollstaendig, aendert das nur die Zustellart, nie das Ergebnis.
+
+        Bestand die Antwort NUR aus MEDIA:-Tags, gibt es keinen sichtbaren Text — dann
+        wird auch keine leere Nachricht gesendet (Telegram lehnte sie ohnehin ab): die
+        Anhaenge SIND die Antwort.
         """
-        if stream is not None:
+        delivered = False
+        if text.strip() or not media:
+            if stream is not None:
+                try:
+                    if stream.adopt(text):
+                        self.log.append(Event(run_id, "conductor", "reply.sent", {"streamed": True}))
+                        self.log.append(Event(run_id, "conductor", "done", {}))
+                        delivered = True
+                except Exception as error:
+                    self.log.append(
+                        Event(run_id, "conductor", "error",
+                              {"stage": "reply.stream", "error": str(error)})
+                    )
+                if not delivered:
+                    self._settle(stream, run_id)
+            if not delivered:
+                if approval_reply:
+                    delivered = self._approval_reply(update, run_id, text)
+                else:
+                    delivered = self._reply(update, run_id, text)
+        else:
+            # Kein Text, nur Anhaenge: die gewachsene Nachricht einfrieren, statt eine
+            # leere Endfassung ueber sie zu stueelpen.
+            self._settle(stream, run_id)
+        if media:
+            attached = self._send_attachments(update, run_id, media)
+            if attached and not delivered:
+                self.log.append(Event(run_id, "conductor", "done", {}))
+            delivered = delivered or attached
+        return delivered
+
+    def _send_attachments(self, update: Inbound, run_id: str, paths: tuple[str, ...]) -> bool:
+        """Sendet die angeforderten Anhaenge — jeder Fehlschlag wird gemeldet, keiner kippt den Lauf.
+
+        Zwei Regeln:
+          1. **Das Gate laeuft hier, pro Pfad, durch den Kernel-Floor** (`attachment.resolve`).
+             Eine Absage landet als ehrliche Zeile im Chat und als `attachment.refused`
+             im Protokoll — nie still.
+          2. **Versand-Fehler sind Versand-Fehler.** Datei weg, Kanal defekt: der Lauf ist
+             laengst entschieden, ein nachtraeglicher Absturz huelfe niemandem. Aber der
+             Betreiber wartet auf eine Datei — also eine Zeile pro Fehlschlag statt
+             Schweigen.
+        """
+        delivered = False
+        notes: list[str] = []
+        for raw in paths:
             try:
-                if stream.adopt(text):
-                    self.log.append(Event(run_id, "conductor", "reply.sent", {"streamed": True}))
-                    self.log.append(Event(run_id, "conductor", "done", {}))
-                    return True
+                resolved = resolve_media(raw)
+            except ValueError as error:
+                self.log.append(
+                    Event(run_id, "policy", "attachment.refused",
+                          {"path": raw[:200], "reason": str(error)})
+                )
+                notes.append(f"Attachment not sent — {error}")
+                continue
+            if self.send_file is None:
+                notes.append(
+                    "Attachment not sent — no file channel is wired in this build; "
+                    f"the file remains at {resolved}"
+                )
+                continue
+            try:
+                sent = self.send_file(update.conversation, resolved)
             except Exception as error:
                 self.log.append(
                     Event(run_id, "conductor", "error",
-                          {"stage": "reply.stream", "error": str(error)})
+                          {"stage": "attachment", "error": str(error)})
                 )
-            self._settle(stream, run_id)
-        if approval_reply:
-            return self._approval_reply(update, run_id, text)
-        return self._reply(update, run_id, text)
+                notes.append(f"Attachment could not be sent ({Path(resolved).name}): {error}")
+                continue
+            if sent:
+                delivered = True
+                self.log.append(
+                    Event(run_id, "conductor", "attachment.sent", {"path": resolved})
+                )
+            else:
+                notes.append(
+                    "Attachment not sent — this channel cannot send files; "
+                    f"the file remains at {resolved}"
+                )
+        if notes:
+            self._reply(update, run_id, "\n".join(notes))
+        return delivered
 
     def _begin_activity(self, update: Inbound, run_id: str) -> Activity | None:
         if self.begin_activity is None:

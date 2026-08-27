@@ -24,16 +24,17 @@ from typing import Callable
 
 import requests
 
-from . import consult, tools
+from . import claudejobs, consult, notify, tools
 from .api_reasoner import SUPPORTED_PROVIDERS, ApiReasoner
 from .approval import ApprovalPicker, ApprovalStore
 from .autonomy import AutonomyGovernor, GovernedKernel, restore_level
+from .blueprints import BlueprintBook
 from .standing import restore as restore_standing
 from .capability import CapabilityMint, GrantedRunner
 from .channel import ChannelRegistry, Inbound, Principal
 from .commands import CommandCenter, is_command, parse
 from .conductor import Conductor, reply_starter
-from .config import ENTITIES_FILE, MODEL_CACHE, PIPER_BIN, RECALL_DB, SCHEDULE_DB, TRANSCRIPT_DB, VOICE_DIR, load_config
+from .config import BLUEPRINTS_DIR, DATA_DIR, ENTITIES_FILE, MODEL_CACHE, PIPER_BIN, RECALL_DB, SCHEDULE_DB, TRANSCRIPT_DB, VOICE_DIR, load_config
 from .eventlog import Event, EventLog, new_run_id
 from .executor import Executor
 from .fallback import FallbackReasoner, parse_chain
@@ -66,6 +67,10 @@ from .ux import SYM_FAIL, SYM_GATE, SYM_OK
 from .worker import Worker
 
 SCHEDULE_TICK_S = 20
+# Wie oft der Waechter den Worker nach angemeldeten Jobs fragt. Jobs laufen Minuten;
+# ein Sekundentakt waere Laerm auf dem Socket, ein Minutentakt ein spuerbar verspaeteter
+# Push. Derselbe Groessenordnungs-Kompromiss wie beim Zeitplan-Ticker.
+NOTIFY_TICK_S = 15
 QUEUE_FULL_TEXT = "Warteschlange voll — bitte kurz warten. /queue zeigt den Stand."
 
 
@@ -262,6 +267,11 @@ def run(once: bool = False, ask: str = "", chat: bool = False) -> None:
     # getippter; bei verbreiteten Agenten-Frameworks ist es umgekehrt gleich viel.
     unattended = UnattendedCeiling()
     schedules = ScheduleStore(SCHEDULE_DB)
+    # Blueprints sind nur eine Lesehilfe ueber dem Zeitplan: installieren schreibt in
+    # DENSELBEN Store, ueber den auch `/every` geht — der Ticker darunter bleibt der
+    # einzige Ausfuehrungspfad, Decke inklusive. Der Installations-Stand liegt bei den
+    # Laufzeitdaten, die Vorlagen im Installationsverzeichnis.
+    blueprint_book = BlueprintBook(BLUEPRINTS_DIR, DATA_DIR / "blueprints.json", schedules)
     # Die vierte Decke. Sie wirkt nur waehrend eines delegierten Laufs — dann darf
     # ausschliesslich gelesen werden. Ein Untergebener entsteht aus Modelltext, nicht
     # aus einem getippten Auftrag; ihm die Rechte seines Auftraggebers zu geben, waere
@@ -276,6 +286,9 @@ def run(once: bool = False, ask: str = "", chat: bool = False) -> None:
     # Antwort, der Poll-Thread löst sie ein. Zwei Instanzen hiessen, dass der Klick in
     # einem Gedächtnis landet, aus dem niemand ihn abholt.
     questions = QuestionDesk()
+    # Die angemeldeten delegierten Jobs, deren Endzustand gepusht wird. Eine Instanz,
+    # geteilt zwischen dem delegate_code-Runner (Anmeldung) und dem Ticker weiter unten.
+    pushes = notify.CompletionDesk()
     # Das Gespraechsarchiv. Ueberlebt Neustart und /new — gelesen wird es nur ueber das
     # gegatete session_search-Werkzeug, nie automatisch. Faellt es aus, laeuft der Agent
     # ohne Archiv weiter (fail-open, wie Recall).
@@ -340,9 +353,17 @@ def run(once: bool = False, ask: str = "", chat: bool = False) -> None:
         # Der Workspace-Anker kommt aus derselben Kernelfunktion, ueber deren
         # Ergebnis der Kernel urteilt.
         **({
-            "delegate_code": tools.make_delegate_code_runner(
-                socket_path=config.claude_worker_socket,
-                work_root=claude_work_root()),
+            # Die Anmeldung merkt sich den Rueckweg aus dem Thread-Kontext des
+            # Conductors (spaet gebunden wie bei ask_operator), nie aus den
+            # Werkzeug-Argumenten — das Modell entscheidet nicht, WOHIN gemeldet wird.
+            "delegate_code": notify.watching(
+                tools.make_delegate_code_runner(
+                    socket_path=config.claude_worker_socket,
+                    work_root=claude_work_root(),
+                    browser_enabled=config.browser_mcp_enabled),
+                desk=pushes,
+                context=lambda: conductor.ask_contexts.current(),
+            ),
             "delegate_status": tools.make_delegate_status_runner(
                 socket_path=config.claude_worker_socket),
         } if config.claude_worker_enabled else {}),
@@ -432,6 +453,7 @@ def run(once: bool = False, ask: str = "", chat: bool = False) -> None:
         transcript=transcript_store,
         transcript_db=TRANSCRIPT_DB,
         schedules=schedules,
+        blueprints=blueprint_book,
         start_status=lambda: _start_status(reasoner, config),
         model_picker=model_picker,
     )
@@ -453,6 +475,8 @@ def run(once: bool = False, ask: str = "", chat: bool = False) -> None:
         # die Antwort, statt eine zweite daneben zu stellen.
         begin_reply=reply_starter(registry),
         send_structured=registry.send_structured,
+        # Dateianhaenge (MEDIA:-Tags): Kanaele ohne `send_file` melden ehrlich False.
+        send_file=registry.send_file,
         usage_footer=lambda: _usage_footer(meter),
         capability_gaps=_gap_reporter(config),
         # DIESELBE Instanz wie der Zeitplan-Ticker: ein Hintergrundlauf ist derselbe Fall
@@ -501,6 +525,27 @@ def run(once: bool = False, ask: str = "", chat: bool = False) -> None:
 
     if schedules.available:
         threading.Thread(target=tick_schedules, daemon=True, name="talos-schedules").start()
+
+    # Der Completion-Push: dieselbe Bauart wie der Zeitplan-Ticker — ein eigener Takt,
+    # der den Worker nach den angemeldeten Jobs fragt und bei einem Endzustand eine
+    # kurze, faktische Meldung in den Ursprungschat schickt. Inhalt kommt aus dem
+    # Worker-Protokoll, nie aus Modellprosa; der Empfaenger aus der Anmeldung.
+    def tick_completions() -> None:
+        while True:
+            time.sleep(NOTIFY_TICK_S)
+            try:
+                notify.poll_once(
+                    pushes,
+                    status=lambda job_id: claudejobs.job_status(
+                        config.claude_worker_socket, job_id),
+                    send=registry.send,
+                    log=log,
+                )
+            except Exception as error:  # ein kaputter Push darf den Agenten nicht anhalten
+                log.append(Event(new_run_id(), "notify", "notify.error", {"error": str(error)}))
+
+    if config.completion_push and config.claude_worker_enabled:
+        threading.Thread(target=tick_completions, daemon=True, name="talos-notify").start()
 
 
     # `talos ask "…"` — ein Zug, dann Schluss. Kein Poll-Loop, keine Ankuendigung.

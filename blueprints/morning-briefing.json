@@ -1,0 +1,6 @@
+{
+  "name": "morning-briefing",
+  "description": "Daily morning status from the persistent sources (event log, chain, pending approvals, anchor) — report only",
+  "when": "every morning 07:00",
+  "prompt": "Morgen-Briefing: Berichte aus dem Event-Log den Stand der Installation — Laeufe und Fehler der letzten 24 h, Hash-Kette, offene Freigaben, Alter des letzten Ankers. Nur berichten, nichts ausfuehren."
+}

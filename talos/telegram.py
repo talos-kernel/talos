@@ -36,6 +36,8 @@ DEFAULT_HEARTBEAT_S = 5.0
 # Telegram nimmt hoechstens 4096 Zeichen pro Nachricht. Laengeres waere ein Aufruf, der
 # sicher mit 400 zurueckkommt — waehrend des Wachsens gar nicht erst versuchen.
 TELEGRAM_TEXT_LIMIT = 4096
+# Uploads duerfen laenger dauern als ein Text-POST: 20 MB auf einer Pi-Leitung.
+_UPLOAD_TIMEOUT_S = 120
 # Der Reasoner gibt fuer einen Werkzeugwunsch GENAU eine Zeile `TOOL_CALL: {…}` aus
 # (TOOL_PROTOCOL in reasoner.py, gelesen von agent_loop.parse_tool_call). Das ist
 # Maschinerie und niemals Text fuer den Betreiber.
@@ -522,6 +524,30 @@ class TelegramClient:
             requests.post, "sendChatAction",
             data={"chat_id": chat_id, "action": action}, timeout=30,
         )
+
+    def send_document(self, chat_id: int, path: str) -> None:
+        """Eine Datei als Dokument. Der Pfad ist bereits gegatet (`attachment.resolve`)."""
+        ziel = Path(path)
+        with ziel.open("rb") as handle:
+            self._call(
+                requests.post,
+                "sendDocument",
+                data={"chat_id": chat_id},
+                files={"document": (ziel.name, handle)},
+                timeout=_UPLOAD_TIMEOUT_S,
+            )
+
+    def send_photo(self, chat_id: int, path: str) -> None:
+        """Ein Bild als Foto. Nur fuer echte Bilder — die Wahl trifft der Aufrufer an den Bytes."""
+        ziel = Path(path)
+        with ziel.open("rb") as handle:
+            self._call(
+                requests.post,
+                "sendPhoto",
+                data={"chat_id": chat_id},
+                files={"photo": (ziel.name, handle)},
+                timeout=_UPLOAD_TIMEOUT_S,
+            )
 
 
 class ActivityClient(Protocol):
@@ -1128,6 +1154,27 @@ class TelegramChannel:
             errors.append(f"message delivery: {error}")
         if errors:
             raise RuntimeError("; ".join(errors))
+
+    def send_file(self, conversation: str, path: str) -> None:
+        """Eine Datei als echter Anhang: Bilder als Foto, alles andere als Dokument.
+
+        Die Wahl faellt an den ersten BYTES, nicht an der Endung — eine Endung ist eine
+        Behauptung des Dateinamens (dieselbe Regel wie bei `fetch_photo`). Der Pfad
+        selbst ist hier schon gegatet: `attachment.resolve` hat ueber Wurzeln, Floors
+        und Groesse geurteilt, bevor der Conductor an diese Stelle kommt.
+        """
+        chat = chat_id_of(conversation)
+        from .vision import media_type
+
+        try:
+            with open(path, "rb") as handle:
+                kind = media_type(handle.read(16))
+        except OSError:
+            kind = ""
+        if kind in _SUFFIX:
+            self._client.send_photo(chat, path)
+        else:
+            self._client.send_document(chat, path)
 
     def begin_activity(self, conversation: str) -> TelegramActivity:
         # Der Name wird JETZT gelesen, nicht beim Start: wer SOUL.md umbenennt, sah sonst

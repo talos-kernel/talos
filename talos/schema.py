@@ -106,6 +106,15 @@ KEYS: tuple[Key, ...] = (
         "dedicated HOME for Claude jobs holding only the Claude OAuth state"),
     Key("TALOS_CLAUDE_WORKER_BIN", POLICY,
         "pinned claude binary path for worker jobs", default="claude"),
+    Key("TALOS_BROWSER_MCP_ENABLED", POLICY,
+        "lets delegate_code jobs request an in-sandbox browser "
+        "(chrome-devtools-mcp) — a Chrome with network inside the job widens "
+        "the sandbox's attack surface, so it is opt-in, not a side effect of "
+        "the worker switch", default="0", validate=_bool01),
+    Key("TALOS_CLAUDE_WORKER_BROWSER_MCP", POLICY,
+        "the worker's own gate for browser jobs — a frame asking for the "
+        "browser without it is REJECTED, never silently run without", default="0",
+        validate=_bool01),
     # ⚠️ Die Basis-Adressen stehen nicht hier, sondern werden unten aus dem Katalog
     # erzeugt — eine pro Anbieter. Eine einzige `TALOS_API_BASE_URL` fuer alle war der
     # Weg, auf dem OpenAI-Anfragen an Anthropics Basis gingen (Befund 05.08.).
@@ -152,6 +161,16 @@ KEYS: tuple[Key, ...] = (
     Key("TALOS_CLAUDE_WORKER_JOB_TIMEOUT", SETTING,
         "overall deadline per Claude job in seconds", default="900",
         validate=_positive_int),
+    Key("TALOS_CLAUDE_WORKER_BROWSER_HEADLESS", SETTING,
+        "run the browser MCP server headless — only ever loosens toward a "
+        "visible window on a machine that has none", default="1",
+        validate=_bool01),
+    Key("TALOS_CLAUDE_WORKER_BROWSER_CHROME", SETTING,
+        "pinned Chrome/Chromium binary for the browser MCP server; empty lets "
+        "chrome-devtools-mcp find one itself", default="", validate=_one_line),
+    Key("TALOS_COMPLETION_PUSH", SETTING,
+        "proactive factual message when a delegated job finishes", default="1",
+        validate=_bool01),
 )
 
 def _base_url_keys() -> tuple[Key, ...]:

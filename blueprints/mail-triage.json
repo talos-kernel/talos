@@ -1,0 +1,6 @@
+{
+  "name": "mail-triage",
+  "description": "Every two hours: what arrived in the mailbox, what matters — report only, nothing answered, nothing sent",
+  "when": "every 2 hours",
+  "prompt": "Mail-Triage: Pruefe den Posteingang und fasse neue Nachrichten kurz zusammen — Absender, Betreff, was noetig ist. Nur berichten, nichts beantworten und nichts versenden."
+}

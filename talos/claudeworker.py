@@ -19,11 +19,21 @@ fremder Agent ist keine Degradation, sondern ein anderes Produkt.
 
 Protokoll — JSON-Lines, eine Anfrage pro Verbindung:
 
-    →  {"op": "submit", "job_id": "…", "prompt": "…", "workspace": "…"}
+    →  {"op": "submit", "job_id": "…", "prompt": "…", "workspace": "…",
+        "browser_mcp": false}
     →  {"op": "status", "job_id": "…"}
     ←  {"ok": true, "state": "accepted"|"running"|"done"|"failed"|"timeout", …}
     ←  {"ok": false, "kind": "invalid_request"|"unknown_job"|"busy"|"unavailable",
         "message": "…"}
+
+`browser_mcp: true` gibt dem Job chrome-devtools-mcp als MCP-Server mit auf den
+Weg — die EINZige Browser-Automatisierung, die Talos kennt: sie laeuft hinter
+derselben Sandbox-Wand (gleicher Workspace, gleiche Deadline, gleiches Env),
+und der Kernel gated weiterhin nur die Delegation selbst. Der Worker schaltet
+sie separat frei (`TALOS_CLAUDE_WORKER_BROWSER_MCP=1`, Vorgabe AUS): ein Frame,
+der sie anfordert, ohne dass der Dienst sie kennt, wird ABGELEHNT statt still
+ohne Browser zu laufen — eine still degradierte Erlaubnis waere eine Luege
+gegenueber der Policy-Evidenz des Agenten.
 
 Bei "done" zusaetzlich: "summary" (aus dem `result`-Event des Streams),
 "files" (Pfade relativ zum Arbeitsbereich, aus `tool_use`-Events — Beweis
@@ -45,6 +55,7 @@ import subprocess
 import sys
 import threading
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterator, Mapping
 
@@ -62,6 +73,8 @@ __all__ = [
     "MAX_PROMPT_CHARS",
     "MAX_SUMMARY_CHARS",
     "SOCKET_ENV_VAR",
+    "BrowserMcp",
+    "browser_mcp_config",
     "handle_frame",
     "job_backends",
     "job_env",
@@ -101,6 +114,39 @@ DEFAULT_BIN = "claude"
 # Bewusst KEIN --dangerously-skip-permissions: die Konfinement-Grenze traegt,
 # ein Selbst-Freischaftsschalter des Kindes wuerde sie von innen aushoehlen.
 ALLOWED_TOOLS = "Read,Edit,Write,Bash,Glob,Grep"
+
+# chrome-devtools-mcp im Job: Server-Name, Datei (im Job-Workspace) und Paket.
+# Der Server erbt das Job-Env unveraendert — die MCP-Konfiguration traegt
+# absichtlich KEIN eigenes "env", damit keine Credential den ohnehin schon
+# minimierten Kind-Rahmen erweitert.
+BROWSER_MCP_SERVER = "chrome-devtools"
+BROWSER_MCP_FILE = ".chrome-devtools.mcp.json"
+BROWSER_MCP_PACKAGE = "chrome-devtools-mcp@latest"
+BROWSER_MCP_ALLOWED_TOOLS = f"mcp__{BROWSER_MCP_SERVER}"
+
+
+@dataclass(frozen=True)
+class BrowserMcp:
+    """Worker-seitige Browser-MCP-Einstellung. `enabled=False` heisst: ein
+    Frame, der sie anfordert, wird abgelehnt statt still ohne Browser zu
+    laufen. `headless` ist Vorgabe AN — ein sichtbares Fenster auf einem
+    Server ohne Display waere ohnehin nur ein zusaetzlicher Fehlermodus.
+    `chrome_path` pinnt die Binary, wenn npx sie nicht selbst findet (Pi:
+    /usr/bin/chromium)."""
+    enabled: bool = False
+    headless: bool = True
+    chrome_path: str = ""
+
+
+def browser_mcp_config(settings: BrowserMcp) -> dict:
+    """Die MCP-Konfiguration fuer `claude --mcp-config` — reine Struktur,
+    keine Geheimnisse. Gestartet wird per npx; Netz hat der Job ohnehin."""
+    args = [BROWSER_MCP_PACKAGE]
+    if settings.headless:
+        args.append("--headless=true")
+    if settings.chrome_path:
+        args.append(f"--executablePath={settings.chrome_path}")
+    return {"mcpServers": {BROWSER_MCP_SERVER: {"command": "npx", "args": args}}}
 
 # Ruhe-Takt des Stream-Lesers: ein schweigendes Kind darf die Deadline-Pruefung
 # des Aufrufers nicht blockieren (Herzschlag = None aus events()).
@@ -200,15 +246,24 @@ def parse_stream_event(line: dict, workspace: Path) -> tuple[str | None, str | N
     return (None, None)
 
 
-def _job_argv(prompt: str) -> list[str]:
+def _job_argv(prompt: str, *, mcp_config: Path | None = None) -> list[str]:
     """Die Argumente NACH dem Binary. Das Binary selbst gehoert der
-    Worker-Konfiguration (`make_spawn`) — kein Frame der Leitung darf es waehlen."""
-    return [
+    Worker-Konfiguration (`make_spawn`) — kein Frame der Leitung darf es waehlen.
+    Die MCP-Konfiguration (nur bei Browser-Jobs) hat der Worker selbst in den
+    Arbeitsbereich geschrieben; auch ihre WERKZEUGE stehen in der Allowlist,
+    sonst stuenden sie ungenutzt hinter dem Berechtigungs-Prompt."""
+    erlaubt = ALLOWED_TOOLS
+    if mcp_config is not None:
+        erlaubt = f"{erlaubt},{BROWSER_MCP_ALLOWED_TOOLS}"
+    argv = [
         "-p", prompt,
         "--output-format", "stream-json",
         "--verbose",
-        "--allowedTools", ALLOWED_TOOLS,
+        "--allowedTools", erlaubt,
     ]
+    if mcp_config is not None:
+        argv += ["--mcp-config", str(mcp_config)]
+    return argv
 
 
 class _Busy(Exception):
@@ -219,10 +274,12 @@ class _Job:
     """Ein Job in der fluechtigen Tabelle. Alles unter einem eigenen Schloss,
     damit `status` nie einen halb geschriebenen Zustand liest."""
 
-    def __init__(self, job_id: str, prompt: str, workspace: str) -> None:
+    def __init__(self, job_id: str, prompt: str, workspace: str, *,
+                 browser_mcp: BrowserMcp | None = None) -> None:
         self.job_id = job_id
         self.prompt = prompt
         self.workspace = workspace
+        self.browser_mcp = browser_mcp
         self.state = "accepted"
         self.summary = ""
         self.files: list[str] = []
@@ -251,14 +308,17 @@ class _Job:
 class _Jobs:
     """In-memory Job-Tabelle. Zustaende: accepted → running → done|failed|timeout."""
 
-    def __init__(self, *, max_parallel: int = MAX_PARALLEL, worker_home: str = "") -> None:
+    def __init__(self, *, max_parallel: int = MAX_PARALLEL, worker_home: str = "",
+                 browser: BrowserMcp | None = None) -> None:
         self._max_parallel = max_parallel
         self._worker_home = worker_home
+        self._browser = browser if browser is not None else BrowserMcp()
         self._schloss = threading.Lock()
         self._jobs: dict[str, _Job] = {}
 
     def submit(self, job_id: str, prompt: str, workspace: str, *,
-               spawn: Spawn, limits: SandboxLimits) -> str:
+               spawn: Spawn, limits: SandboxLimits,
+               browser_mcp: bool = False) -> str:
         with self._schloss:
             if job_id in self._jobs:
                 raise ValueError(f"job_id {job_id!r} is already known")
@@ -266,7 +326,12 @@ class _Jobs:
                          if j.state in ("accepted", "running"))
             if aktive >= self._max_parallel:
                 raise _Busy
-            job = _Job(job_id, prompt, workspace)
+            einstellung = None
+            if browser_mcp:
+                if not self._browser.enabled:
+                    raise ValueError("browser mcp is not enabled on this worker")
+                einstellung = self._browser
+            job = _Job(job_id, prompt, workspace, browser_mcp=einstellung)
             self._jobs[job_id] = job
         deadline = time.monotonic() + limits.timeout_s
         thread = threading.Thread(
@@ -313,14 +378,22 @@ def _run_job(job: _Job, worker_home: str, spawn: Spawn,
     Pruefung steht vor jedem `next()`, und das Handle liefert Herzschlaege,
     damit ein schweigendes Kind sie nicht aushungert."""
     workspace = Path(job.workspace)
+    mcp_pfad: Path | None = None
     try:
         workspace.mkdir(parents=True, exist_ok=True)
         (workspace / ".home").mkdir(exist_ok=True)
+        if job.browser_mcp is not None:
+            # Der WORKER schreibt die MCP-Konfiguration, bevor das Kind startet:
+            # das Kind findet sie fertig vor und kann ihren Inhalt nie waehlen.
+            mcp_pfad = workspace / BROWSER_MCP_FILE
+            mcp_pfad.write_text(
+                json.dumps(browser_mcp_config(job.browser_mcp)), encoding="utf-8")
+            os.chmod(mcp_pfad, 0o600)
     except OSError as ungueltig:
         job.beenden("failed", fehler=f"workspace not creatable: {ungueltig}")
         return
     job.beenden("running", returncode=-1)
-    argv = _job_argv(job.prompt)
+    argv = _job_argv(job.prompt, mcp_config=mcp_pfad)
     env = job_env(worker_home, workspace,
                   oauth_token=_lies_oauth_token(worker_home))
     try:
@@ -498,9 +571,13 @@ def handle_frame(raw: bytes, jobs: _Jobs, *, spawn: Spawn | None = None,
                 return _invalid("prompt exceeds the size cap")
             if not isinstance(workspace, str) or not os.path.isabs(workspace):
                 return _invalid("workspace missing or not absolute")
+            browser_mcp = frame.get("browser_mcp", False)
+            if not isinstance(browser_mcp, bool):
+                return _invalid("browser_mcp must be a boolean")
             try:
                 jobs.submit(job_id, prompt, workspace,
-                            spawn=hersteller, limits=grenzen)
+                            spawn=hersteller, limits=grenzen,
+                            browser_mcp=browser_mcp)
             except _Busy:
                 return _fehler(KIND_BUSY, "parallel job limit reached")
             except ValueError as ungueltig:
@@ -608,7 +685,16 @@ def serve(socket_path: str = DEFAULT_SOCKET, env_path: str = DEFAULT_ENV, *,
         _positive(cfg("TALOS_CLAUDE_WORKER_JOB_TIMEOUT"), DEFAULT_JOB_TIMEOUT_S),
         MAX_JOB_TIMEOUT_S,
     )
-    jobs = _Jobs(max_parallel=max_parallel, worker_home=worker_home)
+    # Das Browser-Gate des Dienstes: Vorgabe AUS. Es ist ein ZWEITES Schloss
+    # neben dem agent-seitigen Schalter — der Worker vertraut keinem Frame,
+    # und ein Versehen auf Agent-Seite oeffnet hier nichts.
+    browser = BrowserMcp(
+        enabled=cfg("TALOS_CLAUDE_WORKER_BROWSER_MCP") == "1",
+        headless=cfg("TALOS_CLAUDE_WORKER_BROWSER_HEADLESS", "1") != "0",
+        chrome_path=cfg("TALOS_CLAUDE_WORKER_BROWSER_CHROME"),
+    )
+    jobs = _Jobs(max_parallel=max_parallel, worker_home=worker_home,
+                 browser=browser)
     limits = SandboxLimits(timeout_s=timeout_s)
     hersteller = spawn if spawn is not None else make_spawn(claude_bin)
 

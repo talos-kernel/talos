@@ -1,0 +1,6 @@
+{
+  "name": "weekly-review",
+  "description": "Monday morning: the week from the event log — runs, errors, approvals, standing approvals — report only",
+  "when": "monday 09:00",
+  "prompt": "Wochenrueckblick: Berichte aus dem Event-Log, was die letzten 7 Tage lief — Laeufe, Fehler, entschiedene und offene Freigaben, stehende Freigaben. Nur berichten, nichts ausfuehren."
+}

@@ -417,6 +417,7 @@ def make_delegate_code_runner(
     socket_path: str,
     work_root: str,
     exchange: claudejobs.Exchange | None = None,
+    browser_enabled: bool = False,
 ) -> Callable[[ToolRequest], str]:
     """Baut den `delegate_code`-Runner. Dumm: ableiten, abschicken, formatieren.
 
@@ -425,17 +426,26 @@ def make_delegate_code_runner(
     Kernelfunktion ab, ueber deren Wurzel der Kernel eben geurteilt hat (das
     grab_frame-Muster: der Runner baut die Sanitisierungsregel nicht nach, er
     ruft sie). Entschieden ist laengst, bevor hier etwas laeuft; ein Fehler des
-    Workers wird benannt zurueckgegeben, nie still ersetzt.
+    Workers wird benannt zurueckgegeben, nie still ersetzt. `browser: true`
+    fordert chrome-devtools-mcp IM Job an — nur wirksam, wenn der Betreiber den
+    Schalter gesetzt hat; eine Anforderung gegen einen abgeschalteten Schalter
+    wird benannt abgelehnt, nie still ohne Browser gefahren (die Evidenz des
+    Kernels wuerde sonst luegen).
     """
 
     def delegate_code(req: ToolRequest) -> str:
         prompt = _need(req, "prompt")
+        browser = bool(req.args.get("browser"))
+        if browser and not browser_enabled:
+            return ("delegate_code: browser angefordert, aber der Browser-MCP "
+                    "ist abgeschaltet (TALOS_BROWSER_MCP_ENABLED=0)")
         job_id = uuid.uuid4().hex[:12]
         # Blattname aus der Kernelfunktion, Wurzel aus der Verdrahtung — im
         # Dienst ist das policy.claude_work_root(), und beide stimmen ueberein.
         workspace = str(Path(work_root) / Path(claude_job_workspace(job_id)).name)
         antwort = claudejobs.submit_job(
-            socket_path, job_id, prompt, workspace, exchange=exchange)
+            socket_path, job_id, prompt, workspace, exchange=exchange,
+            browser_mcp=browser)
         if not antwort.get("ok"):
             return (f"delegate_code: worker {antwort.get('kind', 'unavailable')}"
                     f" — {antwort.get('message', '')}")

@@ -66,6 +66,10 @@ RECALL_DB = DATA_DIR / "recall.db"
 TRANSCRIPT_DB = DATA_DIR / "transcript.db"
 # Zeitplaene — dieselbe Zusicherung wie Event-Log, Recall und Archiv.
 SCHEDULE_DB = DATA_DIR / "schedules.db"
+# Mitgelieferte Automatisierungs-Blueprints (talos/blueprints.py). Quelltext, keine
+# Laufzeitdaten: installiert wird daraus erst auf Kommando; der INSTALLIERTE Stand
+# liegt unter `data/`, wie alles, was ein Update mitnehmen darf.
+BLUEPRINTS_DIR = INSTALL_DIR / "blueprints"
 SNAPSHOT_DIR = DATA_DIR / "snapshots"
 # Die live geholten Modellnamen je Anbieter. Liegt bei den Laufzeitdaten und nicht
 # bei der Konfiguration: er ist wiederbeschaffbar, und ein Update darf ihn verlieren.
@@ -181,6 +185,15 @@ class TalosConfig:
     claude_worker_bin: str = "claude"
     claude_worker_max_parallel: int = 2
     claude_worker_job_timeout_s: int = 900
+    # Browser-Automatisierung (chrome-devtools-mcp) INNERHALB der Worker-Sandbox,
+    # nie als natives Werkzeug — Vorgabe AUS, wie der Worker selbst: ein Chrome
+    # mit Netz im Job erweitert die Angriffsflaeche der Sandbox, also ist es ein
+    # bewusster Betreiber-Entscheid und kein Mitlaeufer des Worker-Schalters.
+    browser_mcp_enabled: bool = False
+    # Der Completion-Push: eine kurze, faktische Meldung, wenn ein delegierter Job
+    # endet. Voreingestellt AN — ein Job, der nebenher laeuft, hat sonst keinen Weg
+    # zurueck. Er liefert nie Modellprosa; wer ihn abstellt, fragt per delegate_status.
+    completion_push: bool = True
     status_style: str = STATUS_STYLE
     shell_needs_human: bool = SHELL_NEEDS_HUMAN
     skills_dirs: tuple[Path, ...] = SKILLS_DIRS
@@ -380,6 +393,8 @@ def load_config(*, require_channel: bool = True) -> TalosConfig:
         claude_worker_job_timeout_s=int(
             _value("TALOS_CLAUDE_WORKER_JOB_TIMEOUT") or "900"
         ),
+        browser_mcp_enabled=_value("TALOS_BROWSER_MCP_ENABLED") == "1",
+        completion_push=_value("TALOS_COMPLETION_PUSH") != "0",
         status_style=(
             os.environ.get("TALOS_STATUS_STYLE")
             or secrets.get("TALOS_STATUS_STYLE", STATUS_STYLE)

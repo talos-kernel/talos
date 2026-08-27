@@ -49,6 +49,34 @@ def test_delegate_code_fail_closed_when_worker_down():
     assert "unavailable" in out          # named failure, never a silent fallback
 
 
+def test_delegate_code_browser_refused_when_switch_off():
+    def boom(path, frame, deadline): raise AssertionError("darf nicht anmelden")
+    run = tools.make_delegate_code_runner(socket_path="/s/c.sock",
+                                          work_root="/tmp/root", exchange=boom,
+                                          browser_enabled=False)
+    out = run(_req("delegate_code", {"prompt": "x", "browser": True}))
+    assert "abgeschaltet" in out         # benannt abgelehnt, nie still ohne Browser
+
+
+def test_delegate_code_browser_forwarded_when_switch_on():
+    fx = FakeExchange([b'{"ok": true, "state": "accepted"}\n'])
+    run = tools.make_delegate_code_runner(socket_path="/s/c.sock",
+                                          work_root="/tmp/root", exchange=fx,
+                                          browser_enabled=True)
+    out = run(_req("delegate_code", {"prompt": "x", "browser": True}))
+    assert "state=accepted" in out
+    assert json.loads(fx.sent[0]).get("browser_mcp") is True
+
+
+def test_delegate_code_default_frame_has_no_browser_flag():
+    fx = FakeExchange([b'{"ok": true, "state": "accepted"}\n'])
+    run = tools.make_delegate_code_runner(socket_path="/s/c.sock",
+                                          work_root="/tmp/root", exchange=fx,
+                                          browser_enabled=True)
+    run(_req("delegate_code", {"prompt": "x"}))
+    assert "browser_mcp" not in json.loads(fx.sent[0])
+
+
 def test_delegate_status_reads_worker_state():
     fx = FakeExchange([b'{"ok": true, "state": "done", "summary": "did it", "files": ["a.md"], "returncode": 0}\n'])
     run = tools.make_delegate_status_runner(socket_path="/s/c.sock", exchange=fx)
