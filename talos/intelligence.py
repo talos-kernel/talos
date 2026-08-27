@@ -422,8 +422,27 @@ def make_entity_status_runner(
         if set(req.args) != {"name"} or not isinstance(req.args.get("name"), str):
             raise ValueError("entity_status accepts exactly one string argument: name")
         entity = registry.get(req.args["name"])
-        if entity is None or entity.status is None:
-            raise ValueError("unknown entity or no configured status source")
+        if entity is None:
+            # Unbekannte Namen bleiben ein harter Fehler: Eine vom Modell
+            # erfundene Entity darf nie als gepruefter Status durchgehen.
+            raise ValueError("unknown entity")
+        if entity.status is None:
+            # Eine bekannte Entity ohne konfigurierte Statusquelle ist kein
+            # Werkzeugfehler, sondern die ehrliche Antwort auf die Statusfrage:
+            # Es gibt schlicht keine Live-Quelle. Ein done-Ergebnis statt eines
+            # Raises verhindert, dass ein ganzer Plan-Lauf an einer einzelnen
+            # bewusst quell-losen Entity stirbt.
+            payload = {
+                "entity": entity.name,
+                "source": "none",
+                "checked_at": clock(),
+                "verdict": "no_status_source",
+                "evidence": {
+                    "description": entity.description,
+                    "last_verified": entity.last_verified,
+                },
+            }
+            return json.dumps(payload, ensure_ascii=False, sort_keys=True)
         source = entity.status
         if source.kind == "http":
             # Freie Modell-URLs bleiben beim HTTPS-only-Runner. HTTP ist nur ueber

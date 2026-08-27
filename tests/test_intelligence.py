@@ -45,6 +45,13 @@ def registry() -> EntityRegistry:
                     "status": {"kind": "systemd_user", "unit": "cache-worker.service"},
                 },
                 {
+                    "id": "quiet-agent",
+                    "name": "Quiet Agent",
+                    "kind": "agent",
+                    "description": "Known agent without a configured status source.",
+                    "last_verified": "2026-08-12",
+                },
+                {
                     "id": "remote-agent",
                     "name": "Remote Agent",
                     "kind": "agent",
@@ -297,6 +304,22 @@ def test_systemd_entity_status_uses_fixed_unit_and_structured_evidence() -> None
     ]
     assert calls[0][1]["shell"] is False and calls[0][1]["timeout"] == 3
     assert output["entity"] == "Cache Worker" and output["verdict"] == "running"
+
+
+def test_entity_status_without_source_answers_honestly() -> None:
+    runner = make_entity_status_runner(
+        registry(), web_fetch=lambda _req: "", clock=lambda: 123.5
+    )
+
+    output = json.loads(runner(ToolRequest("entity_status", OWNER, {"name": "Quiet Agent"})))
+
+    assert output["entity"] == "Quiet Agent"
+    assert output["source"] == "none" and output["verdict"] == "no_status_source"
+    assert output["checked_at"] == 123.5
+    assert output["evidence"] == {
+        "description": "Known agent without a configured status source.",
+        "last_verified": "2026-08-12",
+    }
 
 
 def test_entity_status_rejects_unknown_entity_and_extra_arguments() -> None:
