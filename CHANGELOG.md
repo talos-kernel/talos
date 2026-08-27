@@ -6,6 +6,49 @@ they make possible that was not possible before — or, more often, what they ta
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions are alpha: the kernel's rules are stable, the surface around them is not.
 
+## [0.11.0-alpha] — 2026-08-27
+
+### Security
+
+- **`requires_env` is now enforced by the kernel.** `ToolSpec.requires_env`
+  was declared but consumed nowhere; a tool whose required environment was
+  missing would simply run. `policy.decide` gains a step that DENYs such a
+  request, naming the missing variables (never their values). What this takes
+  away: an env-gated tool could previously execute without its gate.
+- **Confined Claude Code delegation (`delegate_code`).** A persistent worker
+  daemon (`talos/claudeworker.py`) speaks JSON-lines over a filesystem-
+  permissioned Unix socket (0660 + group — no bearer token to leak) and runs
+  each accepted job as `claude -p` under the existing sandbox backends:
+  root read-only, only the job workspace writable, network on (the API is the
+  job's purpose — the one documented difference from `run_shell`). The job
+  workspace is derived by the kernel (`policy.claude_job_workspace`), never
+  taken from model arguments. Child environments carry a positive allowlist
+  only — no Talos secret, no bridge token. Jobs have an overall deadline
+  beside the read timeout, are capped in parallel and output, and are
+  **refused unconfined** (`TALOS_SANDBOX_ALLOW_UNCONFINED` does not apply).
+  Evidence — summary, changed files — is parsed from the worker's
+  `stream-json` only, never from model prose; paths claimed outside the
+  workspace are dropped. What this makes possible: an allowed turn can cause
+  files to be written inside a fresh, kernel-derived, disposable workspace by
+  Claude Code. Default off; opt-in via `TALOS_CLAUDE_WORKER_*`
+  (`docs/claude-worker.md`, `deploy/talos-claude-worker.service`).
+
+### Added
+
+- Two gated tools, 21 total: `delegate_code` (submit a bounded coding job;
+  Effect.EXEC, `sandbox_required`) and `delegate_status` (read a job's state
+  back; Effect.READ). Live tracking flows through the existing activity /
+  `talos events --follow` path.
+- Config: seven `TALOS_CLAUDE_WORKER_*` keys (POLICY/SETTING, default off).
+
+### Changed
+
+- Website consolidated into **one structure under one claims guard**:
+  `dossier.html` was merged into `index.html` (anchored sections, 301
+  redirect) after drifting a tool count behind; `tests/test_site_claims.py`
+  now guards every remaining page for tests/adversarial/kernel-lines/tools.
+- Suites: 1767 tests, 173 adversarial cases, 589-line gate path.
+
 ## [0.10.0-alpha] — 2026-08-26
 
 ### Security
