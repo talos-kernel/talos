@@ -92,12 +92,20 @@ def _start(sock_dir, tmp_path, spawn, *, extra_env=""):
         daemon=True,
     )
     thread.start()
-    for _ in range(200):
-        if sock.exists():
-            break
-        time.sleep(0.01)
-    else:  # pragma: no cover — waere ein Defekt des Fixtures selbst
-        raise RuntimeError("Worker-Socket ist nicht erschienen")
+    # Bereit heisst VERBINDBAR, nicht "Datei da": zwischen bind() und listen()
+    # liegt ein Fenster, und ein Client in diesem Fenster bekommt
+    # ECONNREFUSED — auf dem CI-macOS-Runner gemessen, lokal praktisch nie.
+    ende = time.monotonic() + 5
+    while True:
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as probe:
+                probe.settimeout(0.5)
+                probe.connect(str(sock))
+            break  # verbunden — der accept-Loop laeuft
+        except OSError:
+            if time.monotonic() > ende:  # pragma: no cover — Fixture-Defekt
+                raise RuntimeError("Worker-Socket ist nicht verbindbar")
+            time.sleep(0.02)
     return str(sock), stop
 
 
