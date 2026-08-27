@@ -6,6 +6,42 @@ they make possible that was not possible before — or, more often, what they ta
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions are alpha: the kernel's rules are stable, the surface around them is not.
 
+## [0.13.0-alpha] — 2026-08-27
+
+### Security
+
+- **Attended auto-approval only ever converts the kernel's own NEEDS_HUMAN,
+  behind all four ceilings** (`talos/autonomy.py`). Unattended and delegated
+  runs turn NEEDS_HUMAN into DENY before it can reach the conversion; channel
+  trust below FULL is DENY; a lowered autonomy dial still asks. What this
+  takes away: nothing the walls covered — system/secret paths are DENY before
+  this point, and the routine class is derived from tool-spec properties
+  (sandbox-contained or reversible, targets re-checked against the kernel's
+  own floor functions), so an outward-send or credential-carrying tool can
+  never fall into it, including tools that do not exist yet.
+- **Every auto-approval is evidence, not silence**: `approval.auto_attended`
+  is written to the hash-chained event log before any effect, and the grant
+  carries `human_approved=false` — no fake "yes" anywhere in the chain.
+
+### Changed
+
+- **Attended is generous, unattended stays strict.** Interactive runs (a real
+  message from an allowed principal) no longer prompt for the routine class:
+  sandboxed shell, reversible reads, workspace writes with snapshot/undo.
+  Scheduled runs, blueprints and delegated runs keep exactly the old verdicts
+  (`TALOS_ATTENDED_AUTOAPPROVE=0` restores prompting everywhere).
+- **The agent stopped reciting rules.** Protocol-level tone change: a denial
+  is answered with one sentence (reason + legitimate path, then take it),
+  operator corrections are one sentence with evidence, never an opener, and
+  burned tool calls are not conversation — the evidence lives in /events.
+  Substantial build/code/research tasks now consider `delegate_code` by
+  default.
+- **The site leads with strength.** New hero: "Strong enough to hand a shell
+  to. Verifiable enough that you can." — the gate demo stays, reframed as
+  "watch it work", plus a new section for the 0.12 capabilities (confined
+  worker, completion push, MEDIA: attachments, blueprints, four channels).
+- Test count: 1909 (was 1890).
+
 ## [0.12.0-alpha] — 2026-08-27
 
 ### Security

@@ -278,7 +278,10 @@ def run(once: bool = False, ask: str = "", chat: bool = False) -> None:
     # derselbe Fehler wie ein Cron-Job mit voller Macht.
     delegated = ReadOnlyCeiling()
     policy = GovernedKernel(
-        kernel, governor, registry.trust_of, unattended=unattended, delegated=delegated
+        kernel, governor, registry.trust_of, unattended=unattended, delegated=delegated,
+        # Die Auto-Freigabe ist keine fuenfte Decke — sie lockert nur die Freigabe-Praxis
+        # der Routineklasse im interaktiven Lauf, nie eine Mauer (siehe autonomy.py).
+        attended_autoapprove=config.attended_autoapprove,
     )
     # undo_last braucht den Event-Log (Backup-Pfade kommen aus dem Beleg, nicht aus den
     # Argumenten) — deshalb wird es hier ergänzt und nicht in tools.RUNNERS gehalten.

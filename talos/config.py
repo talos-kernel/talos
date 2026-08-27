@@ -194,6 +194,15 @@ class TalosConfig:
     # endet. Voreingestellt AN — ein Job, der nebenher laeuft, hat sonst keinen Weg
     # zurueck. Er liefert nie Modellprosa; wer ihn abstellt, fragt per delegate_status.
     completion_push: bool = True
+    # Die Attended-Auto-Freigabe: in einem interaktiven Lauf (eine eingehende
+    # Nachricht eines erlaubten Principals — ein Mensch ist da und kann hinschauen)
+    # laeuft die Routineklasse ohne Freigabe-Prompt: reversible Werkzeuge mit
+    # Snapshot/undo und eingesperrte Shell-Arbeit ohne Zugangsdaten. Unbeaufsichtigte
+    # und delegierte Laeufe bleiben exakt so strikt wie bisher, die Kernel-Floors
+    # auch — die Auto-Freigabe greift nur auf ein kernel-eigenes NEEDS_HUMAN, nie
+    # auf ein DENY. Voreingestellt AN (Owner-Entscheid); jede Auto-Freigabe steht
+    # als `approval.auto_attended` im Event-Log.
+    attended_autoapprove: bool = True
     status_style: str = STATUS_STYLE
     shell_needs_human: bool = SHELL_NEEDS_HUMAN
     skills_dirs: tuple[Path, ...] = SKILLS_DIRS
@@ -395,6 +404,7 @@ def load_config(*, require_channel: bool = True) -> TalosConfig:
         ),
         browser_mcp_enabled=_value("TALOS_BROWSER_MCP_ENABLED") == "1",
         completion_push=_value("TALOS_COMPLETION_PUSH") != "0",
+        attended_autoapprove=_value("TALOS_ATTENDED_AUTOAPPROVE") != "0",
         status_style=(
             os.environ.get("TALOS_STATUS_STYLE")
             or secrets.get("TALOS_STATUS_STYLE", STATUS_STYLE)

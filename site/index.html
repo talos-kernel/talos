@@ -42,7 +42,7 @@
   "programmingLanguage": "Python",
   "license": "https://opensource.org/licenses/MIT",
   "offers": { "@type": "Offer", "price": "0", "priceCurrency": "CHF" },
-  "description": "An autonomous agent you can hand a shell to, because it can prove what it will not do. Every tool call passes a deterministic policy gate that grants authority for exact arguments, once, for 30 seconds, and writes the verdict to an append-only log."
+  "description": "An autonomous agent you can hand a shell to, because it can prove every step it takes. Every tool call passes a deterministic policy gate that grants authority for exact arguments, once, for 30 seconds, and writes the verdict to an append-only log."
 }
 </script>
 
@@ -382,6 +382,7 @@ html.js .rv.in{opacity:1;transform:none}
   <div class="wrap">
     <a class="brand" href="#top"><img class="mark" src="brand/sigil-78.png" alt="" width="26" height="26">TALOS</a>
     <a class="lnk" href="#kernel">Kernel</a>
+    <a class="lnk" href="#does">Work</a>
     <a class="lnk" href="#tools">Tools</a>
     <a class="lnk" href="#nail">The Nail</a>
     <a class="lnk" href="#ledger">Ledger</a>
@@ -399,24 +400,26 @@ html.js .rv.in{opacity:1;transform:none}
 <header class="hero" id="top">
   <div class="wrap hero-grid">
     <div>
-      <p class="sys">talos 0.12.0-alpha · deterministic gate · MIT</p>
-      <h1>The model proposes.<br>It never decides.</h1>
-      <p class="lede">An agent you can hand <strong>a shell</strong> to. Every tool call passes
-      a deterministic security kernel before it runs — each effect authorised individually,
-      <strong>bound to its exact arguments, valid once, for thirty seconds.</strong></p>
+      <p class="sys">talos 0.13.0-alpha · deterministic gate · MIT</p>
+      <h1>Strong enough to hand a shell to.</h1>
+      <p class="lede"><strong>Verifiable enough that you can.</strong> A real shell, a
+      confined Claude worker that builds, tests and browses for you, four chat channels.
+      Every tool call passes a deterministic security kernel before it runs: each effect
+      authorised individually, <strong>bound to its exact arguments, valid once, for
+      thirty seconds.</strong></p>
       <div class="cta-row">
-        <a class="btn" href="#kernel">Watch it refuse you ▾</a>
+        <a class="btn" href="#kernel">Watch it work ▾</a>
         <a class="btn ghost" href="#install">Install</a>
       </div>
       <div class="tick" id="tick">
         <span class="t-pre">gate</span>
         <span class="t-tool">run_shell</span>
-        <span class="t-cmd" id="tickCmd">rm -rf /</span>
-        <span class="t-verdict v-deny" id="tickV">⛒ DENY</span>
-        <span class="t-why" id="tickWhy">hardline: no recovery path, no token overrides this</span>
+        <span class="t-cmd" id="tickCmd">uptime</span>
+        <span class="t-verdict v-allow" id="tickV">✓ ALLOW</span>
+        <span class="t-why" id="tickWhy">clean — runs sandboxed, logged before it runs</span>
       </div>
       <div class="meter-row">
-        <span><b>1891</b>unit tests</span>
+        <span><b>1909</b>unit tests</span>
         <span><b>173/173</b>adversarial</span>
         <span><b>589</b>lines · gate</span>
         <span><b>30s</b>token life</span>
@@ -433,9 +436,10 @@ html.js .rv.in{opacity:1;transform:none}
 <section id="kernel">
   <div class="wrap">
     <p class="sec-tag rv">PolicyKernel.decide()</p>
-    <h2 class="rv">Watch it refuse you</h2>
+    <h2 class="rv">Watch it work. The gate, in the open.</h2>
     <p class="sub rv">The real shell pipeline, running in this page: <strong>path floor →
-    hardline → dangerous → effect</strong>. Type any shell command. Nothing is
+    hardline → dangerous → effect</strong>. Type any shell command. Clean work runs,
+    and every verdict is computed in front of you, with its reason. Nothing is
     sent anywhere.</p>
 
     <div class="demo rv">
@@ -461,6 +465,32 @@ html.js .rv.in{opacity:1;transform:none}
         persistence, effect. The authoritative version is the Python one; 173 adversarial
         cases run against it on every install and every update.</p>
       </div>
+    </div>
+  </div>
+</section>
+
+<section id="does">
+  <div class="wrap">
+    <p class="sec-tag rv">what it does</p>
+    <h2 class="rv">Hand it real work, not just questions.</h2>
+    <p class="sub rv">The strength is the point, and it runs through the same gate as
+    everything else. Nothing here is a promise; each line names the mechanism.</p>
+    <div class="nails">
+      <div class="nail rv"><code>delegate_code</code><p>Hands a bounded coding task to a
+      confined Claude worker that builds, runs the tests and, with <code>browser: true</code>,
+      drives a browser inside the same sandbox. Double opt-in, off by default, writing only
+      into a kernel-derived disposable workspace.</p></div>
+      <div class="nail rv"><code>completion push</code><p>When a delegated job finishes,
+      fails or times out, the origin chat gets a short factual message built from the
+      worker record, never model prose.</p></div>
+      <div class="nail rv"><code>MEDIA:</code><p>A tag in the agent's own reply sends a
+      generated file as a real chat attachment: kernel-derived roots only, capped at
+      20 MB and 4 files, and tool output can never forge one.</p></div>
+      <div class="nail rv"><code>/blueprints</code><p>Installable automations in plain
+      language: "every morning 08:30", never cron syntax. An installed blueprint is an
+      ordinary schedule entry; the unattended ceiling applies unchanged.</p></div>
+      <div class="nail rv"><code>4 channels</code><p>Terminal, Telegram, mail over IMAP,
+      WhatsApp for delivery. Every way in fetches; nothing opens a listening socket.</p></div>
     </div>
   </div>
 </section>
@@ -571,8 +601,11 @@ html.js .rv.in{opacity:1;transform:none}
   <div class="wrap">
     <p class="sec-tag rv">proof, not adjectives</p>
     <h2 class="rv">Reproducible in under a minute</h2>
+    <p class="sub rv">This is why the strength can be trusted: none of it asks for
+    belief. The installer runs both suites in front of you, and every number on
+    this page is a number the suite reproduces.</p>
     <div class="stats">
-      <div class="stat rv"><div class="n cnt" data-n="1891">0</div><div class="l">unit tests, run by the installer in front of you</div></div>
+      <div class="stat rv"><div class="n cnt" data-n="1909">0</div><div class="l">unit tests, run by the installer in front of you</div></div>
       <div class="stat rv"><div class="n cnt" data-n="173">0</div><div class="l">adversarial cases trying to pass the kernel</div></div>
       <div class="stat rv"><div class="n cnt" data-n="44">0</div><div class="l">end-to-end cases against a real model</div></div>
       <div class="stat rv"><div class="n cnt" data-n="589">0</div><div class="l">lines in the file that decides everything</div></div>
@@ -595,7 +628,7 @@ html.js .rv.in{opacity:1;transform:none}
 <span class="p">curl</span> -fsSL https://talos-agent.ch/install.sh | <span class="p">bash</span>
 
   <span class="p">▸</span> Checking prerequisites      <span class="ok">✓ Python 3.11+</span>
-  <span class="p">▸</span> Running the test suite      <span class="ok">1891 passed</span>
+  <span class="p">▸</span> Running the test suite      <span class="ok">1909 passed</span>
   <span class="p">▸</span> Running the adversarial suite
     <span class="ok">173/173 cases behaved as expected.</span> <span class="c">— any failure aborts the install</span>
 
@@ -706,14 +739,14 @@ const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const log = document.getElementById('bootlog');
   if (reduced) { boot.remove(); return; }
   const LINES = [
-    ['TALOS <span class="dim">0.12.0-alpha</span>', 120],
+    ['TALOS <span class="dim">0.13.0-alpha</span>', 120],
     ['<span class="dim">An agent whose actions are bounded, explained and checkable.</span>', 340],
     ['', 60],
     ['▸ Checking prerequisites', 260],
     ['  <span class="ok">✓</span> Python 3.11+', 140],
     ['  <span class="ok">✓</span> curl, tar available', 200],
     ['▸ Running the test suite', 420],
-    ['  <span class="ok">1891 passed</span>', 300],
+    ['  <span class="ok">1909 passed</span>', 300],
     ['▸ Running the adversarial suite', 460],
     ['  <span class="ok">173/173 cases behaved as expected.</span>', 380],
     ['', 80],
@@ -863,7 +896,7 @@ if (!reduced) setInterval(() => { if (Math.random() < 0.12) flickOnce(); }, 4000
   const v = document.getElementById('tickV');
   const why = document.getElementById('tickWhy');
   const cases = talosGate.samples;
-  let ci = 1; /* the static markup already shows case 0 */
+  let ci = 0; /* the static markup shows an ALLOW case; the rotation starts at the first sample */
   function show() {
     const c = cases[ci % cases.length]; ci++;
     const r = talosGate.decide(c);

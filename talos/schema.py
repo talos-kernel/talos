@@ -171,6 +171,11 @@ KEYS: tuple[Key, ...] = (
     Key("TALOS_COMPLETION_PUSH", SETTING,
         "proactive factual message when a delegated job finishes", default="1",
         validate=_bool01),
+    Key("TALOS_ATTENDED_AUTOAPPROVE", SETTING,
+        "attended (interactive) runs auto-approve the routine class — reversible "
+        "tools with snapshot/undo and sandboxed shell work — without a prompt; "
+        "unattended/delegated runs stay exactly as strict, kernel floors untouched, "
+        "every auto-approval is logged", default="1", validate=_bool01),
 )
 
 def _base_url_keys() -> tuple[Key, ...]:

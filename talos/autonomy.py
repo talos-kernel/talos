@@ -56,7 +56,11 @@ from .policy import (
     guard_targets,
     stricter,
 )
+# Die Auto-Freigabe prueft Ziele gegen DIESELBEN Floor-Funktionen des Kernels,
+# statt sie nachzubauen — eine zweite, abweichende Secret-Liste waere ein Loch.
+from .policy import PERSISTENCE_PREFIXES, _derived_targets, _hits, _is_secret
 from .trust import TrustLookup
+from .vault import VaultPathError
 
 MIN_LEVEL = 0
 MAX_LEVEL = 5
@@ -95,6 +99,50 @@ LEVEL_HELP: dict[int, str] = {
 
 class AutonomyError(ValueError):
     """Ungueltige Stufe oder nicht zugelassene Identitaet. Der Stand bleibt unveraendert."""
+
+
+# Grund-Praefix der Attended-Auto-Freigabe. Der Executor erkennt daran, dass ein
+# ALLOW nicht vom rohen Kernel kam, und schreibt sein `approval.auto_attended` —
+# die Freigabe ist leise fuer the operator, aber nie unsichtbar im Log.
+AUTO_ATTENDED_REASON = "attended auto-approval"
+
+
+def is_auto_attended(decision: Decision) -> bool:
+    """War dieses ALLOW eine Attended-Auto-Freigabe? (Fuer den Beleg im Event-Log.)"""
+    return (
+        decision.verdict is Verdict.ALLOW
+        and decision.reason.startswith(AUTO_ATTENDED_REASON)
+    )
+
+
+def attended_routine(req: ToolRequest, spec: ToolSpec | None, kernel: PolicyKernel) -> bool:
+    """Die Routineklasse der Attended-Auto-Freigabe — aus Spec-Eigenschaften, nie aus Namen.
+
+    Dazu gehoeren:
+      * eingesperrte Shell-Arbeit ohne Zugangsdaten (`run_shell`: EXEC ohne
+        `requires_env` — die Sandbox hat weder Netz noch Credentials), und
+      * reversible Werkzeuge (Snapshot/`/undo`) — aber nur, wenn ihre Ziele
+        keinen Floor beruehren. Ein reversibles Schreiben auf ein Secret oder
+        eine Persistenz-Stelle (`~/.bashrc`, der eigene Code) ist keine Routine,
+        sondern genau der Floor, der auch attended fragt.
+
+    Nie dazu: irreversible Werkzeuge und alles mit `requires_env` — beides ist
+    Wirkung auf konfigurierte Infrastruktur nach aussen (Worker-Jobs, Versand).
+    Weil die Klasse aus den Spec-Eigenschaften abgeleitet ist, faellt ein neues
+    Werkzeug automatisch richtig ein, statt auf einer Namensliste vergessen zu
+    werden.
+    """
+    if spec is None:
+        return False
+    if spec.effect is Effect.EXEC:
+        return not spec.requires_env
+    if not spec.reversible:
+        return False
+    try:
+        targets = set(req.targets) | set(_derived_targets(req, kernel.vault_dir))
+    except VaultPathError:
+        return False
+    return not any(_is_secret(t) or _hits(t, PERSISTENCE_PREFIXES) for t in targets)
 
 
 def clamp(level: object) -> int:
@@ -227,6 +275,16 @@ class GovernedKernel:
     # sie ist optional und auch sie kann ausschliesslich verschaerfen — beide gehen
     # durch dieselbe `stricter`-Stelle wie der Regler und die Kanal-Stufe.
     delegated: object | None = None
+    # Attended-Auto-Freigabe (Owner-Entscheid): in einem interaktiven Lauf — eine
+    # eingehende Nachricht eines erlaubten Principals, ein Mensch kann hinschauen —
+    # laeuft die Routineklasse (`attended_routine`) ohne Freigabe-Prompt. Sie ist
+    # keine Decke und keine zweite Erlaubnisquelle: sie greift NUR, wenn der Kernel
+    # selbst NEEDS_HUMAN gesagt hat (nie bei DENY — die Mauern bleiben), keine der
+    # vier Decken zugeschlagen hat (unattended/delegated haetten laengst DENY
+    # gemacht) und der Regler der Anfrage freie Hand gibt (wer die Leine kuerzer
+    # stellt, WILL gefragt werden). Vorgabe AUS: ein vergessener Parameter darf nur
+    # weniger erlauben, nie mehr — AN stellt sie die Config (`__main__`).
+    attended_autoapprove: bool = False
 
     @property
     def manifest(self) -> ToolManifest:
@@ -249,12 +307,26 @@ class GovernedKernel:
 
     def decide(self, req: ToolRequest) -> Decision:
         spec = self.kernel.manifest.get(req.tool)
-        decision = self.governor.apply(self.kernel.decide(req), req, spec)
+        base = self.kernel.decide(req)
+        decision = self.governor.apply(base, req, spec)
         decision = channel_trust.apply(self.trust_of(req.identity.channel), decision, spec)
         if self.unattended is not None:
             decision = self.unattended.apply(decision, spec)
         if self.delegated is not None:
             decision = self.delegated.apply(decision, spec)
+        # Attended-Auto-Freigabe zuletzt, NACH allen Decken: haette eine davon
+        # zugeschlagen (unattended/delegated -> DENY, Regler/Kanal strenger), ist
+        # das Urteil hier nicht mehr das kernel-eigene NEEDS_HUMAN — und genau nur
+        # dieses darf die Routineklasse ersetzen. Der Grund traegt das Praefix,
+        # an dem der Executor seinen Log-Beleg erkennt.
+        if (
+            self.attended_autoapprove
+            and base.verdict is Verdict.NEEDS_HUMAN
+            and decision.verdict is Verdict.NEEDS_HUMAN
+            and ceiling(self.governor.level, req, spec).verdict is Verdict.ALLOW
+            and attended_routine(req, spec, self.kernel)
+        ):
+            decision = Decision(Verdict.ALLOW, f"{AUTO_ATTENDED_REASON}: {base.reason}")
         return decision
 
 

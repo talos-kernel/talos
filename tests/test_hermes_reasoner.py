@@ -104,6 +104,27 @@ def test_tool_protocol_names_the_walls_before_the_model_hits_them() -> None:
         assert term in prompt
 
 
+def test_tool_protocol_sets_colleague_tone_after_denials_and_corrections() -> None:
+    """Gemessener Anlass 27.08.: nach einem DENY predigte das Modell die Regel, statt
+    sofort den legitimen Weg zu liefern; eine erfundene Datei korrigierte es in drei
+    Absaetzen statt einem Satz. Das Protokoll muss den Ton (Kollege, nicht Auditor)
+    und die Ein-Satz-Disziplin festnageln, sonst faellt das Modell in den Auditor-
+    Default zurueck."""
+    prompt = TOOL_PROTOCOL.lower()
+    for term in (
+        "capable colleague, not an auditor",  # der Ton-Gesamtsatz
+        "never recite them",        # der Kernel setzt durch, das Modell belehrt nicht
+        "one sentence",             # Denial UND Korrektur: je ein Satz, dann handeln
+        "never preach",
+        "as i said before",         # explizit verbotene Wendung
+        "'no.'",                    # nie mit "Nein." eroeffnen
+        "/events",                  # Evidenz lebt im Event-Log, nicht in der Antwort
+        "delegate_code",            # Staerke-Default fuer substanzielle Aufgaben
+        "orchestration",
+    ):
+        assert term in prompt
+
+
 def test_hermes_parser_reads_plain_oneshot_and_defensive_json() -> None:
     assert _interpret_hermes("  Hallo.\n") == ("Hallo.", "")
     assert _interpret_hermes(json.dumps({"result": "Antwort"})) == ("Antwort", "")

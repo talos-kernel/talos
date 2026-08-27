@@ -24,6 +24,7 @@ from enum import Enum
 from typing import Callable
 
 from . import verifier
+from .autonomy import is_auto_attended
 from .capability import CapabilityError, CapabilityMint, Grant
 from .eventlog import Event, EventLog
 from .manifest import Effect
@@ -94,6 +95,7 @@ class Executor:
     ) -> Outcome:
         decision = self.policy.decide(req)
         self._record(run_id, "exec.intent", req, decision)  # write-ahead VOR Wirkung
+        self._record_auto_attended(run_id, req, decision)
 
         # DENY ist absolut — auch eine menschliche Freigabe hebt ihn NICHT auf (Bricking-Schutz).
         if decision.verdict is Verdict.DENY:
@@ -132,6 +134,27 @@ class Executor:
 
         self._record_snapshot(run_id, req, token)
         return self._final(run_id, req.tool, Status.DONE, done_detail(decision), result, grant=grant)
+
+    def _record_auto_attended(self, run_id: str, req: ToolRequest, decision: Decision) -> None:
+        """Beleg der Attended-Auto-Freigabe — leise fuer the operator, nie unsichtbar im Log.
+
+        Steht direkt hinter dem Intent, VOR jeder Wirkung: wer spaeter fragt, warum
+        hier kein Prompt kam, findet die Antwort am Lauf, nicht in der Erinnerung.
+        """
+        if not is_auto_attended(decision):
+            return
+        self.log.append(
+            Event(
+                run_id,
+                "executor",
+                "approval.auto_attended",
+                {
+                    "tool": req.tool,
+                    "targets": list(self.policy.guard_targets(req)),
+                    "reason": decision.reason,
+                },
+            )
+        )
 
     def _record_grant(self, run_id: str, req: ToolRequest, grant: Grant) -> None:
         """Beleg der Praegung. Macht im Log sichtbar, dass ein Lauf ein Recht hatte —

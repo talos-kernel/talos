@@ -4,7 +4,7 @@ Static, single file, no build step and no dependencies. Deploy by copying this
 directory to a webroot.
 
 `index.html` carries a browser re-implementation of the policy kernel so visitors can
-watch it refuse them without installing anything. It mirrors the decision order of
+watch it judge their commands without installing anything. It mirrors the decision order of
 `talos/policy.py` and `talos/command_floor.py`.
 
 **If you change the kernel, re-check the demo.** The Python version is authoritative;
