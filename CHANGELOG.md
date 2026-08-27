@@ -6,6 +6,43 @@ they make possible that was not possible before — or, more often, what they ta
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions are alpha: the kernel's rules are stable, the surface around them is not.
 
+## [0.12.0-alpha] — 2026-08-27
+
+### Security
+
+- **`MEDIA:` attachments are gated at the kernel floor.** A `MEDIA:` line in the
+  agent's own reply sends a generated file as a real chat attachment — but only
+  from kernel-derived roots (workspace, claude-jobs), never from system paths,
+  never secret-shaped names (`.env`, `*.pem`, `*.key`, …) at any depth, capped
+  at 20 MB and 4 files per reply. Tool output, web pages and operator text can
+  never forge a tag: extraction runs on the agent's reply text only. What this
+  takes away: a path the model names is no longer a path the model gets.
+- **Browser automation stays behind the sandbox wall.** chrome-devtools-mcp
+  runs as an MCP server *inside* the confined Claude worker job — never as a
+  native Talos tool (a click has no derivable target, so it is DENY by
+  construction). Double opt-in, both default off: agent-side
+  `TALOS_BROWSER_MCP_ENABLED` and worker-side `TALOS_CLAUDE_WORKER_BROWSER_MCP`.
+  A browser request against a disabled gate is refused by name, never silently
+  run without the browser — the kernel's evidence would otherwise lie. The
+  generated MCP config carries no `env` block: no secret crosses that frame
+  (proven by an env-diff adversarial test).
+
+### Added
+
+- **Completion push for delegated jobs** (`talos/notify.py`). When a
+  `delegate_code` job reaches a terminal state (`done`/`failed`/`timeout`),
+  the origin chat gets a short factual message built from the worker record —
+  never model prose. `TALOS_COMPLETION_PUSH=0` disables it.
+- **Automation blueprints** (`talos/blueprints.py`). Installable, plain-language
+  schedules over `schedule.py` — "every morning 08:30", "weekdays 18:00",
+  "every 2 hours", never cron syntax. `/blueprints` lists,
+  `/blueprint install|remove|enable|disable|status` manages. Installed
+  blueprints are ordinary schedule entries: `UnattendedCeiling` applies
+  unchanged, by construction.
+- **`delegate_code` gains `browser: true`** — adds chrome-devtools-mcp to that
+  job's sandbox (navigation, forms, extraction) when both gates are open.
+- Test count: 1890 (was 1773).
+
 ## [0.11.0-alpha] — 2026-08-27
 
 ### Security
