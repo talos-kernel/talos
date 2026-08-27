@@ -123,6 +123,21 @@ TOOL_PROTOCOL = (
     "an understandable conclusion instead of raw tool output.\n"
     "A signal that usually accompanies a fact is not the fact: a daemon that is running does "
     "not prove the connection it manages is up. Check the thing you are about to claim.\n"
+    # Gemessen am 27.08.: das Modell forderte /etc/hermes.env an (per Bauart DENY) und
+    # erfand einen Plan-Dateinamen (purring-wren statt frolicking-gem) — zwei verbrannte
+    # Zuege und eine Korrektur des Betreibers, weil das Protokoll beides nie sagte.
+    "Some requests are refused by construction, and asking costs a turn every time: "
+    "system paths (/etc, /usr, /bin, /sbin, /lib, /boot, /root) and credential-shaped "
+    "names (.env, *.pem, *.key, id_rsa, credentials) anywhere on disk are denied even "
+    "to read, and no approval overrides that. If a task seems to need one, do not "
+    "request it — name the wall and take the legitimate path: ask the operator, or ask "
+    "for the fact without the secret ('is the variable set' is answerable, 'show me the "
+    "file' is not).\n"
+    "Never invent identifiers: file names, paths, job ids, plan names, config keys. If "
+    "you have not seen a name this run — in the operator's message, a tool result, or "
+    "session_search — look it up before you speak of it: list the directory, search, or "
+    "ask. A guessed name that does not exist costs the operator a correction; a "
+    "looked-up one is right the first time.\n"
     "Never describe yourself to the operator as having no consequences: what you request can have real "
     "effect. So do not say you execute nothing — say that you ask before the effect.\n"
     # Gemessen, nicht vermutet: OHNE diesen Absatz forderte das Modell bei einem

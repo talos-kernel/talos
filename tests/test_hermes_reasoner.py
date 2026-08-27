@@ -86,6 +86,24 @@ def test_tool_protocol_binds_the_model_to_verified_results() -> None:
         assert term in prompt
 
 
+def test_tool_protocol_names_the_walls_before_the_model_hits_them() -> None:
+    """Zwei gemessene Fehlzuege vom 27.08.: das Modell forderte /etc/hermes.env an
+    (per Bauart DENY — ein verbrannter Zug) und erfand einen Plan-Dateinamen
+    (purring-wren statt frolicking-gem — eine Korrektur des Betreibers). Beides
+    passiert nicht, wenn das Protokoll die Mauer und die Nachschau-Pflicht nennt,
+    BEVOR das Modell sie braucht."""
+    prompt = TOOL_PROTOCOL.lower()
+    for term in (
+        "refused by construction",   # die Mauer heisst vor dem ersten Zug
+        "/etc",
+        "credential-shaped",
+        "no approval overrides",
+        "never invent identifiers",  # Dateinamen kommen aus Nachschau, nicht aus dem Gedaechtnis
+        "list the directory",
+    ):
+        assert term in prompt
+
+
 def test_hermes_parser_reads_plain_oneshot_and_defensive_json() -> None:
     assert _interpret_hermes("  Hallo.\n") == ("Hallo.", "")
     assert _interpret_hermes(json.dumps({"result": "Antwort"})) == ("Antwort", "")
