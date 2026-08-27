@@ -40,7 +40,17 @@ Versions are alpha: the kernel's rules are stable, the surface around them is no
   to. Verifiable enough that you can." — the gate demo stays, reframed as
   "watch it work", plus a new section for the 0.12 capabilities (confined
   worker, completion push, MEDIA: attachments, blueprints, four channels).
-- Test count: 1909 (was 1890).
+- **Browser MCP proven live on the Pi.** `TALOS_CLAUDE_WORKER_BROWSER_CMD`
+  runs a fixed installed chrome-devtools-mcp binary (the job's npm cache is
+  read-only — `npx @latest` would re-download into every disposable HOME),
+  and `TALOS_CLAUDE_WORKER_BROWSER_CHROME_ARGS` passes `--chromeArg` flags
+  (Chrome under bubblewrap needs `--no-sandbox`: it may not create its own
+  namespaces). Measured gotcha: `/usr/bin/chromium` is a shell wrapper
+  sourcing `/etc/chromium.d/*` and dies in the masked sandbox — point
+  `TALOS_CLAUDE_WORKER_BROWSER_CHROME` at the real binary
+  (`/usr/lib/chromium/chromium`). E2E on the Pi: navigation, title read,
+  file written, read-back verified.
+- Test count: 1912 (was 1890).
 
 ## [0.12.0-alpha] — 2026-08-27
 
