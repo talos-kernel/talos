@@ -246,3 +246,17 @@ else
   echo "(keine)"
 fi
 echo "Deploy verifiziert: ausschliesslich $SOURCE/ -> $REMOTE_DEST"
+
+# Der Blueprint-Katalog liegt neben dem Package (INSTALL_DIR/blueprints) — ohne
+# ihn kennt das Ziel keine installierbaren Blueprints. Gleicher Vertrag wie oben:
+# spiegeln, dann per erneutem Dry-Run beweisen, dass Quelle und Ziel gleich sind.
+BLUEPRINTS_SOURCE="$REPO_ROOT/blueprints"
+if [ -d "$BLUEPRINTS_SOURCE" ]; then
+  rsync -a --delete --exclude='.DS_Store' \
+    "$BLUEPRINTS_SOURCE/" "$REMOTE:$REMOTE_ROOT/blueprints/"
+  if rsync -a --delete --dry-run --itemize-changes \
+      "$BLUEPRINTS_SOURCE/" "$REMOTE:$REMOTE_ROOT/blueprints/" | grep -q .; then
+    die "Remote-Blueprint-Katalog weicht nach dem Deploy noch von der Quelle ab"
+  fi
+  echo "Deploy verifiziert: $BLUEPRINTS_SOURCE/ -> $REMOTE:$REMOTE_ROOT/blueprints/"
+fi
