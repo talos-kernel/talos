@@ -82,7 +82,16 @@ In der Unit (oder Umgebung) des **Agenten**:
 ```
 Environment=TALOS_CLAUDE_WORKER_ENABLED=1
 Environment=TALOS_CLAUDE_WORKER_SOCKET=/run/talos/claude.sock
+Environment=TALOS_CLAUDE_WORKER_ROOT=/var/lib/talos/claude-jobs
 ```
+
+⚠️ Diese drei Schlüssel gehören in die **Prozess-Umgebung** des Agenten (die
+`Environment=`-Zeilen seiner Unit), nicht nur in eine Secrets-Datei: der Kernel
+prüft `requires_env` gegen `os.environ` und `policy.claude_work_root()` liest
+die Root selbst aus der Umgebung — bewusst ohne Umweg über `config.py` (das
+`TALOS_MODEL_WORKER`-Muster). Wer sie nur in die Secrets-Datei schreibt,
+bekommt ein sauberes, aber unvermeidliches `DENY: required env not set` —
+gemessen am ersten E2E dieses Releases.
 
 Erst dann existieren die Werkzeuge. `delegate_code {"prompt": "…"}` reicht einen
 begrenzten Auftrag ein und gibt eine `job_id` zurück; `delegate_status
