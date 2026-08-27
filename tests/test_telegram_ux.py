@@ -438,6 +438,55 @@ def test_a_telegram_file_path_that_tries_to_escape_is_refused() -> None:
         assert tg._plausible_file_path(boese) == ""
 
 
+# --- Ein Abbruchbericht geht raus, auch wenn Telegram sein Markdown ablehnt -----------
+@dataclass
+class MarkdownRejectingClient(FakeTelegramClient):
+    """Bildet die echte Bot-API nach: legacy-Markdown mit ungerader Entity-Zahl -> 400.
+
+    So starben zwei echte Laeufe auf dem Pi: der Abbruchbericht trug `read_file` /
+    `entity_status` (ungerade Unterstriche), Telegram antwortete mit 400 Bad Request,
+    und die fertige Antwort endete als „could not deliver the answer".
+    """
+
+    def send_message(self, chat_id: int, text: str, **kwargs) -> int:
+        if kwargs.get("parse_mode") == "Markdown" and text.count("_") % 2:
+            raise RuntimeError("400 Client Error: Bad Request (can't parse entities)")
+        return super().send_message(chat_id, text, **kwargs)
+
+
+def test_a_report_telegrams_markdown_rejects_still_goes_out_plain() -> None:
+    """Zustellung schlaegt Formatierung: ohne parse_mode raus statt gar nicht.
+
+    Dieselbe Bauart wie `TelegramReply._adopt_fallback`: die Antwort ist wichtiger
+    als ihr Satz. Ohne den Fallback verlor der Kanal genau die Berichte, die der
+    Betreiber am dringendsten braucht — die ueber einen Fehlschlag.
+    """
+    client = MarkdownRejectingClient()
+    channel = TelegramChannel(client)
+
+    bericht = (
+        "Stopped at: read_file — error: [Errno 2] No such file or directory: "
+        "'memory/2026-08-27.md'"
+    )
+    channel.send("telegram:42", bericht)
+
+    assert len(client.sent) == 1
+    _, text, kwargs = client.sent[0]
+    assert text == bericht
+    assert "parse_mode" not in kwargs        # unformatiert zugestellt, nicht verloren
+
+
+def test_well_formed_markdown_keeps_its_formatting() -> None:
+    """Der Fallback ist Notbremse, nicht Regel: gueltiges Markdown bleibt formatiert."""
+    client = MarkdownRejectingClient()
+    channel = TelegramChannel(client)
+
+    channel.send("telegram:42", "Plan *abgebrochen*, Rest lief nicht.")
+
+    _, _, kwargs = client.sent[0]
+    assert kwargs.get("parse_mode") == "Markdown"
+
+
 # --- Eine zu lange Antwort geht raus, statt verloren zu gehen ---------------------------
 def test_a_long_answer_is_split_instead_of_being_dropped() -> None:
     """⚠️ Der echte Ausfall: „could not deliver the answer", waehrend die fertige

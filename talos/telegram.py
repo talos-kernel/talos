@@ -1128,9 +1128,16 @@ class TelegramChannel:
 
     def send(self, conversation: str, text: str) -> None:
         # Markdown wird nicht umgeschrieben: insbesondere Codeblöcke bleiben exakt erhalten.
+        # Lehnt Telegram das Markdown eines Teils ab (z. B. ungerade Unterstriche in
+        # `read_file` — legacy-Markdown kennt keine Flucht), geht dieser Teil ohne
+        # parse_mode raus: die Antwort ist wichtiger als ihr Satz, und ein Bericht
+        # ueber einen Fehlschlag darf nie selbst an der Zustellung scheitern.
         chat = chat_id_of(conversation)
         for teil in split_for_telegram(text):
-            self._client.send_message(chat, teil, parse_mode="Markdown")
+            try:
+                self._client.send_message(chat, teil, parse_mode="Markdown")
+            except Exception:
+                self._client.send_message(chat, teil)
 
     def send_structured(self, conversation: str, message: StructuredMessage) -> None:
         chat_id = chat_id_of(conversation)
