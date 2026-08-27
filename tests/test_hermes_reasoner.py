@@ -125,6 +125,22 @@ def test_tool_protocol_sets_colleague_tone_after_denials_and_corrections() -> No
         assert term in prompt
 
 
+def test_tool_protocol_names_the_vault_note_schema() -> None:
+    """Gemessen am ersten daily-reflection-Lauf (27.08., 22:09): das Modell rief
+    vault_write_note auf und scheiterte an 'Frontmatter unvollständig (fehlt:
+    confidence, last-verified, projects, …)' — die Protokoll-Zeile sagte nur
+    'YAML frontmatter', nie welche Felder Pflicht sind. Ein Schema, das das
+    Modell nicht kennt, ist ein garantierter Fehlzug pro Notiz."""
+    prompt = TOOL_PROTOCOL.lower()
+    for term in (
+        "confidence",
+        "last-verified",
+        "projects",
+        "errors|gotchas|decisions|workflows|patterns",
+    ):
+        assert term in prompt
+
+
 def test_hermes_parser_reads_plain_oneshot_and_defensive_json() -> None:
     assert _interpret_hermes("  Hallo.\n") == ("Hallo.", "")
     assert _interpret_hermes(json.dumps({"result": "Antwort"})) == ("Antwort", "")

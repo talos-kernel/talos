@@ -48,7 +48,7 @@ TOOL_PROTOCOL = (
     '- entity_status {"name": "known entity"}\n'
     '- vault_search {"query": "…", "limit": 1..10}\n'
     '- vault_get {"path": "qmd://obsidian/…md or relative/path.md"}\n'
-    '- vault_write_note {"path": "gotchas/kebab-case.md", "content": "Markdown with YAML frontmatter"}\n'
+    '- vault_write_note {"path": "gotchas/kebab-case.md", "content": "Markdown starting with YAML frontmatter — required fields: type (errors|gotchas|decisions|workflows|patterns), tags, projects, date, confidence, last-verified"}\n'
     '- undo_last {}\n'
     '- web_fetch {"url": "https://…"}\n'
     '- web_search {"query": "…", "limit": 1..10}\n'
