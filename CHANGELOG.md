@@ -6,6 +6,18 @@ they make possible that was not possible before — or, more often, what they ta
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions are alpha: the kernel's rules are stable, the surface around them is not.
 
+## [0.13.1-alpha] — 2026-08-27
+
+### Fixed
+
+- **Raw `PLAN: {…}` JSON no longer leaks into the Telegram chat.** The reply
+  stream muted `TOOL_CALL` lines as machinery but not the plan line, so a
+  plan's raw JSON briefly became the message (screenshot from the operator).
+  The plan's human form already exists — the activity line "🗺️ N steps — …" —
+  and a plan-led turn is either all machinery or discarded and retried by the
+  loop, so muting it loses nothing meant for the operator. Prose that merely
+  starts alike ("PLANET …") still shows.
+
 ## [0.13.0-alpha] — 2026-08-27
 
 ### Security

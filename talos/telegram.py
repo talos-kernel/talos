@@ -42,6 +42,14 @@ _UPLOAD_TIMEOUT_S = 120
 # (TOOL_PROTOCOL in reasoner.py, gelesen von agent_loop.parse_tool_call). Das ist
 # Maschinerie und niemals Text fuer den Betreiber.
 TOOL_CALL_MARKER = "TOOL_CALL"
+# Dieselbe Klasse: die `PLAN: {…}`-Zeile. Der Agent-Loop liest sie (plan.parse_plan)
+# und ihre menschliche Form existiert bereits — die Aktivitaetszeile "🗺️ N steps — …"
+# (ProgressStage.PLAN). Im Screenshot vom 27.08. landete das rohe JSON trotzdem im
+# Chat: der Stream filterte nur TOOL_CALL. Ein Plan-Zug traegt danach entweder einen
+# TOOL_CALL (ganz Maschinerie) oder wird vom Loop verworfen und neu begonnen
+# (declared_now ohne Werkzeugwunsch) — Stillschweigen verliert also nichts, was der
+# Betreiber sehen sollte.
+PLAN_MARKER = "PLAN:"
 
 def split_for_telegram(text: str, limit: int = TELEGRAM_TEXT_LIMIT) -> tuple[str, ...]:
     """Eine zu lange Antwort in mehrere Nachrichten — statt sie zu verlieren.
@@ -840,7 +848,7 @@ class TelegramActivity:
 class _Verdict(Enum):
     """Was mit einem Reasoner-Zug geschieht, sobald genug Zeichen da sind."""
 
-    MUTE = "mute"   # eine TOOL_CALL-Zeile: Maschinerie, gehoert nie in den Chat
+    MUTE = "mute"   # eine TOOL_CALL-/PLAN-Zeile: Maschinerie, gehoert nie in den Chat
     SHOW = "show"   # Prosa: darf wachsen
 
 
@@ -859,10 +867,11 @@ def _verdict(collected: str) -> _Verdict | None:
     head = collected.lstrip()
     if not head:
         return None
-    if head.startswith(TOOL_CALL_MARKER):
-        return _Verdict.MUTE
-    if TOOL_CALL_MARKER.startswith(head):
-        return None
+    for marker in (TOOL_CALL_MARKER, PLAN_MARKER):
+        if head.startswith(marker):
+            return _Verdict.MUTE
+        if marker.startswith(head):
+            return None
     return _Verdict.SHOW
 
 

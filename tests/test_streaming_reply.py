@@ -113,6 +113,45 @@ def test_prose_that_merely_starts_like_the_marker_still_appears() -> None:
     assert client.sent[0][1] == "TOOLs sind bereit."
 
 
+# --- Die PLAN-Falle: rohes Plan-JSON gehoert nie in den Chat -------------------
+def test_a_plan_line_never_reaches_the_chat_even_split_across_deltas() -> None:
+    """Befund 27.08.: der Betreiber sah `PLAN: {"goal": …}` als rohes JSON im Chat.
+    Die Zeile ist Maschinerie wie TOOL_CALL — ihre menschliche Form ist die
+    Aktivitaetszeile (ProgressStage.PLAN), nicht die Nachricht."""
+    client = FakeChatClient()
+    reply = _reply(client)
+
+    for delta in ("PL", "AN: {\"goal\": ", "\"SSZ-Ads\"", ", \"steps\": [\"suchen\"]}"):
+        reply.push(delta)
+
+    assert client.sent == []
+    assert client.edited == []
+    assert reply.adopt("Fertig.") is False   # nichts gewachsen -> normal senden
+
+
+def test_plan_and_tool_call_in_one_turn_stay_silent() -> None:
+    """Der Normalfall: Ankuendigung und erster Schritt im selben Zug."""
+    client = FakeChatClient()
+    reply = _reply(client)
+
+    reply.push('PLAN: {"goal": "x", "steps": ["a", "b"]}\n')
+    reply.push('TOOL_CALL: {"tool": "vault_search", "args": {"query": "x"}}')
+
+    assert client.texts == []
+
+
+def test_prose_that_merely_starts_like_plan_still_appears() -> None:
+    """`PLANET der Affen` ist Prosa — nur der echte Marker mit Doppelpunkt schweigt."""
+    client = FakeChatClient()
+    reply = _reply(client)
+
+    reply.push("PLAN")     # noch unentscheidbar: echtes Praefix
+    assert client.texts == []
+    reply.push("ET der Affen.")
+
+    assert client.sent[0][1] == "PLANET der Affen."
+
+
 def test_prose_grows_visibly_and_the_last_version_is_exactly_the_answer() -> None:
     client = FakeChatClient()
     reply = _reply(client, min_edit_interval=1.2)
