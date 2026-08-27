@@ -115,12 +115,21 @@ def worker(tmp_path, sock_dir):
             daemon=True,
         )
         thread.start()
+        # Bereit heisst VERBINDBAR, nicht nur sichtbar: die Socket-Datei legt `bind()`
+        # an, Verbindungen nimmt der Worker erst ab `listen()` an — dazwischen
+        # (chmod/chown) bekommt ein Client unter Last ECONNREFUSED, und der Test
+        # misst einen Netzfehler statt des Worker-Protokolls. Die Probe spricht
+        # kein Protokoll; eine stille Verbindung kostet den Daemon nichts.
         for _ in range(200):
-            if sock.exists():
+            try:
+                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as probe:
+                    probe.settimeout(0.5)
+                    probe.connect(str(sock))
                 break
-            time.sleep(0.01)
+            except OSError:
+                time.sleep(0.01)
         else:  # pragma: no cover — waere ein Defekt des Fixtures selbst
-            raise RuntimeError("Worker-Socket ist nicht erschienen")
+            raise RuntimeError("Worker-Socket ist nicht verbindbar")
         stops.append(stop)
         return str(sock)
 
@@ -134,8 +143,15 @@ def _frage(pfad: str, roh: bytes) -> dict:
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as verbindung:
         verbindung.settimeout(10)
         verbindung.connect(pfad)
-        verbindung.sendall(roh)
-        verbindung.shutdown(socket.SHUT_WR)
+        try:
+            verbindung.sendall(roh)
+            verbindung.shutdown(socket.SHUT_WR)
+        except OSError:
+            # Ein Frame ueber dem Limit beantwortet der Server sofort und schliesst,
+            # waehrend der Client noch sendet — der RST macht send/shutdown zum
+            # Fehler, die Antwort liegt aber schon im Empfangspuffer. Genau diese
+            # Antwort (und das Ueberleben des Daemons) ist die Testaussage.
+            pass
         puffer = bytearray()
         while True:
             stueck = verbindung.recv(65536)
