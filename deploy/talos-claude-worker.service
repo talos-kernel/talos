@@ -1,0 +1,47 @@
+# Talos Claude-Worker — nimmt begrenzte Coding-Jobs per Socket entgegen und
+# fuehrt sie confined aus. Installation und Begruendung jeder Zeile:
+# docs/claude-worker.md
+[Unit]
+Description=Talos Claude worker (confined delegate_code jobs)
+After=network.target
+
+[Service]
+Type=simple
+User=talos-claude
+Group=talos-claude
+# /run/talos, gehoert talos-claude:talos-claude, Mode 0750: der Agent (User talos,
+# Mitglied der Gruppe talos-claude) erreicht den Socket darin, der Rest der
+# Maschine nicht.
+RuntimeDirectory=talos
+RuntimeDirectoryMode=0750
+Environment=TALOS_CLAUDE_WORKER_SOCKET=/run/talos/claude.sock
+Environment=TALOS_CLAUDE_WORKER_ENV=/etc/talos/claude-worker.env
+ExecStart=/usr/bin/env python3 -m talos.claudeworker
+Restart=on-failure
+RestartSec=2
+
+# Haertung wie beim Modell-Worker, mit zwei begruendeten Abweichungen:
+# - ProtectHome=read-only statt yes: der Worker muss sein dediziertes HOME mit
+#   dem Claude-OAuth-State lesen koennen. Liegt das HOME ausserhalb von /home
+#   (empfohlen, siehe ReadWritePaths), bleibt auch der OAuth-Token-Refresh
+#   schreibfaehig.
+# - kein Netzwerk-Block: die Jobs brauchen die Anthropic-API — der eine
+#   dokumentierte Unterschied zur run_shell-Confine-Form.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+# ProtectSystem=strict macht das ganze Dateisystem read-only; die Job-Workspaces
+# und das dedizierte HOME muessen schreibbar bleiben. Pfade an die eigene
+# Installation anpassen (TALOS_CLAUDE_WORKER_ROOT / TALOS_CLAUDE_WORKER_HOME in
+# /etc/talos/claude-worker.env).
+ReadWritePaths=/var/lib/talos/claude-jobs /var/lib/talos/claude-home
+
+[Install]
+WantedBy=multi-user.target

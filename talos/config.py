@@ -169,6 +169,18 @@ class TalosConfig:
     agent_consult_token: str = ""
     # Private Namen/Aliase des konsultierbaren Agenten; nur fuer explizite Handoff-Erkennung.
     agent_consult_aliases: tuple[str, ...] = ()
+    # Der Claude-Worker: aus, bis der Betreiber ihn bewusst einschaltet und ihm einen
+    # Socket zeigt. Ohne Socket gibt es das Werkzeug gar nicht — ein konfigurierter,
+    # aber toter Dienst waere ein Pfad, der bei jeder Delegation scheitert.
+    claude_worker_enabled: bool = False
+    claude_worker_socket: str = ""
+    claude_worker_root: str = ""
+    # Eigenes HOME der Claude-Jobs — dort liegt NUR der Claude-OAuth-Stand, kein
+    # Talos-Geheimnis. Es ist absichtlich ein zweites Zuhause, nicht das des Agenten.
+    claude_worker_home: str = ""
+    claude_worker_bin: str = "claude"
+    claude_worker_max_parallel: int = 2
+    claude_worker_job_timeout_s: int = 900
     status_style: str = STATUS_STYLE
     shell_needs_human: bool = SHELL_NEEDS_HUMAN
     skills_dirs: tuple[Path, ...] = SKILLS_DIRS
@@ -357,6 +369,17 @@ def load_config(*, require_channel: bool = True) -> TalosConfig:
                 if part.strip()
             )
         )[:8],
+        claude_worker_enabled=_value("TALOS_CLAUDE_WORKER_ENABLED") == "1",
+        claude_worker_socket=_value("TALOS_CLAUDE_WORKER_SOCKET"),
+        claude_worker_root=_value("TALOS_CLAUDE_WORKER_ROOT"),
+        claude_worker_home=_value("TALOS_CLAUDE_WORKER_HOME"),
+        claude_worker_bin=_value("TALOS_CLAUDE_WORKER_BIN") or "claude",
+        claude_worker_max_parallel=int(
+            _value("TALOS_CLAUDE_WORKER_MAX_PARALLEL") or "2"
+        ),
+        claude_worker_job_timeout_s=int(
+            _value("TALOS_CLAUDE_WORKER_JOB_TIMEOUT") or "900"
+        ),
         status_style=(
             os.environ.get("TALOS_STATUS_STYLE")
             or secrets.get("TALOS_STATUS_STYLE", STATUS_STYLE)

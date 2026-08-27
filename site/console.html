@@ -290,7 +290,7 @@ main.on{display:block}
   <nav class="snav" aria-label="Site">
     <a href="/">Home</a>
     <a href="/docs/">Docs</a>
-    <a href="/dossier.html">Dossier</a>
+    <a href="/#ledger">Ledger</a>
     <a class="on" href="/console.html" aria-current="page">Console</a>
     <a href="https://github.com/talos-kernel/talos">GitHub</a>
   </nav>
@@ -324,12 +324,12 @@ main.on{display:block}
       <span class="panel-title">vitals</span>
       <div class="panel-body">
         <div class="gauges">
-          <div class="g"><div class="n cnt" data-n="1737">0</div><div class="l">unit tests</div><div class="bar"><i style="--p:1"></i></div></div>
-          <div class="g"><div class="n"><span class="cnt" data-n="166">0</span><i>/166</i></div><div class="l">adversarial</div><div class="bar"><i style="--p:1"></i></div></div>
+          <div class="g"><div class="n cnt" data-n="1767">0</div><div class="l">unit tests</div><div class="bar"><i style="--p:1"></i></div></div>
+          <div class="g"><div class="n"><span class="cnt" data-n="173">0</span><i>/173</i></div><div class="l">adversarial</div><div class="bar"><i style="--p:1"></i></div></div>
           <div class="g"><div class="n cnt" data-n="44">0</div><div class="l">e2e · real model</div><div class="bar"><i style="--p:1"></i></div></div>
-          <div class="g"><div class="n cnt" data-n="548">0</div><div class="l">gate lines</div><div class="bar"><i style="--p:.4"></i></div></div>
+          <div class="g"><div class="n cnt" data-n="589">0</div><div class="l">gate lines</div><div class="bar"><i style="--p:.4"></i></div></div>
           <div class="g"><div class="n cnt" data-n="30" data-suf="s">0</div><div class="l">token life</div><div class="bar"><i style="--p:.12"></i></div></div>
-          <div class="g"><div class="n cnt" data-n="19">0</div><div class="l">gated tools</div><div class="bar"><i style="--p:.6"></i></div></div>
+          <div class="g"><div class="n cnt" data-n="21">0</div><div class="l">gated tools</div><div class="bar"><i style="--p:.6"></i></div></div>
           <div class="g"><div class="n">0</div><div class="l">default identities</div><div class="bar"><i style="--p:0"></i></div></div>
         </div>
       </div>
@@ -402,15 +402,18 @@ main.on{display:block}
 <main id="ws-tools">
   <div class="ws">
     <div class="panel">
-      <span class="panel-title">the instruments · 18 · every one passes the gate</span>
+      <span class="panel-title">the instruments · 21 · every one passes the gate</span>
       <div class="panel-body">
         <p style="color:var(--dim);margin-bottom:14px;max-width:72ch">A tool without an entry in
         <code>TARGET_EXTRACTORS</code> is <strong>DENY by construction</strong> — not by a rule
         somebody remembered to write, but because there is nothing to judge it on.</p>
         <ul class="toolgrid">
+          <li><code>agent_consult</code></li>
           <li><code>ask_operator</code></li>
           <li><code>browse</code></li>
           <li><code>delegate</code></li>
+          <li><code>delegate_code</code></li>
+          <li><code>delegate_status</code></li>
           <li><code>entity_status</code></li>
           <li><code>grab_frame</code></li>
           <li><code>hear</code></li>
@@ -470,8 +473,8 @@ main.on{display:block}
 <pre><span class="c"># the installer proves the claims before your eyes, then starts nothing</span>
 <span class="p">curl</span> -fsSL https://talos-agent.ch/install.sh | <span class="p">bash</span>
 
-<span class="c">▸ Running the test suite</span>       <span class="ok">1737 passed</span> <span class="c">— pytest prints the platform-specific pass/skip breakdown</span>
-<span class="c">▸ Running the adversarial suite</span> <span class="ok">166/166 cases behaved as expected.</span> <span class="c">— any failure aborts the install</span>
+<span class="c">▸ Running the test suite</span>       <span class="ok">1767 passed</span> <span class="c">— pytest prints the platform-specific pass/skip breakdown</span>
+<span class="c">▸ Running the adversarial suite</span> <span class="ok">173/173 cases behaved as expected.</span> <span class="c">— any failure aborts the install</span>
 
 <span class="ok">Done.</span> Talos is in ~/talos — and it is <b>not running</b>.
 <span class="c">That is not a forgotten step. The switch is yours.</span></pre>
@@ -494,7 +497,7 @@ main.on{display:block}
   <span class="sp"></span>
   <a href="/">home</a>
   <a href="/docs/">docs</a>
-  <a href="/dossier.html">dossier</a>
+  <a href="/#ledger">ledger</a>
   <a href="https://github.com/talos-kernel/talos">github</a>
   <span>1..6 switch panel</span>
   <span>MIT</span>

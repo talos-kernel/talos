@@ -95,6 +95,17 @@ KEYS: tuple[Key, ...] = (
         "fixed endpoint for inter-agent consultation — changing it redirects private reports"),
     Key("TALOS_AGENT_CONSULT_ALIASES", POLICY,
         "private names that make explicit consultation requests mandatory"),
+    Key("TALOS_CLAUDE_WORKER_ENABLED", POLICY,
+        "master switch for the Claude worker delegation tool", default="0",
+        validate=_bool01),
+    Key("TALOS_CLAUDE_WORKER_SOCKET", POLICY,
+        "unix socket of the Claude worker — changing it redirects delegated jobs"),
+    Key("TALOS_CLAUDE_WORKER_ROOT", POLICY,
+        "root directory for Claude job workspaces — jobs may write only below it"),
+    Key("TALOS_CLAUDE_WORKER_HOME", POLICY,
+        "dedicated HOME for Claude jobs holding only the Claude OAuth state"),
+    Key("TALOS_CLAUDE_WORKER_BIN", POLICY,
+        "pinned claude binary path for worker jobs", default="claude"),
     # ⚠️ Die Basis-Adressen stehen nicht hier, sondern werden unten aus dem Katalog
     # erzeugt — eine pro Anbieter. Eine einzige `TALOS_API_BASE_URL` fuer alle war der
     # Weg, auf dem OpenAI-Anfragen an Anthropics Basis gingen (Befund 05.08.).
@@ -136,6 +147,11 @@ KEYS: tuple[Key, ...] = (
         validate=_positive_int),
     Key("TALOS_WEB_ALLOW_HTTP", SETTING, "allow plain http as well as https",
         default="0", validate=_bool01),
+    Key("TALOS_CLAUDE_WORKER_MAX_PARALLEL", SETTING,
+        "max concurrent Claude worker jobs", default="2", validate=_positive_int),
+    Key("TALOS_CLAUDE_WORKER_JOB_TIMEOUT", SETTING,
+        "overall deadline per Claude job in seconds", default="900",
+        validate=_positive_int),
 )
 
 def _base_url_keys() -> tuple[Key, ...]:

@@ -128,11 +128,21 @@ def test_the_site_states_the_real_number_of_tools() -> None:
 # drei verschiedene Wahrheiten. Der Test las nur eine Datei, also sah er eine Wahrheit.
 # Seitdem gilt die Pflicht fuer jede Seite des Auftritts; die Werkzeug-NAMEN bleiben
 # der Startseite vorbehalten (sie ist die einzige, die das Inventar auflistet).
+# Am 27.08. ging dossier.html in der Startseite auf (#ledger, #myth, #limits) — eine
+# Struktur statt zwei, damit Zahlen nicht mehr zwischen parallelen Kopien driften
+# koennen; die Vergleichsseite trat dafuer unter dieselbe Pflicht.
 EXTRA_PAGES = (
-    ROOT / "site" / "dossier.html",
     ROOT / "site" / "console.html",
     ROOT / "site" / "docs" / "index.html",
+    ROOT / "site" / "vergleich" / "index.html",
 )
+
+
+def _tool_count() -> int:
+    from talos.tools import default_manifest
+
+    echte = default_manifest().tools
+    return len(echte) if not hasattr(echte, "items") else len(list(echte))
 
 
 def _page_claims(seite: Path) -> list[int]:
@@ -144,6 +154,7 @@ def test_every_page_of_the_site_states_the_real_numbers() -> None:
         "Tests": _collected_tests(),
         "Adversarial-Faelle": _redteam_cases(),
         "Kernel-Zeilen": len(KERNEL.read_text(encoding="utf-8").splitlines()),
+        "Werkzeuge": _tool_count(),
     }
     for seite in (SITE, *EXTRA_PAGES):
         if not seite.exists():

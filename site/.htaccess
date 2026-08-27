@@ -9,6 +9,11 @@
   ForceType text/plain
 </FilesMatch>
 
+# dossier.html ist in die Startseite aufgegangen (#ledger, #myth, #limits).
+# Ein Fragment kann nicht in einer 301 mitreisen — mod_alias wuerde das # kodieren —
+# deshalb zeigt die Weiterleitung auf /; die Anker leben dort.
+Redirect 301 /dossier.html /
+
 # Der Quell-Tarball ist erreichbar, gehoert aber in keinen Suchindex.
 <IfModule mod_headers.c>
   <FilesMatch "\.(tar\.gz|sig|sha256)$">

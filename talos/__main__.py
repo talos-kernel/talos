@@ -39,7 +39,7 @@ from .executor import Executor
 from .fallback import FallbackReasoner, parse_chain
 from .memory import Memory
 from .intelligence import EntityRegistry, IntelligenceLayer, make_entity_status_runner
-from .policy import WORKSPACE_DIR, PolicyKernel
+from .policy import WORKSPACE_DIR, PolicyKernel, claude_work_root
 from .question import QuestionDesk
 from .recall import Recall
 from .schedule import ScheduleStore, UnattendedCeiling
@@ -335,6 +335,17 @@ def run(once: bool = False, ask: str = "", chat: bool = False) -> None:
             config.agent_consult_url,
             config.agent_consult_token,
         ),
+        # Der Claude-Worker existiert nur, wenn der Betreiber ihn eingeschaltet
+        # hat — ein verdrahteter Runner ohne Worker waere ein stilles Versprechen.
+        # Der Workspace-Anker kommt aus derselben Kernelfunktion, ueber deren
+        # Ergebnis der Kernel urteilt.
+        **({
+            "delegate_code": tools.make_delegate_code_runner(
+                socket_path=config.claude_worker_socket,
+                work_root=claude_work_root()),
+            "delegate_status": tools.make_delegate_status_runner(
+                socket_path=config.claude_worker_socket),
+        } if config.claude_worker_enabled else {}),
         # Netz. Die Grenze liegt in `web.guard_url`, nicht im Pfad-Floor: ein Werkzeug,
         # das beliebige URLs holt, ist sonst ein Tor ins interne Netz.
         # Der rendernde Browser. Dieselbe Netz-Grenze wie `web_fetch` (`guard_url`) und

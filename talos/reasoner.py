@@ -56,6 +56,8 @@ TOOL_PROTOCOL = (
     '- session_search {"query": "…", "limit": 1..10}\n'
     '- delegate {"question": "…"}\n'
     '- agent_consult {"question": "…", "attempted": "…", "failure": "…"}\n'
+    '- delegate_code {"prompt": "…"} — hand a bounded coding task to the confined Claude worker; returns a job_id\n'
+    '- delegate_status {"job_id": "…"} — read a delegated job\'s state and result\n'
     '- browse {"url": "https://…"}\n'
     '- see_image {"path": "…", "question": "…"}\n'
     '- hear {"path": "…"}\n'

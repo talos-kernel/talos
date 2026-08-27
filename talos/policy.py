@@ -198,6 +198,31 @@ def frame_output_path(video: object, at: object = "") -> str:
     return str(FRAME_INBOX / f"frame-{stamm}{marke}.jpg")
 
 
+_CLAUDE_JOB_SAFE = re.compile(r"[^A-Za-z0-9_-]")
+
+
+def claude_work_root() -> str:
+    """Wurzel, UNTERHALB derer jeder Claude-Job-Workspace liegt.
+
+    Wird hier aus der Umgebung gelesen, nicht aus config.py — ein Floor, der
+    config fragte, schuetzte das Verzeichnis erst, NACHDEM es gelesen wurde
+    (die _config_files-Regel).
+    """
+    configured = os.environ.get("TALOS_CLAUDE_WORKER_ROOT", "")
+    return configured or str(WORKSPACE_DIR / "claude-jobs")
+
+
+def claude_job_workspace(job_id: str) -> str:
+    """Das Verzeichnis, in dem ein delegierter Claude-Job schreiben darf.
+
+    Vom Kernel abgeleitet, nie aus den Argumenten — das Modell kann nicht
+    waehlen, wo die Bytes eines fremden Agenten landen (das
+    frame_output_path-Muster).
+    """
+    safe = _CLAUDE_JOB_SAFE.sub("-", job_id)[:64]
+    return str(Path(claude_work_root()) / f"job-{safe}")
+
+
 TARGET_EXTRACTORS = {
     "read_file": lambda args: (str(args.get("path", "")),) if "path" in args else (),
     # Sehen hat ein echtes Ziel — den Bildpfad. Das ist der Grund, warum Talos die Datei
@@ -248,6 +273,13 @@ TARGET_EXTRACTORS = {
     # Operator-konfigurierte Agentenberatung. Endpoint und Credential liegen im Runner,
     # das Modell liefert nur begrenzten Fragetext; die Antwort erteilt keine Capability.
     "agent_consult": lambda args: (),
+    # Delegieren an den Claude-Worker: das Ziel ist die kernel-abgeleitete
+    # Wurzel, unter der jeder Job-Workspace liegt — nie ein Modellpfad. Der
+    # Floor greift also, bevor ein einziger Byte des fremden Agenten faellt.
+    "delegate_code": lambda args: (claude_work_root(),),
+    # Status lesen fasst nichts an — aber der Eintrag muss stehen: ein
+    # Werkzeug ohne Extractor ist per Bauart DENY (siehe `decide`, Schritt 0.5).
+    "delegate_status": lambda args: (),
     # Zurückrollen wirkt auf die ORIGINALPFADE — genau die sind das Ziel und werden
     # gegatet. Ein Undo auf ~/.bashrc fragt den Betreiber also wie ein Schreiben dorthin.
     "undo_last": lambda args: tuple(
@@ -469,6 +501,15 @@ class PolicyKernel:
         spec = self.manifest.get(req.tool)
         if spec is None:
             return Decision(Verdict.DENY, f"unknown tool: {req.tool}")
+
+        # 0.25 Deklarierte Laufzeit-Voraussetzung: ein Werkzeug, dessen
+        # requires_env nicht gesetzt ist, hat das, worauf es wirkt, gar nicht
+        # (kein Worker-Socket, kein Dienst). Ein Grant darauf verspraeche eine
+        # Wirkung auf einen Konfigurationsstand, den der Betreiber nie gesetzt
+        # hat — fail-closed, und genannt wird die fehlende Variable, nie ein Wert.
+        fehlend = sorted(name for name in spec.requires_env if not os.environ.get(name))
+        if fehlend:
+            return Decision(Verdict.DENY, f"required env not set: {', '.join(fehlend)}")
 
         # 0.5 Target-Extraktion: Wir glauben nicht dem LLM (req.targets), wir leiten ab.
         if req.tool not in TARGET_EXTRACTORS and req.tool not in {"vault_get", "vault_write_note"}:

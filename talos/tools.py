@@ -7,15 +7,16 @@ enthalten keine Sicherheitslogik — Trennung von Gate und Vollzug.
 """
 from __future__ import annotations
 
-from . import browser, frames, hearing, sandbox, speech, transcript, vision, web
+from . import browser, claudejobs, frames, hearing, sandbox, speech, transcript, vision, web
 
 import subprocess
 import threading
+import uuid
 from pathlib import Path
 from typing import Callable
 
 from .manifest import Effect, ToolManifest, ToolSpec
-from .policy import ToolRequest
+from .policy import ToolRequest, claude_job_workspace
 from .question import Answer, AnswerReason, QuestionDesk
 from .snapshot import Entries, restore_entries
 from .vault import (
@@ -285,6 +286,18 @@ def default_manifest() -> ToolManifest:
         # sie liefert nur begrenzten Text zurueck und erteilt weder Capability noch
         # Freigabe. Ziel und Credential kommen nie aus Modellargumenten.
         .with_tool(ToolSpec("agent_consult", Effect.READ, reversible=True))
+        # Eine begrenzte Coding-Aufgabe an den eingesperrten Claude-Worker. EXEC
+        # mit sandbox_required, die run_shell-Vertrauensform: die Wirkung entsteht
+        # im kernel-abgeleiteten Job-Workspace, eingesperrt (Netz an — die eine
+        # dokumentierte Abweichung, die Anthropic-API wird gebraucht). requires_env:
+        # ohne konfigurierten Socket gibt es keinen Worker und keinen Grant.
+        .with_tool(ToolSpec("delegate_code", Effect.EXEC, reversible=False,
+                            requires_env=frozenset({"TALOS_CLAUDE_WORKER_SOCKET"}),
+                            sandbox_required=True))
+        # Den Stand eines delegierten Jobs lesen: READ wie `session_search` — der
+        # Aufruf fasst nichts an, er fragt den Worker.
+        .with_tool(ToolSpec("delegate_status", Effect.READ, reversible=True,
+                            requires_env=frozenset({"TALOS_CLAUDE_WORKER_SOCKET"})))
         # Der rendernde Browser. READ wie `web_fetch`: er liest eine Seite, er bedient
         # sie nicht — Klicken und Formulare gibt es bewusst nicht, weil ein Klick kein
         # ableitbares Ziel hat und ein Werkzeug ohne Ziel per Bauart DENY ist.
@@ -397,3 +410,61 @@ def make_delegate_runner(
         )
 
     return delegate
+
+
+def make_delegate_code_runner(
+    *,
+    socket_path: str,
+    work_root: str,
+    exchange: claudejobs.Exchange | None = None,
+) -> Callable[[ToolRequest], str]:
+    """Baut den `delegate_code`-Runner. Dumm: ableiten, abschicken, formatieren.
+
+    job_id erzeugt der Runner selbst — stuende sie in den Argumenten, koennte das
+    Modell bestehende Jobs adressieren. Den Workspace leitet er ueber DIESELBE
+    Kernelfunktion ab, ueber deren Wurzel der Kernel eben geurteilt hat (das
+    grab_frame-Muster: der Runner baut die Sanitisierungsregel nicht nach, er
+    ruft sie). Entschieden ist laengst, bevor hier etwas laeuft; ein Fehler des
+    Workers wird benannt zurueckgegeben, nie still ersetzt.
+    """
+
+    def delegate_code(req: ToolRequest) -> str:
+        prompt = _need(req, "prompt")
+        job_id = uuid.uuid4().hex[:12]
+        # Blattname aus der Kernelfunktion, Wurzel aus der Verdrahtung — im
+        # Dienst ist das policy.claude_work_root(), und beide stimmen ueberein.
+        workspace = str(Path(work_root) / Path(claude_job_workspace(job_id)).name)
+        antwort = claudejobs.submit_job(
+            socket_path, job_id, prompt, workspace, exchange=exchange)
+        if not antwort.get("ok"):
+            return (f"delegate_code: worker {antwort.get('kind', 'unavailable')}"
+                    f" — {antwort.get('message', '')}")
+        return (f"delegate_code job_id={job_id} state={antwort.get('state')}"
+                f" (workspace {workspace})")
+
+    return delegate_code
+
+
+def make_delegate_status_runner(
+    *,
+    socket_path: str,
+    exchange: claudejobs.Exchange | None = None,
+) -> Callable[[ToolRequest], str]:
+    """Baut den `delegate_status`-Runner. Liest den Worker-Stand und formatiert
+    ihn — Beweis (summary/files) kommt aus dem Stream des Workers, nie aus Prosa."""
+
+    def delegate_status(req: ToolRequest) -> str:
+        job_id = _need(req, "job_id")
+        antwort = claudejobs.job_status(socket_path, job_id, exchange=exchange)
+        if not antwort.get("ok"):
+            return (f"delegate_status: worker {antwort.get('kind', 'unavailable')}"
+                    f" — {antwort.get('message', '')}")
+        zeilen = [f"delegate_status job_id={job_id} state={antwort.get('state', '?')}"]
+        if antwort.get("state") == "done":
+            zeilen.append(f"summary: {antwort.get('summary', '')}")
+            dateien = antwort.get("files") or []
+            zeilen.append(f"files: {', '.join(dateien) if dateien else '(none)'}")
+            zeilen.append(f"returncode: {antwort.get('returncode')}")
+        return "\n".join(zeilen)
+
+    return delegate_status
