@@ -349,6 +349,17 @@ class BubblewrapSandbox:
             passwd_file, group_file = identity
             args += ["--ro-bind", passwd_file, "/etc/passwd"]
             args += ["--ro-bind", group_file, "/etc/group"]
+        if allow_network:
+            # Netz ohne DNS ist kein Netz: `/etc` liegt unter der leeren tmpfs-Maske,
+            # also kommen die Resolver-Dateien einzeln zurueck (spaetere Bindung
+            # ueberdeckt fruehere). Gemessen am ersten 0.11-E2E: ein `claude`-Job
+            # scheiterte mit `Unable to connect to API`, weil `/etc/resolv.conf` fehlte.
+            # realpath, weil resolv.conf gern ein Symlink nach /run ist — der Link
+            # selbst wuerde ins Leere zeigen.
+            for name in ("resolv.conf", "nsswitch.conf", "hosts"):
+                quelle = f"/etc/{name}"
+                if os.path.exists(quelle):
+                    args += ["--ro-bind", os.path.realpath(quelle), quelle]
         args += ["--bind", workspace_path, workspace_path, "--chdir", workspace_path]
         args += ["--", SHELL_BIN, "-c", command]
         return tuple(args)

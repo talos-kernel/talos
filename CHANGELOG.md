@@ -33,6 +33,14 @@ Versions are alpha: the kernel's rules are stable, the surface around them is no
   Claude Code. Default off; opt-in via `TALOS_CLAUDE_WORKER_*`
   (`docs/claude-worker.md`, `deploy/talos-claude-worker.service`).
 
+### Fixed
+
+- **DNS inside network-allowed sandboxes.** `/etc` is an empty tmpfs mask, so
+  a job granted `--share-net` had no `resolv.conf` and failed with "Unable to
+  connect to API" — measured on this release's first live E2E. The bubblewrap
+  profile now re-binds `resolv.conf`/`nsswitch.conf`/`hosts` (realpath) when
+  and only when the network is shared.
+
 ### Added
 
 - Two gated tools, 21 total: `delegate_code` (submit a bounded coding job;

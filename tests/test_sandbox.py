@@ -503,6 +503,21 @@ def test_bubblewrap_only_shares_the_network_when_asked() -> None:
     )
 
 
+def test_bubblewrap_restores_dns_when_the_network_is_shared() -> None:
+    """Netz ohne DNS ist kein Netz: `/etc` liegt unter der leeren tmpfs-Maske,
+    also muessen die Resolver-Dateien einzeln zurueck, sobald `--share-net`
+    gesetzt ist. Gemessen am ersten 0.11-E2E: ein `claude`-Job im Sandbox
+    scheiterte mit `Unable to connect to API`, weil `/etc/resolv.conf` fehlte."""
+    argv = BubblewrapSandbox().argv("true", workspace=Path("/ws"), allow_network=True)
+
+    for name in ("resolv.conf", "nsswitch.conf", "hosts"):
+        if Path(f"/etc/{name}").exists():
+            assert f"/etc/{name}" in argv
+
+    argv_off = BubblewrapSandbox().argv("true", workspace=Path("/ws"))
+    assert "/etc/resolv.conf" not in argv_off
+
+
 def test_bubblewrap_masks_every_protected_prefix_the_floor_names() -> None:
     """Eine Liste, zwei Durchsetzungen. Zwei Listen wuerden auseinanderdriften."""
     argv = BubblewrapSandbox().argv("true", workspace=Path("/ws"))
