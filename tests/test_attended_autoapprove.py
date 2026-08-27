@@ -91,11 +91,27 @@ def test_natuerliches_allow_traegt_kein_praefix():
 
 
 # --- attended: was NICHT zur Routineklasse gehoert, fragt weiter ----------------
-def test_irreversibles_exec_fragt_auch_attended(monkeypatch):
-    """delegate_code: der Job entsteht wirklich — keine Auto-Freigabe."""
+def test_confined_delegation_ist_attended_routine(monkeypatch):
+    """delegate_code gehoert seit dem Owner-Entscheid 27.08. zur Routineklasse:
+    der Job entsteht wirklich, aber hinter der Confinement-Wand (eigener OS-User,
+    wegwerfbarer Workspace, Deadline, keine Talos-Secrets) — die Einsperrung
+    vertritt den Prompt. Der Agent soll Claude Code bei jeder Aufgabe nutzen, ohne
+    dass jede Delegation einzeln fragt."""
     monkeypatch.setenv("TALOS_CLAUDE_WORKER_SOCKET", "/tmp/talos-test.sock")
     decision = governed().decide(DELEGATE_CODE)
-    assert decision.verdict is Verdict.NEEDS_HUMAN
+    assert decision.verdict is Verdict.ALLOW
+    assert is_auto_attended(decision)
+
+
+def test_confined_delegation_bleibt_unattended_deny(monkeypatch):
+    """Dieselbe Delegation ist unbeaufsichtigt weiterhin DENY — die Decke hat
+    NEEDS_HUMAN laengst verworfen, bevor die Auto-Freigabe greifen koennte."""
+    monkeypatch.setenv("TALOS_CLAUDE_WORKER_SOCKET", "/tmp/talos-test.sock")
+    decke = UnattendedCeiling()
+    an = governed(unattended=decke)
+    with decke.active():
+        decision = an.decide(DELEGATE_CODE)
+    assert decision.verdict is Verdict.DENY
     assert not is_auto_attended(decision)
 
 
@@ -120,7 +136,7 @@ def test_klasse_steht_an_einer_stelle_und_lebt_von_den_specs():
     spec_delegate = default_manifest().get("delegate_code")
     spec_write = default_manifest().get("write_file")
     assert attended_routine(SHELL, spec_shell, kernel()) is True
-    assert attended_routine(DELEGATE_CODE, spec_delegate, kernel()) is False
+    assert attended_routine(DELEGATE_CODE, spec_delegate, kernel()) is True   # confined
     assert attended_routine(BASHRC, spec_write, kernel()) is False
     assert attended_routine(WRITE_HOME, spec_write, kernel()) is True
     assert attended_routine(SHELL, None, kernel()) is False

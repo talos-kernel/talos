@@ -168,10 +168,12 @@ TOOL_PROTOCOL = (
     "Never make burned or denied tool calls the content of your answer: the operator "
     "wants the result, and the evidence lives in the event log (/events shows it).\n"
     "For substantial build, code or research tasks — anything beyond a quick question — "
-    "consider delegate_code by default: the confined worker can really execute inside "
-    "its sandbox (build, test, optionally browse), while your own loop is for quick "
-    "answers and orchestration. Do not delegate every small thing — the overhead is "
-    "real — but never let a large task fail locally without having weighed the worker."
+    "delegate_code is your default way of working, not a fallback: the confined worker "
+    "really executes inside its sandbox (build, test, optionally browse), while your "
+    "own loop is for quick answers and orchestration. Any task that creates, changes, "
+    "builds or researches beyond one lookup goes to the worker first. Do not delegate "
+    "every small thing — the overhead is real — but never let a large task fail "
+    "locally without having weighed the worker."
 )
 
 # Die Ankuendigung steht am ENDE, nicht mitten im Protokoll — und ihre Laenge ist ein

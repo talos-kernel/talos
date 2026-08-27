@@ -119,23 +119,30 @@ def attended_routine(req: ToolRequest, spec: ToolSpec | None, kernel: PolicyKern
     """Die Routineklasse der Attended-Auto-Freigabe — aus Spec-Eigenschaften, nie aus Namen.
 
     Dazu gehoeren:
-      * eingesperrte Shell-Arbeit ohne Zugangsdaten (`run_shell`: EXEC ohne
-        `requires_env` — die Sandbox hat weder Netz noch Credentials), und
+      * eingesperrte oder zugangsdatenfreie Ausfuehrung: EXEC-Werkzeuge, deren
+        Wirkung entweder ganz ohne Credentials auskommt (`run_shell`: Sandbox
+        ohne Netz und ohne Env) ODER per Bauart hinter einer Confinement-Wand
+        stattfindet (`sandbox_required` — `delegate_code`: eigener OS-User,
+        wegwerfbarer Workspace, Deadline, keine Talos-Secrets im Job). Bei
+        beiden ist die Einsperrung die Sicherung, die ein Prompt sonst vertritt —
+        der Owner will den Worker als Default-Weg fuer jede Aufgabe, und ein
+        Prompt pro Delegation war genau die Reibung, die ihn davon abhielt
+        (Owner-Entscheid 27.08.).
       * reversible Werkzeuge (Snapshot/`/undo`) — aber nur, wenn ihre Ziele
         keinen Floor beruehren. Ein reversibles Schreiben auf ein Secret oder
         eine Persistenz-Stelle (`~/.bashrc`, der eigene Code) ist keine Routine,
         sondern genau der Floor, der auch attended fragt.
 
-    Nie dazu: irreversible Werkzeuge und alles mit `requires_env` — beides ist
-    Wirkung auf konfigurierte Infrastruktur nach aussen (Worker-Jobs, Versand).
-    Weil die Klasse aus den Spec-Eigenschaften abgeleitet ist, faellt ein neues
+    Nie dazu: EXEC mit `requires_env` OHNE Confinement — Wirkung auf
+    konfigurierte Infrastruktur nach aussen (Versand mit Zugangsdaten). Weil
+    die Klasse aus den Spec-Eigenschaften abgeleitet ist, faellt ein neues
     Werkzeug automatisch richtig ein, statt auf einer Namensliste vergessen zu
     werden.
     """
     if spec is None:
         return False
     if spec.effect is Effect.EXEC:
-        return not spec.requires_env
+        return spec.sandbox_required or not spec.requires_env
     if not spec.reversible:
         return False
     try:
