@@ -1,16 +1,234 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<!-- Die Doku wohnt unter /docs. /setup bleibt bestehen, weil der Weg bereits verlinkt und
-     verschickt wurde — eine tote Adresse ist schlimmer als eine Weiterleitung. Zwei Kopien
-     derselben Seite waeren die schlechtere Loesung: sie laufen auseinander. -->
-<title>Talos — Docs</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="../brand/favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="../brand/apple-touch-icon.png">
+
+<!--
+  Die Doku wohnt unter /docs. /setup bleibt bestehen, weil der Weg bereits verlinkt
+  und verschickt wurde — eine tote Adresse ist schlimmer als eine knappe ehrliche
+  Seite. Zwei Kopien derselben Anleitung waeren die schlechtere Loesung: sie laufen
+  auseinander. Deshalb kein Redirect mehr, sondern ein klarer Wegweiser im selben
+  CRT-Kleid wie der Rest der Site: gleiche Tokens, gleiche Nav, gleicher Footer.
+-->
+<title>Talos — this address moved to the field manual</title>
+<meta name="description" content="The setup guide that lived here grew into the field manual under /docs/: install, identity, model, operation. This kept address points the way.">
 <link rel="canonical" href="https://talos-agent.ch/docs/">
-<meta http-equiv="refresh" content="0; url=/docs/">
 <meta name="robots" content="noindex">
-<style>body{background:#0C0E0D;color:#93A099;font:14px ui-monospace,monospace;padding:3rem}
-a{color:#E8A33D}</style>
+<meta name="theme-color" content="#17140F">
+<script>document.documentElement.classList.add('js')</script>
+
+<style>
+/* ── fonts (local, no third party) — /setup/ liegt eine Ebene tiefer ───────── */
+@font-face { font-family: "VT323"; src: url("../fonts/vt323.woff2") format("woff2");
+             font-weight: 400; font-display: swap; }
+@font-face { font-family: "Sometype Mono"; src: url("../fonts/sometype-mono-var.woff2") format("woff2");
+             font-weight: 400 700; font-style: normal; font-display: swap; }
+@font-face { font-family: "Sometype Mono"; src: url("../fonts/sometype-mono-italic.woff2") format("woff2");
+             font-weight: 400; font-style: italic; font-display: swap; }
+
+/* Dieselben Tokens wie überall — ein System, ein Look. */
+:root{
+  --bg:    oklch(0.115 0.012 75);
+  --bg2:   oklch(0.145 0.016 78);
+  --amber: oklch(0.80 0.155 80);
+  --hot:   oklch(0.92 0.13 85);
+  --dim:   oklch(0.56 0.09 80);
+  --faint: oklch(0.38 0.055 80);
+  --line:  oklch(0.28 0.04 80);
+  --deny:  oklch(0.64 0.19 32);
+  --allow: oklch(0.74 0.14 145);
+  --crt:   "VT323", monospace;
+  --mono:  "Sometype Mono", monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+  background:var(--bg); color:var(--amber);
+  font-family:var(--mono); font-size:14.5px; line-height:1.8;
+  overflow-x:hidden;
+}
+::selection{background:var(--amber);color:var(--bg)}
+a{color:var(--hot)}
+.wrap{max-width:1080px;margin:0 auto;padding:0 clamp(18px,4vw,52px)}
+b,strong{color:var(--hot);font-weight:600}
+
+/* ── CRT overlays: dezent dosiert, die Seite ist ein Wegweiser ── */
+.crt-fx{position:fixed;inset:0;pointer-events:none;z-index:90}
+.crt-fx::before{
+  content:"";position:absolute;inset:0;
+  background:repeating-linear-gradient(0deg, oklch(0 0 0/.13) 0 1px, transparent 1px 3px);
+}
+.crt-fx::after{
+  content:"";position:absolute;inset:0;
+  background:radial-gradient(ellipse at 50% 40%, transparent 62%, oklch(0 0 0/.34) 100%);
+}
+
+/* ── nav (fixiert, wie überall) ────────────────── */
+nav{position:fixed;inset:0 0 auto 0;z-index:50;border-bottom:1px solid var(--line);
+  background:color-mix(in oklch, var(--bg) 88%, transparent);backdrop-filter:blur(8px)}
+nav .wrap{display:flex;gap:26px;align-items:baseline;padding-top:14px;padding-bottom:14px}
+.brand{font-family:var(--crt);font-size:26px;color:var(--hot);text-decoration:none;
+  text-shadow:0 0 10px oklch(0.8 0.155 80/.6);letter-spacing:.1em;
+  display:inline-flex;align-items:center;gap:11px}
+.brand .mark{width:26px;height:26px;display:block}
+nav a.lnk{font-size:11.5px;color:var(--dim);text-decoration:none;letter-spacing:.18em;text-transform:uppercase}
+nav a.lnk:hover{color:var(--hot)}
+nav a.lnk.on{color:var(--hot);text-shadow:0 0 8px oklch(0.8 0.155 80/.55)}
+nav a.lnk.on::before{content:"[";color:var(--faint)}
+nav a.lnk.on::after{content:"]";color:var(--faint)}
+nav .sp{flex:1}
+.status{font-size:11px;color:var(--faint);letter-spacing:.12em}
+.status i{color:var(--allow);font-style:normal;animation:pulse 2s infinite}
+@keyframes pulse{50%{opacity:.3}}
+@media(max-width:760px){nav a.lnk,.status{display:none}}
+
+/* ── hero ─────────────────────────────────────── */
+.hero{padding:clamp(140px,20vh,190px) 0 clamp(60px,9vh,100px)}
+.sys{font-size:11px;letter-spacing:.28em;text-transform:uppercase;color:var(--dim);margin-bottom:22px}
+.sys::before{content:"● ";color:var(--allow)}
+h1{
+  font-family:var(--crt);font-weight:400;
+  font-size:clamp(42px,6.4vw,84px);line-height:.98;color:var(--hot);
+  text-shadow:0 0 18px oklch(0.8 0.155 80/.5), 0 0 60px oklch(0.8 0.155 80/.25);
+  max-width:20ch;text-wrap:balance;
+}
+.hero .lede{color:var(--dim);max-width:60ch;margin-top:26px}
+.cta-row{display:flex;gap:14px;margin-top:36px;flex-wrap:wrap}
+.btn{
+  font-family:var(--mono);font-size:12px;letter-spacing:.16em;text-transform:uppercase;
+  text-decoration:none;padding:13px 24px;border:1px solid var(--amber);color:var(--hot);
+  background:none;cursor:pointer;transition:all .25s;text-shadow:none;
+}
+.btn:hover{background:var(--amber);color:var(--bg);box-shadow:0 0 24px oklch(0.8 0.155 80/.45)}
+.btn.ghost{border-color:var(--line);color:var(--dim)}
+.btn.ghost:hover{background:var(--bg2);color:var(--hot);box-shadow:none}
+.spec-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1px;
+  background:var(--line);border:1px solid var(--line);margin-top:44px;max-width:720px}
+.spec{background:var(--bg);padding:20px 22px;font-size:12px;color:var(--dim);line-height:1.6}
+.spec b{display:block;font-family:var(--crt);font-weight:400;font-size:clamp(26px,3.2vw,38px);
+  color:var(--hot);line-height:1.1;letter-spacing:.03em;
+  text-shadow:0 0 14px oklch(0.8 0.155 80/.45)}
+
+/* ── footer (wie überall) ─────────────────────── */
+footer{border-top:1px solid var(--line);padding:36px 0 50px;font-size:12px;color:var(--faint)}
+footer .wrap{display:flex;gap:26px;flex-wrap:wrap}
+footer a{color:var(--dim);text-decoration:none}
+footer a:hover{color:var(--hot)}
+footer .sp{flex:1}
+
+/* scroll rule */
+.rule{position:fixed;top:0;left:0;width:100%;height:2px;z-index:60;
+  background:var(--amber);box-shadow:0 0 12px oklch(0.8 0.155 80/.55);
+  transform:scaleX(0);transform-origin:0 50%}
+
+/* reveals — hinter dem js-Gate: ohne JS steht alles da */
+html.js .rv{opacity:0;transform:translateY(20px);transition:opacity .8s cubic-bezier(.19,1,.22,1),transform .8s cubic-bezier(.19,1,.22,1)}
+html.js .rv.in{opacity:1;transform:none}
+
+/* a counted number lands like a stamp */
+.spec b.set{animation:settle .7s cubic-bezier(.19,1,.22,1)}
+@keyframes settle{0%{transform:scale(1.06)}100%{transform:scale(1)}}
+
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
+  html.js .rv{opacity:1;transform:none}
+  .rule{display:none}
+}
+</style>
 </head>
-<body><p>The documentation moved to <a href="/docs/">/docs/</a>.</p></body>
+<body>
+
+<div class="rule" id="rule" aria-hidden="true"></div>
+<div class="crt-fx" aria-hidden="true"></div>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="/"><img class="mark" src="../brand/sigil-78.png" alt="" width="26" height="26">TALOS</a>
+    <a class="lnk" href="/">Home</a>
+    <a class="lnk" href="/#kernel">Kernel</a>
+    <a class="lnk" href="/#ledger">Ledger</a>
+    <a class="lnk" href="/docs/">Docs</a>
+    <a class="lnk" href="/vergleich/">Compare</a>
+    <a class="lnk" href="/console.html">Console</a>
+    <a class="lnk" href="https://github.com/talos-kernel/talos">GitHub</a>
+    <span class="sp"></span>
+    <span class="status"><i>●</i> MOVED · THE MANUAL CARRIES IT NOW</span>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap">
+    <p class="sys rv">setup · an old address, kept alive</p>
+    <h1 class="rv">This address moved.</h1>
+    <p class="lede rv">The setup guide that used to live here grew into the
+    <strong>field manual</strong>: install, identity, model, operation, twelve sections
+    plus the commands it deliberately does not have. One manual instead of two copies
+    that drift apart. This page stays because the address was linked and sent around;
+    a dead address is worse than a short honest one.</p>
+    <div class="cta-row rv">
+      <a class="btn" href="/docs/">Open the field manual ▸</a>
+      <a class="btn ghost" href="/">Back to the start</a>
+    </div>
+    <div class="spec-row rv">
+      <div class="spec"><b>1890</b>unit tests</div>
+      <div class="spec"><b>173</b>adversarial</div>
+      <div class="spec"><b>589</b>gate lines</div>
+      <div class="spec"><b>21</b>gated tools</div>
+    </div>
+  </div>
+</header>
+
+<footer>
+  <div class="wrap">
+    <a href="https://talos-agent.ch">talos-agent.ch</a>
+    <a href="/docs/">Docs</a>
+    <a href="/#ledger">Ledger</a>
+    <a href="/vergleich/">Compare</a>
+    <a href="/console.html">Console</a>
+    <a href="https://github.com/talos-kernel/talos">GitHub</a>
+    <span class="sp"></span>
+    <span>MIT · the gate is why the work can be trusted</span>
+  </div>
+</footer>
+
+<script>
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ─── scroll rule: one bronze line, transform only ─── */
+(() => {
+  if (reduced) return;
+  const rule = document.getElementById('rule');
+  let max = 1, queued = false;
+  const measure = () => {
+    max = Math.max(document.documentElement.scrollHeight - innerHeight, 1);
+  };
+  measure();
+  addEventListener('resize', measure, {passive: true});
+  addEventListener('scroll', () => {
+    if (queued) return;
+    queued = true;
+    requestAnimationFrame(() => {
+      rule.style.transform = 'scaleX(' + Math.min(scrollY / max, 1) + ')';
+      queued = false;
+    });
+  }, {passive: true});
+})();
+
+/* Reveals + number settle — rein kosmetisch, ohne JS steht alles da. */
+(() => {
+  const io = new IntersectionObserver(es => es.forEach(e => {
+    if (!e.isIntersecting) return;
+    e.target.classList.add('in');
+    e.target.querySelectorAll('.spec b:not(.set)').forEach((el, i) => {
+      el.style.animationDelay = (i * 60) + 'ms';
+      el.classList.add('set');
+    });
+    io.unobserve(e.target);
+  }), {threshold: 0.18});
+  document.querySelectorAll('.rv').forEach(el => io.observe(el));
+})();
+</script>
+</body>
 </html>

@@ -22,6 +22,7 @@
 <meta name="description" content="OpenClaw and Hermes can do more: channels, skills, browser automation, cron fleets. Talos has a deterministic policy kernel, a sandbox and a provable log. The comparison, written down honestly — the gap is doctrine.">
 <link rel="canonical" href="https://talos-agent.ch/vergleich/">
 <meta name="theme-color" content="#17140F">
+<script>document.documentElement.classList.add('js')</script>
 
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Talos">
@@ -85,11 +86,14 @@ nav{position:fixed;inset:0 0 auto 0;z-index:50;border-bottom:1px solid var(--lin
   background:color-mix(in oklch, var(--bg) 88%, transparent);backdrop-filter:blur(8px)}
 nav .wrap{display:flex;gap:26px;align-items:baseline;padding-top:14px;padding-bottom:14px}
 .brand{font-family:var(--crt);font-size:26px;color:var(--hot);text-decoration:none;
-  text-shadow:0 0 10px oklch(0.8 0.155 80/.6);letter-spacing:.1em}
+  text-shadow:0 0 10px oklch(0.8 0.155 80/.6);letter-spacing:.1em;
+  display:inline-flex;align-items:center;gap:11px}
+.brand .mark{width:26px;height:26px;display:block}
 nav a.lnk{font-size:11.5px;color:var(--dim);text-decoration:none;letter-spacing:.18em;text-transform:uppercase}
 nav a.lnk:hover{color:var(--hot)}
-nav a.lnk.active{color:var(--hot);border-bottom:1px solid var(--amber);padding-bottom:2px;
-  text-shadow:0 0 8px oklch(0.8 0.155 80/.55)}
+nav a.lnk.on{color:var(--hot);text-shadow:0 0 8px oklch(0.8 0.155 80/.55)}
+nav a.lnk.on::before{content:"[";color:var(--faint)}
+nav a.lnk.on::after{content:"]";color:var(--faint)}
 nav .sp{flex:1}
 .status{font-size:11px;color:var(--faint);letter-spacing:.12em}
 .status i{color:var(--allow);font-style:normal;animation:pulse 2s infinite}
@@ -168,11 +172,9 @@ td.t{color:var(--amber)}
 .note p{margin:0;font-size:13.5px;max-width:none;color:var(--amber)}
 .note p + p{margin-top:8px}
 
-/* ── Kernel-Demo — die Klassen, die kernel.js (unverändert) erwartet ───────────
-   kernel.js stammt aus einer früheren Fassung der Hauptseite und kennt nur IDs
-   und Klassennamen, kein Design. Das CRT-Kleid dazu steht hier; die Datei selbst
-   bleibt unangetastet, damit sie eine Portierung des Kernels bleibt und nicht
-   eine Kopie mit eigener Meinung. */
+/* ── Kernel-Demo ─────────────────────────────────────────────
+   Der Browser-Port von policy.py steht weiter unten inline im Dokument —
+   self-contained wie der Rest der Site, keine Datei, kein Request. */
 .demo{border:1px solid var(--line);background:var(--bg2);margin-top:34px;
   box-shadow:0 0 60px oklch(0.8 0.155 80/.07)}
 .demo-head{display:flex;gap:14px;align-items:center;border-bottom:1px solid var(--line);
@@ -230,27 +232,40 @@ footer a{color:var(--dim);text-decoration:none}
 footer a:hover{color:var(--hot)}
 footer .sp{flex:1}
 
-/* reveals */
-.rv{opacity:0;transform:translateY(20px);transition:opacity .8s cubic-bezier(.19,1,.22,1),transform .8s cubic-bezier(.19,1,.22,1)}
-.rv.in{opacity:1;transform:none}
+/* scroll rule */
+.rule{position:fixed;top:0;left:0;width:100%;height:2px;z-index:60;
+  background:var(--amber);box-shadow:0 0 12px oklch(0.8 0.155 80/.55);
+  transform:scaleX(0);transform-origin:0 50%}
+
+/* reveals — hinter dem js-Gate: ohne JS steht einfach alles da */
+html.js .rv{opacity:0;transform:translateY(20px);transition:opacity .8s cubic-bezier(.19,1,.22,1),transform .8s cubic-bezier(.19,1,.22,1)}
+html.js .rv.in{opacity:1;transform:none}
+
+/* a counted number lands like a stamp */
+.spec b.set{animation:settle .7s cubic-bezier(.19,1,.22,1)}
+@keyframes settle{0%{transform:scale(1.06)}100%{transform:scale(1)}}
+
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{animation:none!important;transition:none!important}
-  .rv{opacity:1;transform:none}
+  html.js .rv{opacity:1;transform:none}
+  .rule{display:none}
   html{scroll-behavior:auto}
 }
 </style>
 </head>
 <body>
 
+<div class="rule" id="rule" aria-hidden="true"></div>
 <div class="crt-fx" aria-hidden="true"></div>
 
 <nav>
   <div class="wrap">
-    <a class="brand" href="/">TALOS</a>
+    <a class="brand" href="/"><img class="mark" src="../brand/sigil-78.png" alt="" width="26" height="26">TALOS</a>
     <a class="lnk" href="/">Home</a>
-    <a class="lnk" href="/docs/">Docs</a>
+    <a class="lnk" href="/#kernel">Kernel</a>
     <a class="lnk" href="/#ledger">Ledger</a>
-    <a class="lnk active" href="/vergleich/" aria-current="page">Compare</a>
+    <a class="lnk" href="/docs/">Docs</a>
+    <a class="lnk on" href="/vergleich/" aria-current="page">Compare</a>
     <a class="lnk" href="/console.html">Console</a>
     <a class="lnk" href="https://github.com/talos-kernel/talos">GitHub</a>
     <span class="sp"></span>
@@ -467,7 +482,7 @@ footer .sp{flex:1}
     stuck</strong>. Nothing leaves the page.</p>
     <div class="demo rv">
       <div class="demo-head">
-        <span class="dot"></span><span>kernel.js · browser port of policy.py</span>
+        <span class="dot"></span><span>policy.py · browser port, inline in this page</span>
         <span class="r">the Python original is authoritative</span>
       </div>
       <div class="demo-body">
@@ -533,15 +548,233 @@ footer .sp{flex:1}
   </div>
 </footer>
 
-<script src="../kernel.js"></script>
 <script>
-/* Reveals — rein kosmetisch, ohne JS ist einfach alles sichtbar. */
+/* The kernel, re-implemented for the browser — inline, like the rest of the site.
+   ----------------------------------------------------------------------------
+   Mirrors talos/policy.py + command_floor.py. The order matters and is the same:
+   system floor → hardline → secrets → persistence → effect. The Python version is
+   the authoritative one and the one the adversarial suite runs against; this
+   exists so the rules can be read without installing anything. Nothing leaves
+   the page.
+
+   The one thing added for the web: when the verdict lands on a different step
+   than before, the chain replays top to bottom. The animation is the argument —
+   the kernel walks these in order, and you can watch where it stops.
+   ---------------------------------------------------------------------------- */
+(function () {
+  "use strict";
+
+  var HOME = "/home/you";
+
+  var HARDLINE = [
+    [/\brm\s+(-\S*\s+)*-\S*[rf][^\n]*\s["']?\/(\s|["']|$|\*)/, "recursive delete of the root filesystem"],
+    [/\brm\s+(-\S*\s+)*-\S*[rf][^\n]*(\/home|\/root|\/etc|\/usr|\/var|\/bin|\/sbin|\/boot|\/lib)\b/, "recursive delete of a system directory"],
+    [/\brm\s+(-\S*\s+)*-\S*[rf][^\n]*(~|\$\{?HOME\}?)(\/\*)?(\s|$)/, "recursive delete of the home directory"],
+    [/\bmkfs(\.[a-z0-9]+)?\b/, "formatting a filesystem (mkfs)"],
+    [/\bdd\b[^\n]*\bof=\/dev\/(sd|nvme|hd|mmcblk|vd|xvd)/, "dd onto a raw block device"],
+    [/>\s*\/dev\/(sd|nvme|hd|mmcblk|vd|xvd)[a-z0-9]*\b/, "redirect onto a raw block device"],
+    [/:\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:/, "fork bomb"],
+    [/\bkill\s+(-\S+\s+)*-1\b/, "killing every process"],
+    [/(^|[;&|]\s*)(sudo\s+)?(shutdown|reboot|halt|poweroff)\b/, "system shutdown or reboot"]
+  ];
+
+  var DANGEROUS = [
+    [/\b(curl|wget)\b[^\n|]*\|\s*(sudo\s+)?(ba)?sh\b/, "piping the network into a shell"],
+    [/(^|[;&|]\s*)(sudo\s+)?rm\s+(-\S*\s+)*-\S*r/, "recursive delete"],
+    [/\bchmod\s+(-\S+\s+)*-R\b/, "recursive chmod"],
+    [/\bchown\s+(-\S+\s+)*-R\b/, "recursive chown"],
+    [/\bgit\s+reset\s+--hard\b/, "git reset --hard"],
+    [/\bgit\s+clean\s+-\S*[fx]/, "git clean -fx"],
+    [/\bgit\s+push\b[^\n]*--force/, "force push"]
+  ];
+
+  var SYSTEM = ["/etc", "/boot", "/root", "/usr", "/bin", "/sbin", "/lib"];
+  var SECRET = [HOME + "/.secrets", HOME + "/.ssh", HOME + "/.claude/.credentials.json", HOME + "/.aws"];
+  var PERSIST = [HOME + "/.bashrc", HOME + "/.zshrc", HOME + "/.profile",
+                 HOME + "/.config/systemd", HOME + "/.local/bin"];
+
+  // Path-ish tokens only. Deliberately literal — this is the limitation the page
+  // states out loud rather than hides.
+  function paths(cmd) {
+    var out = [], re = /(~|\$\{?HOME\}?|\/)[^\s;|&'"]*/g, m;
+    while ((m = re.exec(cmd)) !== null) {
+      var p = m[0].replace(/^~|^\$\{?HOME\}?/, HOME);
+      if (p.length > 1) out.push(p);
+    }
+    return out;
+  }
+  function under(p, roots) {
+    for (var i = 0; i < roots.length; i++) {
+      if (p === roots[i] || p.indexOf(roots[i] + "/") === 0) return roots[i];
+    }
+    return null;
+  }
+  function match(cmd, table) {
+    for (var i = 0; i < table.length; i++) {
+      if (table[i][0].test(cmd)) return table[i][1];
+    }
+    return null;
+  }
+
+  var STEPS = [
+    { n: "1", label: "System floor",         note: "/etc /boot /usr /bin — never, not even with approval" },
+    { n: "2", label: "Hardline command",     note: "no recovery path exists" },
+    { n: "3", label: "Secrets",              note: "reading refused, writing asks" },
+    { n: "4", label: "Persistence",          note: "runs later or grants rights" },
+    { n: "5", label: "Risky but recoverable", note: "asks you once" },
+    { n: "6", label: "Ordinary work",        note: "runs" }
+  ];
+
+  function judge(cmd) {
+    var trail = [null, null, null, null, null, null];
+    var found = paths(cmd);
+
+    for (var i = 0; i < found.length; i++) {
+      if (under(found[i], SYSTEM)) {
+        trail[0] = "deny · " + found[i];
+        return { v: "deny", why: "system path (hardline)", trail: trail, at: 0 };
+      }
+    }
+    var hard = match(cmd, HARDLINE);
+    if (hard) { trail[1] = "deny · " + hard; return { v: "deny", why: hard, trail: trail, at: 1 }; }
+
+    for (var j = 0; j < found.length; j++) {
+      if (under(found[j], SECRET)) {
+        trail[2] = "deny · " + found[j];
+        return { v: "deny", why: "reading secrets refused", trail: trail, at: 2 };
+      }
+    }
+    for (var k = 0; k < found.length; k++) {
+      if (under(found[k], PERSIST)) {
+        trail[3] = "ask · " + found[k];
+        return { v: "ask", why: "will be executed later", trail: trail, at: 3 };
+      }
+    }
+    var risky = match(cmd, DANGEROUS);
+    if (risky) { trail[4] = "ask · " + risky; return { v: "ask", why: risky, trail: trail, at: 4 }; }
+
+    trail[5] = "allow";
+    return { v: "allow", why: "nothing protected in the command", trail: trail, at: 5 };
+  }
+
+  var GLYPH = { allow: "✓", ask: "⏸", deny: "⛒" };
+  var WORD  = { allow: "allow", ask: "needs you", deny: "refused" };
+
+  var $cmd     = document.getElementById("cmd"),
+      $verdict = document.getElementById("verdict"),
+      $glyph   = document.getElementById("vGlyph"),
+      $word    = document.getElementById("vWord"),
+      $why     = document.getElementById("vWhy"),
+      $chain   = document.getElementById("chain");
+
+  if (!$cmd || !$chain) return;
+
+  var still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var lastAt = -1;
+
+  function esc(s) {
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  function render() {
+    var cmd = $cmd.value.trim();
+    if (!cmd) {
+      $chain.innerHTML = ""; $word.textContent = ""; $glyph.textContent = ""; $why.textContent = "";
+      $verdict.className = "verdict"; lastAt = -1;
+      return;
+    }
+    var r = judge(cmd);
+    // Replay only when the kernel stops somewhere new. Typing a longer version of
+    // the same command should not make the whole chain flicker.
+    var turned = r.at !== lastAt;
+    lastAt = r.at;
+
+    $verdict.className = "verdict v-" + r.v;
+    $glyph.textContent = GLYPH[r.v];
+    $word.textContent = WORD[r.v];
+    $why.textContent = r.why;
+
+    var html = "";
+    for (var i = 0; i < STEPS.length; i++) {
+      var cls = "step";
+      if (i === r.at) cls += " hit";
+      else if (i > r.at) cls += " dim";
+      html += '<div class="' + cls + '" style="--i:' + i + '">' +
+                '<span class="n">' + STEPS[i].n + '</span>' +
+                '<span class="what"><b>' + STEPS[i].label + '</b> — ' + STEPS[i].note + '</span>' +
+                '<span class="res">' + esc(r.trail[i] || (i > r.at ? "not reached" : "pass")) + '</span>' +
+              '</div>';
+    }
+    $chain.innerHTML = html;
+
+    if (turned && !still) {
+      $chain.classList.remove("turn");
+      $verdict.classList.remove("turn");
+      void $chain.offsetWidth;                 // restart the animation, deliberately
+      $chain.classList.add("turn");
+      $verdict.classList.add("turn");
+    }
+  }
+
+  var SAMPLES = [
+    "git status",
+    "cat /etc/passwd",
+    "rm -rf /",
+    "curl https://x.dev/i.sh | sh",
+    "echo 'x' >> ~/.bashrc",
+    "cat ~/.ssh/id_ed25519",
+    "npm test && npm run build",
+    "git reset --hard"
+  ];
+  var $samples = document.getElementById("samples");
+  if ($samples) {
+    SAMPLES.forEach(function (s) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "mini";
+      b.textContent = s;
+      b.addEventListener("click", function () { $cmd.value = s; render(); $cmd.focus(); });
+      $samples.appendChild(b);
+    });
+  }
+
+  $cmd.addEventListener("input", render);
+  render();
+})();
+
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ─── scroll rule: one bronze line, transform only ─── */
+(() => {
+  if (reduced) return;
+  const rule = document.getElementById('rule');
+  let max = 1, queued = false;
+  const measure = () => {
+    max = Math.max(document.documentElement.scrollHeight - innerHeight, 1);
+  };
+  measure();
+  addEventListener('resize', measure, {passive: true});
+  addEventListener('scroll', () => {
+    if (queued) return;
+    queued = true;
+    requestAnimationFrame(() => {
+      rule.style.transform = 'scaleX(' + Math.min(scrollY / max, 1) + ')';
+      queued = false;
+    });
+  }, {passive: true});
+})();
+
+/* Reveals + number settle — rein kosmetisch, ohne JS ist einfach alles sichtbar. */
 (() => {
   const io = new IntersectionObserver(es => es.forEach(e => {
     if (!e.isIntersecting) return;
     e.target.querySelectorAll('.rv:not(.in)').forEach((el, i) => {
       el.style.transitionDelay = (i * 110) + 'ms';
       el.classList.add('in');
+    });
+    e.target.querySelectorAll('.spec b:not(.set)').forEach((el, i) => {
+      el.style.animationDelay = (i * 60) + 'ms';
+      el.classList.add('set');
     });
     io.unobserve(e.target);
   }), {threshold: 0.12});

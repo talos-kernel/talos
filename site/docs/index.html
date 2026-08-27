@@ -13,6 +13,7 @@
 <meta property="og:url" content="https://talos-agent.ch/docs/">
 <link rel="canonical" href="https://talos-agent.ch/docs/">
 <meta name="theme-color" content="#17140F">
+<script>document.documentElement.classList.add('js')</script>
 <style>
 /* ── fonts (lokal, kein Drittanbieter) — docs/ liegt eine Ebene tiefer ─────── */
 @font-face { font-family:"VT323"; src:url("../fonts/vt323.woff2") format("woff2");
@@ -64,18 +65,22 @@ a{color:var(--hot)}
 /* ── nav (fixiert, wie auf der Hauptseite) ────────────────── */
 nav{position:fixed; inset:0 0 auto 0; z-index:50; border-bottom:1px solid var(--line);
   background:color-mix(in oklch, var(--bg) 88%, transparent); backdrop-filter:blur(8px)}
-nav .wrap{display:flex; gap:24px; align-items:baseline; padding-top:14px; padding-bottom:14px;
-  flex-wrap:wrap; row-gap:8px}
+nav .wrap{display:flex; gap:26px; align-items:baseline; padding-top:14px; padding-bottom:14px}
 .brand{font-family:var(--crt); font-size:26px; color:var(--hot); text-decoration:none;
-  text-shadow:0 0 10px oklch(0.8 0.155 80/.6); letter-spacing:.1em}
+  text-shadow:0 0 10px oklch(0.8 0.155 80/.6); letter-spacing:.1em;
+  display:inline-flex; align-items:center; gap:11px}
+.brand .mark{width:26px; height:26px; display:block}
 nav a.lnk{font-size:11.5px; color:var(--dim); text-decoration:none; letter-spacing:.18em;
   text-transform:uppercase}
 nav a.lnk:hover{color:var(--hot)}
-nav a.lnk.on{color:var(--hot); text-shadow:0 0 10px oklch(0.8 0.155 80/.5)}
-nav a.lnk.on::before{content:"▸ "; color:var(--amber)}
+nav a.lnk.on{color:var(--hot); text-shadow:0 0 8px oklch(0.8 0.155 80/.55)}
+nav a.lnk.on::before{content:"["; color:var(--faint)}
+nav a.lnk.on::after{content:"]"; color:var(--faint)}
 nav .sp{flex:1}
 .status{font-size:11px; color:var(--faint); letter-spacing:.12em}
-@media(max-width:900px){.status{display:none}}
+.status i{color:var(--allow); font-style:normal; animation:pulse 2s infinite}
+@keyframes pulse{50%{opacity:.3}}
+@media(max-width:760px){nav a.lnk, .status{display:none}}
 
 main{padding-top:64px}
 
@@ -181,34 +186,52 @@ footer a{color:var(--dim); text-decoration:none}
 footer a:hover{color:var(--hot)}
 footer .sp{flex:1}
 
+/* scroll rule */
+.rule{position:fixed; top:0; left:0; width:100%; height:2px; z-index:60;
+  background:var(--amber); box-shadow:0 0 12px oklch(0.8 0.155 80/.55);
+  transform:scaleX(0); transform-origin:0 50%}
+
+/* reveals — hinter dem js-Gate: ohne JS steht das ganze Manual da */
+html.js .rv{opacity:0; transform:translateY(20px);
+  transition:opacity .8s cubic-bezier(.19,1,.22,1), transform .8s cubic-bezier(.19,1,.22,1)}
+html.js .rv.in{opacity:1; transform:none}
+
+/* a counted number lands like a stamp */
+.spec b.set{animation:settle .7s cubic-bezier(.19,1,.22,1)}
+@keyframes settle{0%{transform:scale(1.06)}100%{transform:scale(1)}}
+
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{animation:none!important; transition:none!important}
+  html.js .rv{opacity:1; transform:none}
+  .rule{display:none}
   html{scroll-behavior:auto}
 }
 </style>
 </head>
 <body>
 
+<div class="rule" id="rule" aria-hidden="true"></div>
 <div class="crt-fx" aria-hidden="true"></div>
 
 <nav>
   <div class="wrap">
-    <a class="brand" href="/">TALOS</a>
+    <a class="brand" href="/"><img class="mark" src="../brand/sigil-78.png" alt="" width="26" height="26">TALOS</a>
     <a class="lnk" href="/">Home</a>
-    <a class="lnk on" href="/docs/" aria-current="page">Docs</a>
+    <a class="lnk" href="/#kernel">Kernel</a>
     <a class="lnk" href="/#ledger">Ledger</a>
+    <a class="lnk on" href="/docs/" aria-current="page">Docs</a>
     <a class="lnk" href="/vergleich/">Compare</a>
     <a class="lnk" href="/console.html">Console</a>
     <a class="lnk" href="https://github.com/talos-kernel/talos">GitHub</a>
     <span class="sp"></span>
-    <span class="status">FIELD MANUAL · REV 0.9.5-ALPHA</span>
+    <span class="status"><i>●</i> FIELD MANUAL · REV 0.12.0-ALPHA</span>
   </div>
 </nav>
 
 <main>
 <div class="wrap">
 
-  <div class="hero">
+  <div class="hero rv">
     <div class="doc-line">
       <span>Doc · Setup &amp; Operation</span>
       <span>Classification · Public</span>
@@ -230,7 +253,7 @@ footer .sp{flex:1}
     </div>
   </div>
 
-  <div class="index"><ol>
+  <div class="index rv"><ol>
     <li><a href="#install">Install</a></li>
     <li><a href="#identity">Give it an identity</a></li>
     <li><a href="#model">Give it a mind</a></li>
@@ -245,7 +268,7 @@ footer .sp{flex:1}
     <li><a href="#missing">What it doesn't have</a></li>
   </ol></div>
 
-  <section id="install">
+  <section id="install" class="rv">
     <h2><span class="n">Section 01</span>Install</h2>
     <p>One line. It downloads the signed release, verifies the signature and the
     checksum, runs the full test suite — and then <em>stops</em>.</p>
@@ -272,7 +295,7 @@ python -m pytest tests/ -q</pre>
     unprotected.</p>
   </section>
 
-  <section id="identity">
+  <section id="identity" class="rv">
     <h2><span class="n">Section 02</span>Give it an identity</h2>
     <p>Talos ships with <strong>zero</strong> identities that may command it. Not an
     oversight to fix during setup — it is the state it starts in, and the reason it is
@@ -301,7 +324,7 @@ python -m pytest tests/ -q</pre>
     </div>
   </section>
 
-  <section id="model">
+  <section id="model" class="rv">
     <h2><span class="n">Section 03</span>Give it a mind</h2>
     <p>Talos does not ship a model. It talks to one — through an API key, or through a
     CLI you already have installed and logged in.</p>
@@ -322,7 +345,7 @@ python -m talos setup model</pre>
     </div>
   </section>
 
-  <section id="run">
+  <section id="run" class="rv">
     <h2><span class="n">Section 04</span>Run it</h2>
     <div class="tw"><table>
       <thead><tr><th>Command</th><th>What it is</th></tr></thead>
@@ -340,10 +363,10 @@ python -m talos setup model</pre>
     </div>
   </section>
 
-  <section id="session">
+  <section id="session" class="rv">
     <h2><span class="n">Section 05</span>The terminal session</h2>
 <pre>$ talos chat
-Talos 0.9.5-alpha  ·  anthropic-api/claude-opus-4-8  ·  autonomy 3
+Talos 0.12.0-alpha  ·  anthropic-api/claude-opus-4-8  ·  autonomy 3
 speaking as cli:1000  ·  approvals possible — you are at a terminal
 /help for commands, `exit` to leave
 
@@ -377,7 +400,7 @@ speaking as cli:1000  ·  approvals possible — you are at a terminal
     </div>
   </section>
 
-  <section id="background">
+  <section id="background" class="rv">
     <h2><span class="n">Section 06</span>Work on the side</h2>
     <p>Some questions take two minutes, and the conversation should not stand still for
     them.</p>
@@ -401,7 +424,7 @@ Background #1 started: go through /var/log and summarise today's…
     a cap a dozen typed tasks leave you with a machine that has stopped answering.</p>
   </section>
 
-  <section id="memory">
+  <section id="memory" class="rv">
     <h2><span class="n">Section 07</span>What it remembers</h2>
     <p>The conversation is kept per channel, in memory only, and it is bounded twice — by
     turns and by characters. An unbounded history is an unbounded prompt (cost, latency,
@@ -428,7 +451,7 @@ You:                  and add the offsite copy</pre>
     the searchable archive stay — “forgotten” here means precisely: out of the prompt.</p>
   </section>
 
-  <section id="commands">
+  <section id="commands" class="rv">
     <h2><span class="n">Section 08</span>Every command</h2>
     <p>Sixteen, each answering a question an operator actually asks. Every one takes
     <code>--help</code>.</p>
@@ -461,7 +484,7 @@ You:                  and add the offsite copy</pre>
     </div>
   </section>
 
-  <section id="slash">
+  <section id="slash" class="rv">
     <h2><span class="n">Section 09</span>In-session commands</h2>
     <p>The same set in the terminal and in the messenger — one command centre, not two.
     There is deliberately no separate vocabulary for the CLI.</p>
@@ -494,7 +517,7 @@ You:                  and add the offsite copy</pre>
     </div>
   </section>
 
-  <section id="stuck">
+  <section id="stuck" class="rv">
     <h2><span class="n">Section 10</span>When something won't work</h2>
     <p>Start with the doctor. It reads, counts and looks — it creates no directory,
     writes no file, starts no service, and shows no secret.</p>
@@ -530,7 +553,7 @@ talos why 4831                    <span class="c"># the verdict, the rule, and w
     </div>
   </section>
 
-  <section id="channels">
+  <section id="channels" class="rv">
     <h2><span class="n">Section 11</span>Channels</h2>
     <p>Every way in <strong>fetches</strong>. Telegram long-polls; mail pulls over IMAP.
     Nothing listens on a port, because a webhook would turn an outbound-only process into
@@ -554,7 +577,7 @@ talos why 4831                    <span class="c"># the verdict, the rule, and w
     </div>
   </section>
 
-  <section id="missing">
+  <section id="missing" class="rv">
     <h2><span class="n">Section 12</span>What it doesn't have</h2>
     <p>If you have used other agent CLIs, some things will be missing. Each was
     considered and left out for the same reason.</p>
@@ -585,6 +608,7 @@ talos why 4831                    <span class="c"># the verdict, the rule, and w
     <a href="https://talos-agent.ch">talos-agent.ch</a>
     <a href="/docs/">Docs</a>
     <a href="/#ledger">Ledger</a>
+    <a href="/vergleich/">Compare</a>
     <a href="/console.html">Console</a>
     <a href="https://github.com/talos-kernel/talos">GitHub</a>
     <span class="sp"></span>
@@ -593,6 +617,42 @@ talos why 4831                    <span class="c"># the verdict, the rule, and w
 </footer>
 
 <script>
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ─── scroll rule: one bronze line, transform only ─── */
+(() => {
+  if (reduced) return;
+  const rule = document.getElementById('rule');
+  let max = 1, queued = false;
+  const measure = () => {
+    max = Math.max(document.documentElement.scrollHeight - innerHeight, 1);
+  };
+  measure();
+  addEventListener('resize', measure, {passive: true});
+  addEventListener('scroll', () => {
+    if (queued) return;
+    queued = true;
+    requestAnimationFrame(() => {
+      rule.style.transform = 'scaleX(' + Math.min(scrollY / max, 1) + ')';
+      queued = false;
+    });
+  }, {passive: true});
+})();
+
+/* Reveals + number settle — rein kosmetisch, ohne JS steht das ganze Manual da. */
+(() => {
+  const io = new IntersectionObserver(es => es.forEach(e => {
+    if (!e.isIntersecting) return;
+    e.target.classList.add('in');
+    e.target.querySelectorAll('.spec b:not(.set)').forEach((el, i) => {
+      el.style.animationDelay = (i * 60) + 'ms';
+      el.classList.add('set');
+    });
+    io.unobserve(e.target);
+  }), {threshold: 0.12});
+  document.querySelectorAll('.rv').forEach(el => io.observe(el));
+})();
+
 /* Scroll-Spy: markiert im Inhaltsverzeichnis den Abschnitt, der gerade gelesen wird.
    Rein kosmetisch — ohne Beobachter bleibt die Liste einfach eine Liste. */
 (function(){
