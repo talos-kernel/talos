@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TALOS — The MCP registry</title>
+<meta name="description" content="How Talos runs MCP servers: no marketplace, no third-party code in the agent process — an operator-owned registry behind a double gate, inside a UID-separated worker.">
+<link rel="icon" href="../brand/favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="../brand/apple-touch-icon.png">
+<meta property="og:title" content="TALOS — The MCP registry">
+<meta property="og:description" content="No marketplace. An operator-owned registry, a double gate, and MCP servers that live only inside the confined worker.">
+<meta property="og:image" content="https://talos-agent.ch/brand/og-logo.png">
+<meta property="og:url" content="https://talos-agent.ch/registry/">
+<link rel="canonical" href="https://talos-agent.ch/registry/">
+<meta name="theme-color" content="#17140F">
+<script>document.documentElement.classList.add('js')</script>
+<style>
+/* ── fonts (lokal, kein Drittanbieter) — docs/ liegt eine Ebene tiefer ─────── */
+@font-face { font-family:"VT323"; src:url("../fonts/vt323.woff2") format("woff2");
+             font-weight:400; font-display:swap; }
+@font-face { font-family:"Sometype Mono"; src:url("../fonts/sometype-mono-var.woff2") format("woff2");
+             font-weight:400 700; font-style:normal; font-display:swap; }
+@font-face { font-family:"Sometype Mono"; src:url("../fonts/sometype-mono-italic.woff2") format("woff2");
+             font-weight:400; font-style:italic; font-display:swap; }
+
+/* Dieselben Tokens wie die Hauptseite — ein System, ein Look. */
+:root{
+  --bg:    oklch(0.115 0.012 75);
+  --bg2:   oklch(0.145 0.016 78);
+  --amber: oklch(0.80 0.155 80);
+  --hot:   oklch(0.92 0.13 85);
+  --dim:   oklch(0.56 0.09 80);
+  --faint: oklch(0.38 0.055 80);
+  --line:  oklch(0.28 0.04 80);
+  --deny:  oklch(0.64 0.19 32);
+  --allow: oklch(0.74 0.14 145);
+  --crt:   "VT323", monospace;
+  --mono:  "Sometype Mono", monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth; scroll-padding-top:80px; -webkit-text-size-adjust:100%}
+body{
+  background:var(--bg); color:var(--amber);
+  font-family:var(--mono); font-size:14.5px; line-height:1.8;
+  font-variant-numeric:tabular-nums;
+}
+::selection{background:var(--amber); color:var(--bg)}
+a{color:var(--hot)}
+
+/* ── CRT-Overlay: nur dezente Scanlines + leichte Vignette.
+   Das Manual ist lang — Lesbarkeit schlaegt Effekt, deshalb bewusst
+   schwaecher dosiert als auf der Hauptseite und ohne Rain/Boot. ── */
+.crt-fx{position:fixed; inset:0; pointer-events:none; z-index:90}
+.crt-fx::before{
+  content:""; position:absolute; inset:0;
+  background:repeating-linear-gradient(0deg, oklch(0 0 0/.13) 0 1px, transparent 1px 3px);
+}
+.crt-fx::after{
+  content:""; position:absolute; inset:0;
+  background:radial-gradient(ellipse at 50% 40%, transparent 62%, oklch(0 0 0/.34) 100%);
+}
+
+.wrap{max-width:1000px; margin:0 auto; padding:0 clamp(18px,4vw,52px)}
+
+/* ── nav (fixiert, wie auf der Hauptseite) ────────────────── */
+nav{position:fixed; inset:0 0 auto 0; z-index:50; border-bottom:1px solid var(--line);
+  background:color-mix(in oklch, var(--bg) 88%, transparent); backdrop-filter:blur(8px)}
+nav .wrap{display:flex; gap:26px; align-items:baseline; padding-top:14px; padding-bottom:14px}
+.brand{font-family:var(--crt); font-size:26px; color:var(--hot); text-decoration:none;
+  text-shadow:0 0 10px oklch(0.8 0.155 80/.6); letter-spacing:.1em;
+  display:inline-flex; align-items:center; gap:11px}
+.brand .mark{width:26px; height:26px; display:block}
+nav a.lnk{font-size:11.5px; color:var(--dim); text-decoration:none; letter-spacing:.18em;
+  text-transform:uppercase}
+nav a.lnk:hover{color:var(--hot)}
+nav a.lnk.on{color:var(--hot); text-shadow:0 0 8px oklch(0.8 0.155 80/.55)}
+nav a.lnk.on::before{content:"["; color:var(--faint)}
+nav a.lnk.on::after{content:"]"; color:var(--faint)}
+nav .sp{flex:1}
+.status{font-size:11px; color:var(--faint); letter-spacing:.12em}
+.status i{color:var(--allow); font-style:normal; animation:pulse 2s infinite}
+@keyframes pulse{50%{opacity:.3}}
+@media(max-width:760px){nav a.lnk, .status{display:none}}
+
+main{padding-top:64px}
+
+/* ── hero ─────────────────────────────────────────────────── */
+.hero{padding:clamp(44px,7vh,80px) 0 30px}
+.doc-line{font-size:10.5px; letter-spacing:.2em; text-transform:uppercase; color:var(--dim);
+          display:flex; gap:26px; flex-wrap:wrap; margin-bottom:26px}
+.doc-line::before{content:"● "; color:var(--allow)}
+h1{font-family:var(--crt); font-weight:400; font-size:clamp(42px,6vw,76px); line-height:.98;
+   color:var(--hot); text-shadow:0 0 18px oklch(0.8 0.155 80/.5), 0 0 60px oklch(0.8 0.155 80/.22);
+   max-width:18ch; text-wrap:balance}
+.hero .lede{margin-top:24px; max-width:62ch; color:var(--dim)}
+.hero .lede + .lede{margin-top:12px}
+.hero .lede strong{color:var(--hot); font-weight:600}
+.spec-row{display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:1px;
+          background:var(--line); border:1px solid var(--line); margin-top:36px}
+.spec{background:var(--bg); padding:20px 22px; font-size:12px; color:var(--dim); line-height:1.6}
+.spec b{display:block; font-family:var(--crt); font-weight:400; font-size:clamp(28px,3.4vw,40px);
+        color:var(--hot); line-height:1.1; letter-spacing:.03em;
+        text-shadow:0 0 14px oklch(0.8 0.155 80/.45)}
+
+/* ── index / Inhaltsverzeichnis ───────────────────────────── */
+.index{border-top:1px dashed var(--line); border-bottom:1px dashed var(--line);
+       padding:16px 0; margin-bottom:8px}
+.index ol{list-style:none; display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr));
+          gap:2px 26px; counter-reset:sec}
+.index a{display:block; color:var(--dim); text-decoration:none; font-size:12.5px; padding:2px 0;
+         transition:color .2s}
+.index a::before{counter-increment:sec; content:counter(sec,decimal-leading-zero) "  ";
+                 color:var(--faint)}
+.index a:hover{color:var(--hot)}
+.index a.here{color:var(--hot)}
+.index a.here::before{color:var(--amber)}
+
+/* ── sections ─────────────────────────────────────────────── */
+section{padding:42px 0 10px; scroll-margin-top:80px}
+h2{font-family:var(--crt); font-weight:400; font-size:clamp(30px,3.8vw,44px); line-height:1.05;
+   color:var(--hot); text-shadow:0 0 14px oklch(0.8 0.155 80/.4);
+   margin-bottom:6px; text-wrap:balance}
+h2 .n{display:block; font-size:17px; letter-spacing:.14em; color:var(--dim);
+      text-shadow:none; margin-bottom:8px}
+h2 .n::before{content:"┌─[ "}
+h2 .n::after{content:" ]"}
+h3{font-family:var(--crt); font-weight:400; font-size:21px; color:var(--hot);
+   margin:30px 0 8px; text-shadow:0 0 10px oklch(0.8 0.155 80/.3)}
+p{max-width:66ch; margin:11px 0}
+strong{color:var(--hot); font-weight:600}
+em{font-style:italic}
+a{color:var(--hot); text-decoration-color:var(--line); text-underline-offset:3px}
+a:hover{text-decoration-color:var(--hot)}
+ul{max-width:66ch; margin:11px 0; padding-left:0; list-style:none}
+li{margin:5px 0; padding-left:18px; position:relative}
+li::before{content:"—"; position:absolute; left:0; color:var(--faint)}
+
+/* ── code ─────────────────────────────────────────────────── */
+pre{background:oklch(0.09 0.01 75); border:1px solid var(--line); padding:16px 18px;
+    overflow-x:auto; margin:14px 0; font-size:13px; line-height:1.75; color:var(--amber);
+    box-shadow:0 0 40px oklch(0.8 0.155 80/.05)}
+pre .c{color:var(--faint)}
+pre .f{color:var(--hot)}
+code{background:var(--bg2); border:1px solid var(--line); padding:0 5px; font-size:.92em;
+     color:var(--hot)}
+pre code{background:none; border:none; padding:0; font-size:inherit; color:inherit}
+
+/* ── tables ───────────────────────────────────────────────── */
+.tw{overflow-x:auto; margin:18px 0; border:1px solid var(--line); background:var(--bg)}
+table{border-collapse:collapse; width:100%; font-size:12.5px; min-width:540px}
+th,td{text-align:left; padding:9px 14px; border-bottom:1px solid var(--line); vertical-align:top}
+th{font-size:10px; letter-spacing:.16em; text-transform:uppercase; color:var(--dim);
+   font-weight:400; border-bottom:1px solid var(--line); background:var(--bg2)}
+tr:last-child td{border-bottom:none}
+td:first-child{color:var(--hot); white-space:nowrap}
+td.d{color:var(--dim)}
+
+/* ── notes ────────────────────────────────────────────────── */
+.note{border:1px solid var(--line); border-left:3px solid var(--faint);
+      background:var(--bg2); padding:13px 16px; margin:18px 0; max-width:66ch}
+.note.warn{border-left-color:var(--deny)}
+.note.good{border-left-color:var(--allow)}
+.note b{display:block; font-size:10px; letter-spacing:.18em; text-transform:uppercase;
+        color:var(--faint); margin-bottom:6px; font-weight:700}
+.note.warn b{color:var(--deny)}
+.note.good b{color:var(--allow)}
+.note p{margin:0; font-size:13.5px; max-width:none; color:var(--amber)}
+.note p + p{margin-top:8px}
+
+/* ── verdict stamps ───────────────────────────────────────── */
+.stamps{display:flex; flex-wrap:wrap; gap:14px; margin:18px 0}
+.vs{border:2.5px solid currentColor; padding:6px 13px; font-size:11px; font-weight:700;
+    letter-spacing:.18em; text-transform:uppercase; transform:rotate(-2deg);
+    mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='.6' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .95 0'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='.9'/%3E%3C/svg%3E");
+    mask-size:110px}
+.vs.a{color:var(--allow); transform:rotate(1.5deg); text-shadow:0 0 10px oklch(0.74 0.14 145/.4)}
+.vs.h{color:var(--amber); text-shadow:0 0 10px oklch(0.8 0.155 80/.4)}
+.vs.d{color:var(--deny); transform:rotate(-3deg); text-shadow:0 0 10px oklch(0.64 0.19 32/.5)}
+.stamps p{margin:0; align-self:center; font-size:12.5px; max-width:38ch; color:var(--dim)}
+
+/* ── footer (wie Hauptseite) ──────────────────────────────── */
+footer{border-top:1px solid var(--line); margin-top:56px; padding:36px 0 50px;
+       font-size:12px; color:var(--faint)}
+footer .wrap{display:flex; gap:26px; flex-wrap:wrap}
+footer a{color:var(--dim); text-decoration:none}
+footer a:hover{color:var(--hot)}
+footer .sp{flex:1}
+
+/* scroll rule */
+.rule{position:fixed; top:0; left:0; width:100%; height:2px; z-index:60;
+  background:var(--amber); box-shadow:0 0 12px oklch(0.8 0.155 80/.55);
+  transform:scaleX(0); transform-origin:0 50%}
+
+/* reveals — hinter dem js-Gate: ohne JS steht das ganze Manual da */
+html.js .rv{opacity:0; transform:translateY(20px);
+  transition:opacity .8s cubic-bezier(.19,1,.22,1), transform .8s cubic-bezier(.19,1,.22,1)}
+html.js .rv.in{opacity:1; transform:none}
+
+/* a counted number lands like a stamp */
+.spec b.set{animation:settle .7s cubic-bezier(.19,1,.22,1)}
+@keyframes settle{0%{transform:scale(1.06)}100%{transform:scale(1)}}
+
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important; transition:none!important}
+  html.js .rv{opacity:1; transform:none}
+  .rule{display:none}
+  html{scroll-behavior:auto}
+}
+</style>
+</head>
+<body>
+
+<div class="rule" id="rule" aria-hidden="true"></div>
+<div class="crt-fx" aria-hidden="true"></div>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="/"><img class="mark" src="../brand/sigil-78.png" alt="" width="26" height="26">TALOS</a>
+    <a class="lnk" href="/">Home</a>
+    <a class="lnk" href="/#kernel">Kernel</a>
+    <a class="lnk" href="/#ledger">Ledger</a>
+    <a class="lnk" href="/docs/">Docs</a>
+    <a class="lnk on" href="/registry/" aria-current="page">Registry</a>
+    <a class="lnk" href="/vergleich/">Compare</a>
+    <a class="lnk" href="/console.html">Console</a>
+    <a class="lnk" href="https://github.com/talos-kernel/talos">GitHub</a>
+    <span class="sp"></span>
+    <span class="status"><i>●</i> MCP REGISTRY · REV 0.15.0-ALPHA</span>
+  </div>
+</nav>
+
+<main>
+<div class="wrap">
+
+  <div class="hero rv">
+    <div class="doc-line">
+      <span>Doc · Extension model</span>
+      <span>Classification · Public</span>
+      <span>Subject · MCP without a marketplace</span>
+    </div>
+    <h1>The MCP registry</h1>
+    <p class="lede">Every other agent ecosystem answers "what may the agent do?" with a
+    marketplace: browse a catalogue, install a stranger's code, grant it the process.
+    Talos answers with a <strong>file the operator owns</strong>. There is no catalogue,
+    no install button, and no third-party code in the agent process — MCP servers run
+    only inside the UID-separated claude worker, behind a double gate.</p>
+    <p class="lede">This page is the public contract of that model. The operator guide
+    with the full protocol is <a href="https://github.com/talos-kernel/talos/blob/master/docs/claude-worker.md">docs/claude-worker.md</a>;
+    a curated starting point ships as <code>examples/mcp-servers.json</code>.</p>
+    <div class="spec-row">
+      <div class="spec"><b>2063</b>unit tests</div>
+      <div class="spec"><b>179</b>adversarial</div>
+      <div class="spec"><b>645</b>gate lines</div>
+      <div class="spec"><b>23</b>gated tools</div>
+      <div class="spec"><b>16</b>servers, at most</div>
+      <div class="spec"><b>0</b>env fields, ever</div>
+    </div>
+  </div>
+
+  <div class="index rv"><ol>
+    <li><a href="#model">The model</a></li>
+    <li><a href="#file">The registry file</a></li>
+    <li><a href="#gates">The double gate</a></li>
+    <li><a href="#curated">A curated starting point</a></li>
+    <li><a href="#limits">What this deliberately costs</a></li>
+  </ol></div>
+
+  <section id="model" class="rv">
+    <h2><span class="n">Section 01</span>The model</h2>
+    <p>Talos itself <strong>never speaks MCP</strong>. The <code>claude -p</code> child
+    inside a confined worker job does — a job that writes only into its own kernel-derived
+    disposable workspace, on a separate UID, with a hard deadline. Talos merely writes the
+    MCP configuration and passes it through with <code>--mcp-config</code>. The socket
+    frame that starts a job carries server <strong>names</strong>, never commands or
+    arguments: the model can ask for a server by name, and naming is all it can do.</p>
+    <p>Which names exist at all is not a model question and not a market question. It is
+    an operator decision, written down in one place.</p>
+    <div class="note">
+      <b>Why not the agent process</b>
+      <p>An MCP server is somebody else's code with a tool list. Loaded into the agent it
+      would stand next to the kernel with rights of its own — the exact second source of
+      permission this design exists to remove. Inside the worker it is a guest in a cell:
+      the confinement form is the boundary, and the agent only ever sees names and
+      results.</p>
+    </div>
+  </section>
+
+  <section id="file" class="rv">
+    <h2><span class="n">Section 02</span>The registry file</h2>
+    <p><code>data/mcp-servers.json</code> — operator-owned, gitignored, fail-closed by the
+    same convention as <code>entities.json</code>. The parser
+    (<code>talos/mcpservers.py</code>) is hard where a lenient parser would be
+    convenient:</p>
+    <ul>
+      <li><code>version: 1</code> is mandatory. Anything else is not a registry.</li>
+      <li>A missing, broken or oversized file (32 KB cap) parses as an <strong>empty</strong>
+      registry — never an error, never a guessed partial state.</li>
+      <li>An invalid entry falls out <strong>individually</strong>; its neighbours stay
+      readable. A broken neighbour does not take the good entries with it.</li>
+      <li>Names must match <code>[a-z0-9-]{1,32}</code> — they become tool prefixes
+      (<code>mcp__&lt;name&gt;</code>) and file components.</li>
+      <li><code>command</code> must be an <strong>absolute</strong> path — or empty, in
+      which case <code>npx &lt;package&gt;</code> starts the server. A relative command
+      would resolve against the job's workspace and could be swapped from there.</li>
+      <li><code>args</code> is a capped string list. Sixteen servers at most.</li>
+      <li>An <code>env</code> field <strong>costs the whole entry</strong>. The server
+      inherits exactly the minimised job environment; a private env table would be a
+      second, unchecked credential path.</li>
+    </ul>
+  </section>
+
+  <section id="gates" class="rv">
+    <h2><span class="n">Section 03</span>The double gate</h2>
+    <p>Existing in the registry is not being allowed. A server must be named in
+    <strong>both</strong> of these, or the request is refused by name before any job
+    starts:</p>
+    <div class="tw"><table>
+      <thead><tr><th>Gate</th><th>Where</th><th>What it decides</th></tr></thead>
+      <tbody>
+      <tr><td>registry file</td><td class="d"><code>data/mcp-servers.json</code></td>
+          <td class="d">The server exists, with exactly this command and these args.</td></tr>
+      <tr><td>worker allowlist</td><td class="d"><code>TALOS_CLAUDE_WORKER_MCP_SERVERS</code> in the worker's own env file</td>
+          <td class="d">This worker may start it. The agent-side <code>TALOS_MCP_SERVERS</code> intersects separately; the browser switches keep implying <code>chrome-devtools</code> so existing installs do not break.</td></tr>
+      </tbody>
+    </table></div>
+    <p>Per requested server, <code>--allowedTools</code> gets exactly one
+    <code>mcp__&lt;name&gt;</code> prefix — never more than was asked for.</p>
+  </section>
+
+  <section id="curated" class="rv">
+    <h2><span class="n">Section 04</span>A curated starting point</h2>
+    <p>Two entries, the shape the parser accepts. They ship as
+    <code>examples/mcp-servers.json</code> — copy to <code>data/mcp-servers.json</code>
+    and replace every placeholder with infrastructure you control.</p>
+<pre>{
+  "version": 1,
+  "servers": [
+    {
+      "name": "chrome-devtools",
+      "command": "/usr/local/bin/npx",
+      "args": ["chrome-devtools-mcp@latest", "--headless=true"],
+      "description": "Browser automation inside the job, via npx"
+    },
+    {
+      "name": "filesystem",
+      "command": "/usr/local/bin/npx",
+      "args": ["@modelcontextprotocol/server-filesystem", "/var/lib/talos/claude-jobs"],
+      "description": "File access rooted at the worker root — never wider"
+    }
+  ]
+}</pre>
+    <p>The filesystem root belongs <strong>at or below the worker root</strong>: the job
+    can only write there anyway, and a wider root would hand the child read access the
+    confinement form does not provide for.</p>
+  </section>
+
+  <section id="limits" class="rv">
+    <h2><span class="n">Section 05</span>What this deliberately costs</h2>
+    <ul>
+      <li><b>No discovery.</b> You cannot browse for a server from the chat. You read the
+      server's code, then you write one entry — that is the price of there being nothing
+      to social-engineer.</li>
+      <li><b>No per-action gate inside a job.</b> What the confined Claude does with its
+      MCP tools is bounded by the confinement form (workspace-only writes, read-only
+      root, one deadline), not by a verdict per call. If that is more trust than you
+      want to extend, the entry does not go in the file.</li>
+      <li><b>Network is on in job sandboxes.</b> Claude needs it; the boundary is the
+      filesystem, not the wire. Stated here because the alternative would be claiming
+      otherwise.</li>
+    </ul>
+  </section>
+
+</div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <a href="https://talos-agent.ch">talos-agent.ch</a>
+    <a href="/docs/">Docs</a>
+    <a href="/registry/">Registry</a>
+    <a href="/#ledger">Ledger</a>
+    <a href="/vergleich/">Compare</a>
+    <a href="/console.html">Console</a>
+    <a href="https://github.com/talos-kernel/talos">GitHub</a>
+    <span class="sp"></span>
+    <span>MIT · the gate is why the work can be trusted</span>
+  </div>
+</footer>
+
+<script>
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ─── scroll rule: one bronze line, transform only ─── */
+(() => {
+  if (reduced) return;
+  const rule = document.getElementById('rule');
+  let max = 1, queued = false;
+  const measure = () => {
+    max = Math.max(document.documentElement.scrollHeight - innerHeight, 1);
+  };
+  measure();
+  addEventListener('resize', measure, {passive: true});
+  addEventListener('scroll', () => {
+    if (queued) return;
+    queued = true;
+    requestAnimationFrame(() => {
+      rule.style.transform = 'scaleX(' + Math.min(scrollY / max, 1) + ')';
+      queued = false;
+    });
+  }, {passive: true});
+})();
+
+/* Reveals + number settle — rein kosmetisch, ohne JS steht das ganze Manual da. */
+(() => {
+  const io = new IntersectionObserver(es => es.forEach(e => {
+    if (!e.isIntersecting) return;
+    e.target.classList.add('in');
+    e.target.querySelectorAll('.spec b:not(.set)').forEach((el, i) => {
+      el.style.animationDelay = (i * 60) + 'ms';
+      el.classList.add('set');
+    });
+    io.unobserve(e.target);
+  }), {threshold: 0.12});
+  document.querySelectorAll('.rv').forEach(el => io.observe(el));
+})();
+
+/* Scroll-Spy: markiert im Inhaltsverzeichnis den Abschnitt, der gerade gelesen wird.
+   Rein kosmetisch — ohne Beobachter bleibt die Liste einfach eine Liste. */
+(function(){
+  var links = Array.prototype.slice.call(document.querySelectorAll(".index a"));
+  var ziele = links.map(function(a){
+    return document.querySelector(a.getAttribute("href"));
+  }).filter(Boolean);
+  if (!("IntersectionObserver" in window) || !ziele.length) return;
+  var io = new IntersectionObserver(function(eintraege){
+    eintraege.forEach(function(e){
+      if (!e.isIntersecting) return;
+      links.forEach(function(a){
+        a.classList.toggle("here", a.getAttribute("href") === "#" + e.target.id);
+      });
+    });
+  }, {rootMargin:"-20% 0px -70% 0px"});
+  ziele.forEach(function(z){ io.observe(z); });
+})();
+</script>
+</body>
+</html>

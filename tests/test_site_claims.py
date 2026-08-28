@@ -135,6 +135,7 @@ EXTRA_PAGES = (
     ROOT / "site" / "console.html",
     ROOT / "site" / "docs" / "index.html",
     ROOT / "site" / "vergleich" / "index.html",
+    ROOT / "site" / "registry" / "index.html",
 )
 
 

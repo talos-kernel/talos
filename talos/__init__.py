@@ -10,4 +10,4 @@ Deshalb haelt ein Test die beiden zusammen (`tests/test_version.py`). Wer hier h
 und den Installer vergisst, bekommt es beim naechsten Lauf gesagt.
 """
 
-__version__ = "0.14.0-alpha"
+__version__ = "0.15.0-alpha"

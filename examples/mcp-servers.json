@@ -1,0 +1,18 @@
+{
+  "_doc": "Curated starting point for data/mcp-servers.json — copy it there and replace every placeholder with infrastructure you control. Commands must be absolute; an 'env' field costs the whole entry; the parser is fail-closed (see talos/mcpservers.py and docs/claude-worker.md).",
+  "version": 1,
+  "servers": [
+    {
+      "name": "chrome-devtools",
+      "command": "/usr/local/bin/npx",
+      "args": ["chrome-devtools-mcp@latest", "--headless=true"],
+      "description": "Browser automation inside the job, started via npx"
+    },
+    {
+      "name": "filesystem",
+      "command": "/usr/local/bin/npx",
+      "args": ["@modelcontextprotocol/server-filesystem", "/var/lib/talos/claude-jobs"],
+      "description": "File access rooted at the worker root — never wider"
+    }
+  ]
+}

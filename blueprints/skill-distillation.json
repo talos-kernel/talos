@@ -1,0 +1,6 @@
+{
+  "name": "skill-distillation",
+  "description": "Sunday evening: the week from the event log — repeated successful workflows become at most one skill candidate, gated through skill_write or parked in the vault",
+  "when": "every sunday 20:15",
+  "prompt": "Skill-Destillation: Lies im Event-Log die Laeufe der letzten 7 Tage — was lief wiederholt gut, welche mehrstufigen Arbeitsablauefe gelangen mindestens dreimal, welche Gotchas kosteten Laeufe. Destilliere HOECHSTENS EINEN wiederverwendbaren Skill-Kandidaten (Name kebab-case, Beschreibung ein Satz, Body eine knappe Schrittfolge — niemals allowed-tools, niemals Zugangsdaten) und versuche, ihn mit skill_write zu schreiben. Verweigert der Kernel (unbeaufsichtigter Lauf), lege den Kandidaten stattdessen als Vault-Notiz unter patterns/ ab (vault_write_note) und melde, dass ein Skill-Kandidat auf die Freigabe des Betreibers wartet. Keine weiteren Aktionen; berichte am Ende knapp, was du gefunden und wo du es abgelegt hast."
+}

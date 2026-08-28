@@ -269,7 +269,7 @@ html.js .rv.in{opacity:1;transform:none}
     <a class="lnk" href="/console.html">Console</a>
     <a class="lnk" href="https://github.com/talos-kernel/talos">GitHub</a>
     <span class="sp"></span>
-    <span class="status"><i>●</i> COMPARISON · AS OF 2026-08-26</span>
+    <span class="status"><i>●</i> COMPARISON · AS OF 2026-08-28</span>
   </div>
 </nav>
 
@@ -290,11 +290,11 @@ html.js .rv.in{opacity:1;transform:none}
     log whose integrity you can <strong>prove</strong> rather than have to believe.
     The gap between the two is doctrine, not backlog — and that is exactly what this page explains.</p>
     <div class="spec-row">
-      <div class="spec"><b>22</b>tools here, every one gated</div>
+      <div class="spec"><b>23</b>tools here, every one gated</div>
       <div class="spec"><b>100+</b>skills there — counted honestly</div>
-      <div class="spec"><b>2005</b>unit tests</div>
+      <div class="spec"><b>2063</b>unit tests</div>
       <div class="spec"><b>179/179</b>adversarial cases</div>
-      <div class="spec"><b>593</b>gate lines</div>
+      <div class="spec"><b>645</b>gate lines</div>
       <div class="spec"><b>0</b>inbound ports</div>
       <div class="spec"><b>0</b>default identities</div>
     </div>
@@ -308,17 +308,22 @@ html.js .rv.in{opacity:1;transform:none}
     <p class="sub rv">The other side first, complete and without gloating. Anyone running
     either project should find nothing missing here that they use every day.</p>
     <ul class="ahead">
-      <li class="rv"><b>Channels.</b> WhatsApp in both directions, several messengers,
-      media pipelines for images, audio and documents. Talos has three ways in
-      (Telegram, mail, CLI) — and all three only fetch.</li>
+      <li class="rv"><b>Channels.</b> Several messengers, companion apps, media
+      pipelines for images, audio and documents. Talos has four ways in
+      (Telegram, mail, CLI, WhatsApp over an operator-controlled broker) — and
+      all four only fetch.</li>
       <li class="rv"><b>Skills and plugins.</b> Catalogues in the hundreds, from calendars
-      to image generation, plus sub-agents and MCP integration. Talos has 22 tools,
-      and the number grows slowly — on purpose, see §3.</li>
+      to image generation. Talos has 23 tools, worker-confined MCP behind an
+      operator-owned registry, and a sub-agent DAG — and the number grows slowly,
+      on purpose, see §3.</li>
       <li class="rv"><b>Browser automation.</b> Filling in forms, clicking, driving
-      entire flows. The Talos browser renders and reads. Nothing more.</li>
+      entire flows, as a first-class tool. The Talos browser renders and reads;
+      automation exists only inside the confined worker (MCP, double opt-in),
+      never as a native tool.</li>
       <li class="rv"><b>Everyday automation.</b> Cron fleets, watchdogs,
-      morning reports — both projects have matured here. Talos can run schedules,
-      but runs them under a hard ceiling (§3).</li>
+      morning reports — both projects have matured here. Talos ships installable
+      blueprints and a live dashboard, but every schedule runs under a hard
+      ceiling (§3).</li>
       <li class="rv"><b>Model routing.</b> Multiple sources, local models,
       mature fallback chains. Talos has provider routes with fallback —
       solid, but narrower.</li>
@@ -380,13 +385,13 @@ html.js .rv.in{opacity:1;transform:none}
           </tr>
           <tr>
             <td class="k">Channels</td>
-            <td class="t">3 — Telegram (long-poll), mail (IMAP pull), CLI. Every way in fetches; none opens a port.</td>
+            <td class="t">4 — Telegram (long-poll), mail (IMAP pull), CLI, WhatsApp (SSH pull from an operator-controlled broker). Every way in fetches; none opens a port.</td>
             <td>Many messengers, in both directions, incl. webhooks and companion apps.</td>
             <td>WhatsApp broker with media pipeline, mail, more.</td>
           </tr>
           <tr>
             <td class="k">Tools / skills</td>
-            <td class="t">21, each with a declared effect in the manifest. Without an entry in <code>TARGET_EXTRACTORS</code>: DENY by construction.</td>
+            <td class="t">23, each with a declared effect in the manifest. Without an entry in <code>TARGET_EXTRACTORS</code>: DENY by construction.</td>
             <td>Plugin and skill ecosystem, in the hundreds.</td>
             <td>Skill catalogue around a hundred, plus sub-agent CLIs.</td>
           </tr>
@@ -420,7 +425,7 @@ html.js .rv.in{opacity:1;transform:none}
     <div class="note rv">
       <b>Fairness</b>
       <p>This comparison comes from the Talos project itself. Neutral it is not — honest
-      it is: as of 2026-08-26, from public documentation and our own use of all
+      it is: as of 2026-08-28, from public documentation and our own use of all
       three systems. OpenClaw and Hermes move fast; if a row is no longer
       true, <a href="https://github.com/talos-kernel/talos/issues">tell us</a>.</p>
     </div>
@@ -437,10 +442,11 @@ html.js .rv.in{opacity:1;transform:none}
     <div class="why-list rv">
       <div class="why"><code>inbound webhook</code>
         <span>Every way in <b>fetches</b>: Telegram long-polls, mail is pulled over
-        IMAP. A webhook needs a port the world can reach — an outbound-only process
-        would become a reachable one. That is why WhatsApp inbound does not exist,
-        and <code>poll()</code> returns empty there. Deliberate, not “not built
-        yet”.</span></div>
+        IMAP, WhatsApp is pulled over SSH from an operator-controlled broker. A
+        webhook needs a port the world can reach — an outbound-only process
+        would become a reachable one. That is why the Cloud-API WhatsApp variant
+        stays delivery-only, and why the broker variant pulls instead of
+        listening. Deliberate, not “not built yet”.</span></div>
       <div class="why"><code>browser automation</code>
         <span>Clicking, typing and submitting have <b>no derivable target</b> — the
         kernel could not judge what is about to happen. A tool without a target is
@@ -449,8 +455,8 @@ html.js .rv.in{opacity:1;transform:none}
       <div class="why"><code>skill catalogue</code>
         <span>Breadth is cheap — <b>gated breadth is not</b>. Every tool needs a
         declared effect and a target extractor, otherwise there is nothing to
-        judge. The 22 tools are the ones where the kernel can justify every verdict;
-        tool number 21 had to pass the same test.</span></div>
+        judge. The 23 tools are the ones where the kernel can justify every verdict;
+        tool number 23 had to pass the same test.</span></div>
       <div class="why"><code>yolo mode</code>
         <span>The autonomy dial can only ever <b>tighten</b>, never widen. A mode
         that grants rights next to the kernel would be a second source of permission —

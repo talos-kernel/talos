@@ -220,11 +220,12 @@ html.js .rv.in{opacity:1; transform:none}
     <a class="lnk" href="/#kernel">Kernel</a>
     <a class="lnk" href="/#ledger">Ledger</a>
     <a class="lnk on" href="/docs/" aria-current="page">Docs</a>
+    <a class="lnk" href="/registry/">Registry</a>
     <a class="lnk" href="/vergleich/">Compare</a>
     <a class="lnk" href="/console.html">Console</a>
     <a class="lnk" href="https://github.com/talos-kernel/talos">GitHub</a>
     <span class="sp"></span>
-    <span class="status"><i>●</i> FIELD MANUAL · REV 0.12.0-ALPHA</span>
+    <span class="status"><i>●</i> FIELD MANUAL · REV 0.15.0-ALPHA</span>
   </div>
 </nav>
 
@@ -245,10 +246,10 @@ html.js .rv.in{opacity:1; transform:none}
     <p class="lede">That one sentence explains most of what follows, including why the
     command line is short and why a few obvious conveniences are missing on purpose.</p>
     <div class="spec-row">
-      <div class="spec"><b>2005</b>unit tests</div>
+      <div class="spec"><b>2063</b>unit tests</div>
       <div class="spec"><b>179</b>adversarial</div>
-      <div class="spec"><b>593</b>gate lines</div>
-      <div class="spec"><b>22</b>gated tools</div>
+      <div class="spec"><b>645</b>gate lines</div>
+      <div class="spec"><b>23</b>gated tools</div>
       <div class="spec"><b>30s</b>token life</div>
       <div class="spec"><b>0</b>default identities</div>
     </div>
@@ -367,7 +368,7 @@ python -m talos setup model</pre>
   <section id="session" class="rv">
     <h2><span class="n">Section 05</span>The terminal session</h2>
 <pre>$ talos chat
-Talos 0.14.0-alpha  ·  anthropic-api/claude-opus-4-8  ·  autonomy 3
+Talos 0.15.0-alpha  ·  anthropic-api/claude-opus-4-8  ·  autonomy 3
 speaking as cli:1000  ·  approvals possible — you are at a terminal
 /help for commands, `exit` to leave
 
@@ -450,6 +451,18 @@ You:                  and add the offsite copy</pre>
     </div>
     <p><code>/new</code> clears the active context, summary included. The event log and
     the searchable archive stay — “forgotten” here means precisely: out of the prompt.</p>
+
+    <h3>Skills it writes for itself</h3>
+    <p>Longest-lived memory of all: a skill on disk is read into <em>every</em> prompt
+    from the next turn on. So the one write path into the skills directory,
+    <code>skill_write</code>, is declared irreversible — the kernel answers
+    <code>NEEDS_HUMAN</code> without exception, and an unattended run gets a
+    <code>DENY</code>. It creates only: never overwrites (atomically, not by looking
+    first), never writes <code>allowed-tools</code>, never anything that looks like a
+    credential, never outside the skills root. Improving a skill means the operator
+    deletes it first. The weekly <code>skill-distillation</code> blueprint (“every sunday
+    20:15”) turns the week's event log into at most one candidate and takes exactly this
+    path — or parks the candidate as a vault note when nobody is there to approve.</p>
   </section>
 
   <section id="commands" class="rv">
@@ -559,13 +572,26 @@ talos why 4831                    <span class="c"># the verdict, the rule, and w
     <p>Every way in <strong>fetches</strong>. Telegram long-polls; mail pulls over IMAP.
     Nothing listens on a port, because a webhook would turn an outbound-only process into
     a reachable one.</p>
+    <p>WhatsApp has two implementations of one channel name. The Cloud-API variant stays
+    delivery-only: Meta's inbound path is a webhook, and a webhook is exactly the port
+    this design refuses to open. The broker variant receives without one — a listener on
+    <strong>an operator-controlled WhatsApp broker reachable over SSH</strong> appends the
+    messages routed to Talos to a JSONL queue, and Talos pulls that queue over SSH with a
+    persisted byte cursor, first run at end-of-file, cursor never advanced by a failed
+    poll. Replies go back through the broker's send script. The sender number comes out of
+    the operator's own WhatsApp account, so this variant carries <code>Trust.FULL</code> —
+    conversations live in the same <code>whatsapp:&lt;number&gt;</code> namespace either
+    way. Off by default: <code>TALOS_WA_BROKER_SSH</code> (the SSH target),
+    <code>TALOS_WA_BROKER_QUEUE</code>, <code>TALOS_WA_BROKER_CLI_DIR</code>. Configured,
+    the broker wins over the Cloud API — the registry demands unique names, and this is
+    the one that fetches.</p>
     <div class="tw"><table>
       <thead><tr><th>Channel</th><th>Trust</th><th>Notes</th></tr></thead>
       <tbody>
       <tr><td>telegram</td><td class="d">FULL</td><td class="d">Buttons for approvals, live status, images in.</td></tr>
       <tr><td>cli</td><td class="d">FULL</td><td class="d"><code>chat</code> and <code>ask</code>. Approvals only at a terminal.</td></tr>
       <tr><td>mail</td><td class="d">ASK</td><td class="d">Sender proven from our own server's <code>Authentication-Results</code>, fail-closed.</td></tr>
-      <tr><td>whatsapp</td><td class="d">NOTIFY</td><td class="d">Outbound only. There is no inbound, on purpose.</td></tr>
+      <tr><td>whatsapp</td><td class="d">FULL · NOTIFY</td><td class="d">Broker over SSH pull (FULL) — or Cloud API, outbound only (NOTIFY).</td></tr>
       </tbody>
     </table></div>
     <div class="note warn">

@@ -390,6 +390,7 @@ html.js .rv.in{opacity:1;transform:none}
     <a class="lnk" href="#numbers">Proof</a>
     <a class="lnk" href="#install">Install</a>
     <a class="lnk" href="/docs/">Docs</a>
+    <a class="lnk" href="/registry/">Registry</a>
     <a class="lnk" href="/vergleich/">Compare</a>
     <a class="lnk" href="/console.html">Console</a>
     <span class="sp"></span>
@@ -400,7 +401,7 @@ html.js .rv.in{opacity:1;transform:none}
 <header class="hero" id="top">
   <div class="wrap hero-grid">
     <div>
-      <p class="sys">talos 0.14.0-alpha · deterministic gate · MIT</p>
+      <p class="sys">talos 0.15.0-alpha · deterministic gate · MIT</p>
       <h1>Strong enough to hand a shell to.</h1>
       <p class="lede"><strong>Verifiable enough that you can.</strong> A real shell, a
       confined Claude worker that builds, tests and browses for you, four chat channels.
@@ -419,9 +420,9 @@ html.js .rv.in{opacity:1;transform:none}
         <span class="t-why" id="tickWhy">clean — runs sandboxed, logged before it runs</span>
       </div>
       <div class="meter-row">
-        <span><b>2005</b>unit tests</span>
+        <span><b>2063</b>unit tests</span>
         <span><b>179/179</b>adversarial</span>
-        <span><b>593</b>lines · gate</span>
+        <span><b>645</b>lines · gate</span>
         <span><b>30s</b>token life</span>
       </div>
     </div>
@@ -490,7 +491,8 @@ html.js .rv.in{opacity:1;transform:none}
       language: "every morning 08:30", never cron syntax. An installed blueprint is an
       ordinary schedule entry; the unattended ceiling applies unchanged.</p></div>
       <div class="nail rv"><code>4 channels</code><p>Terminal, Telegram, mail over IMAP,
-      WhatsApp for delivery. Every way in fetches; nothing opens a listening socket.</p></div>
+      WhatsApp through an operator-controlled broker over SSH. Every way in fetches;
+      nothing opens a listening socket.</p></div>
     </div>
   </div>
 </section>
@@ -498,10 +500,10 @@ html.js .rv.in{opacity:1;transform:none}
 <section id="tools">
   <div class="wrap">
     <p class="sec-tag rv">the manifest</p>
-    <h2 class="rv">Twenty-two tools. Each one declared.</h2>
+    <h2 class="rv">Twenty-three tools. Each one declared.</h2>
     <p class="sub rv">The kernel does not guess what a tool might do — every tool declares its
     <strong>effect</strong> in the manifest, and anything undeclared is refused on sight.
-    <strong>15 read, 4 write, 3 exec.</strong></p>
+    <strong>15 read, 5 write, 3 exec.</strong></p>
     <div class="tools">
       <div class="tool-row rv">
         <div><h3>read</h3><div class="fx">free at autonomy 5</div></div>
@@ -516,10 +518,10 @@ html.js .rv.in{opacity:1;transform:none}
       <div class="tool-row rv">
         <div><h3>write</h3><div class="fx">reversible runs · irreversible asks</div></div>
         <div class="set">
-          <code>speak</code><code>undo_last</code><code>vault_write_note</code><code>write_file</code>
+          <code>skill_write</code><code>speak</code><code>undo_last</code><code>vault_write_note</code><code>write_file</code>
         </div>
-        <p>What can be taken back may run. What cannot — a message sent, a secret touched —
-        waits for a human.</p>
+        <p>What can be taken back may run. What cannot — a message sent, a secret touched,
+        a new skill on disk — waits for a human.</p>
       </div>
       <div class="tool-row rv">
         <div><h3>exec</h3><div class="fx">sandboxed — or refused where no sandbox exists</div></div>
@@ -607,11 +609,11 @@ html.js .rv.in{opacity:1;transform:none}
     belief. The installer runs both suites in front of you, and every number on
     this page is a number the suite reproduces.</p>
     <div class="stats">
-      <div class="stat rv"><div class="n cnt" data-n="2005">0</div><div class="l">unit tests, run by the installer in front of you</div></div>
+      <div class="stat rv"><div class="n cnt" data-n="2063">0</div><div class="l">unit tests, run by the installer in front of you</div></div>
       <div class="stat rv"><div class="n cnt" data-n="179">0</div><div class="l">adversarial cases trying to pass the kernel</div></div>
       <div class="stat rv"><div class="n cnt" data-n="44">0</div><div class="l">end-to-end cases against a real model</div></div>
-      <div class="stat rv"><div class="n cnt" data-n="593">0</div><div class="l">lines in the file that decides everything</div></div>
-      <div class="stat rv"><div class="n cnt" data-n="22">0</div><div class="l">gated tools, each with a declared effect</div></div>
+      <div class="stat rv"><div class="n cnt" data-n="645">0</div><div class="l">lines in the file that decides everything</div></div>
+      <div class="stat rv"><div class="n cnt" data-n="23">0</div><div class="l">gated tools, each with a declared effect</div></div>
       <div class="stat rv"><div class="n cnt" data-n="30" data-suf="s">0</div><div class="l">token lifetime, single use</div></div>
       <div class="stat rv"><div class="n cnt" data-n="0">0</div><div class="l">identities allowed by default</div></div>
     </div>
@@ -630,7 +632,7 @@ html.js .rv.in{opacity:1;transform:none}
 <span class="p">curl</span> -fsSL https://talos-agent.ch/install.sh | <span class="p">bash</span>
 
   <span class="p">▸</span> Checking prerequisites      <span class="ok">✓ Python 3.11+</span>
-  <span class="p">▸</span> Running the test suite      <span class="ok">2005 passed</span>
+  <span class="p">▸</span> Running the test suite      <span class="ok">2063 passed</span>
   <span class="p">▸</span> Running the adversarial suite
     <span class="ok">179/179 cases behaved as expected.</span> <span class="c">— any failure aborts the install</span>
 
@@ -741,14 +743,14 @@ const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const log = document.getElementById('bootlog');
   if (reduced) { boot.remove(); return; }
   const LINES = [
-    ['TALOS <span class="dim">0.14.0-alpha</span>', 120],
+    ['TALOS <span class="dim">0.15.0-alpha</span>', 120],
     ['<span class="dim">An agent whose actions are bounded, explained and checkable.</span>', 340],
     ['', 60],
     ['▸ Checking prerequisites', 260],
     ['  <span class="ok">✓</span> Python 3.11+', 140],
     ['  <span class="ok">✓</span> curl, tar available', 200],
     ['▸ Running the test suite', 420],
-    ['  <span class="ok">2005 passed</span>', 300],
+    ['  <span class="ok">2063 passed</span>', 300],
     ['▸ Running the adversarial suite', 460],
     ['  <span class="ok">179/179 cases behaved as expected.</span>', 380],
     ['', 80],

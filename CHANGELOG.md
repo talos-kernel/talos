@@ -6,6 +6,54 @@ they make possible that was not possible before — or, more often, what they ta
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions are alpha: the kernel's rules are stable, the surface around them is not.
 
+## [0.15.0-alpha] — 2026-08-28
+
+### Added
+
+- **WhatsApp over an operator-controlled broker** (`talos/wabroker.py`). A second
+  implementation of the `whatsapp` channel that actually receives: a listener on
+  the operator's own broker host appends prefix-routed messages to a JSONL queue,
+  and Talos *pulls* it over SSH with a persisted byte cursor — no webhook, no
+  listening socket, the outbound-only posture holds. Outbound goes back through
+  the broker's send script (base64-safe text, files via `scp` + broker). The
+  sender number comes out of the operator's own WhatsApp account, so the channel
+  carries `Trust.FULL` — as a property without a setter. First run starts at
+  end-of-file (no backlog replay); a failed poll raises `channel.error` and the
+  cursor never advances. Opt-in via `TALOS_WA_BROKER_SSH` (empty default = off;
+  `TALOS_WA_BROKER_QUEUE` / `TALOS_WA_BROKER_CLI_DIR` for the paths). Configured,
+  the broker wins over the Cloud-API variant — the registry demands unique
+  names, and this is the only one of the two that fetches. Ships
+  `docs/whatsapp-broker.md`.
+- **`skill_write`: the one gated write path into the skills directory** (23rd
+  tool, `talos/skillwrite.py`). The agent may *create* a skill — never modify,
+  never overwrite (atomic `O_EXCL`), and never unattended: the tool is declared
+  irreversible, so the kernel answers `NEEDS_HUMAN` without exception and the
+  unattended ceiling turns that into `DENY`. Four hard refusals, all
+  fail-closed with an honest reason: no overwrite, no `allowed-tools` anywhere
+  (a second permission source next to the kernel), nothing that looks like a
+  credential (same `looks_secret` as the long-term memory), no path escape
+  (slug name, realpath-checked, symlink targets refused). The destination is
+  derived by the kernel (`policy.skill_write_path`), never taken from model
+  arguments.
+- **Skill-distillation blueprint** (`blueprints/skill-distillation.json`,
+  "every sunday 20:15"). The week's event log becomes at most one skill
+  candidate — attempted through `skill_write`, parked as a vault note under
+  `patterns/` when the unattended run is refused, and reported either way.
+- **The MCP registry, documented publicly** (`site/registry/`,
+  `examples/mcp-servers.json`): the operator-owned model behind
+  `data/mcp-servers.json` — no marketplace, no third-party code in the agent
+  process, servers run only inside the UID-separated claude worker, and the
+  double gate (registry file + `TALOS_CLAUDE_WORKER_MCP_SERVERS` allowlist)
+  stands.
+
+### Changed
+
+- **Daily reflection verified live.** The `daily-reflection` blueprint ran
+  against the real installation end-to-end — scheduled, executed under the
+  unattended ceiling, reported — instead of only in the suite.
+- Test count: 2063 (was 2005). Tools: 23 (was 22). Gate path: 645 lines
+  (was 593).
+
 ## [0.14.0-alpha] — 2026-08-28
 
 ### Added

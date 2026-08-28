@@ -17,6 +17,9 @@ from .credentials import (
     parse_worker_socket,
 )
 from .mcpservers import SERVER_NAME
+from .wabroker import DEFAULT_CLI_DIR as DEFAULT_WA_BROKER_CLI_DIR
+from .wabroker import DEFAULT_QUEUE_PATH as DEFAULT_WA_BROKER_QUEUE
+from .wabroker import ENV_SSH as ENV_WA_BROKER_SSH
 from .web import parse_allowed_addresses
 
 HOME = Path.home()
@@ -226,6 +229,17 @@ class TalosConfig:
     whatsapp_token: str = ""
     whatsapp_phone_id: str = ""
     whatsapp_to: str = ""
+    # Der Broker-Weg fuer WhatsApp (`wabroker.py`): eingehend per SSH-Pull aus der
+    # JSONL-Queue des eigenen VPS, ausgehend ueber dessen send.js — kein Webhook,
+    # kein Meta-Konto. Vorgabe AUS: erst ein nicht-leeres TALOS_WA_BROKER_SSH
+    # schaltet den Kanal ein (der Wert IST das SSH-Ziel, ein Alias aus
+    # ~/.ssh/config). Ohne diesen Opt-in versucht keine bestehende Installation
+    # ploetzlich einen SSH-Ruf. Gesetzt, gewinnt der Broker gegen die
+    # Cloud-API-Variante — beide heissen „whatsapp", und die Registry verlangt
+    # eindeutige Namen.
+    wa_broker_ssh: str = ""
+    wa_broker_queue: str = DEFAULT_WA_BROKER_QUEUE
+    wa_broker_cli_dir: str = DEFAULT_WA_BROKER_CLI_DIR
     # Mail als zweiter EINGANG — per IMAP-Abruf, nie per empfangendem Server. Fehlt eines
     # der drei Pflichtstuecke, gibt es den Kanal nicht (dieselbe Regel wie bei WhatsApp).
     mail_host: str = ""
@@ -345,6 +359,9 @@ def load_config(*, require_channel: bool = True) -> TalosConfig:
         whatsapp_token=_value("WHATSAPP_TOKEN"),
         whatsapp_phone_id=_value("WHATSAPP_PHONE_ID"),
         whatsapp_to=_value("WHATSAPP_TO"),
+        wa_broker_ssh=_value(ENV_WA_BROKER_SSH),
+        wa_broker_queue=_value("TALOS_WA_BROKER_QUEUE") or DEFAULT_WA_BROKER_QUEUE,
+        wa_broker_cli_dir=_value("TALOS_WA_BROKER_CLI_DIR") or DEFAULT_WA_BROKER_CLI_DIR,
         mail_host=_value("TALOS_MAIL_HOST"),
         mail_user=_value("TALOS_MAIL_USER"),
         mail_password=_value("TALOS_MAIL_PASSWORD"),

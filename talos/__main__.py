@@ -64,6 +64,7 @@ from . import browser, frames, hearing, models, speech, vision, web
 from .usage import UsageMeter
 from .mail import MailChannel
 from .whatsapp import WhatsAppChannel
+from .wabroker import BrokerWhatsAppChannel
 from .ux import SYM_FAIL, SYM_GATE, SYM_OK
 from .worker import Worker
 
@@ -157,7 +158,20 @@ def run(once: bool = False, ask: str = "", chat: bool = False) -> None:
 
         chat_channel = ChatChannel(os.getuid(), style=config.status_style)
         channels += (chat_channel,)
-    if config.whatsapp_token and config.whatsapp_phone_id:
+    if config.wa_broker_ssh and not (ask or chat):
+        # Der Broker-Kanal heisst wie die Cloud-API-Variante („whatsapp") und die
+        # Registry verlangt eindeutige Namen — konfiguriert gewinnt der Broker, weil
+        # er der einzige der beiden ist, der auch hereinholt (Trust.FULL). Nur im
+        # Dienstbetrieb, wie Telegram: ein Kommandozeilenlauf braucht den Messenger
+        # nicht und soll dem Dienst nicht die Queue unter den Fingern wegziehen.
+        channels += (
+            BrokerWhatsAppChannel(
+                config.wa_broker_ssh,
+                config.wa_broker_queue,
+                config.wa_broker_cli_dir,
+            ),
+        )
+    elif config.whatsapp_token and config.whatsapp_phone_id:
         channels += (WhatsAppChannel(config.whatsapp_token, config.whatsapp_phone_id),)
     # Mail HOLT ab (IMAP) — genau wie Telegram, und aus demselben Grund: ein empfangender
     # Server waere ein Tor von aussen. Die Stufe bleibt `ASK`; eine Adresse beweist kein Konto.

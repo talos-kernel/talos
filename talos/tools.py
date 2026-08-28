@@ -19,6 +19,7 @@ from typing import Callable
 from .manifest import Effect, ToolManifest, ToolSpec
 from .policy import ToolRequest, claude_job_workspace
 from .question import Answer, AnswerReason, QuestionDesk
+from .skillwrite import skill_write
 from .snapshot import Entries, restore_entries
 from .vault import (
     make_vault_get_runner,
@@ -241,6 +242,10 @@ RUNNERS = {
     "vault_search": vault_search,
     "vault_get": vault_get,
     "vault_write_note": vault_write_note,
+    # `skill_write` loest seine Wurzel pro Aufruf selbst auf
+    # (`policy.skill_write_root`, dieselbe Ableitung wie im Kernel) — er braucht
+    # keine Verdrahtung aus __main__.
+    "skill_write": skill_write,
 }
 
 
@@ -269,6 +274,14 @@ def default_manifest() -> ToolManifest:
         .with_tool(ToolSpec("vault_get", Effect.READ, reversible=True))
         .with_tool(ToolSpec("vault_write_note", Effect.WRITE, reversible=True))
         .with_tool(ToolSpec("undo_last", Effect.WRITE, reversible=True))
+        # Ein neuer Skill ist die haerteste Persistenz im Haus: Text, der ab dem
+        # naechsten Zug in JEDEM Prompt mitredet. Deshalb irreversible deklariert —
+        # der Kernel antwortet ausnahmslos NEEDS_HUMAN, und das ist an keinen
+        # Schalter koppelbar: die Attended-Auto-Freigabe greift nur bei reversiblen
+        # Werkzeugen (`attended_routine`), unter der UnattendedCeiling wird aus
+        # NEEDS_HUMAN ohnehin DENY. Geschrieben wird genau einmal; verbessern
+        # heisst: der Betreiber loescht, danach darf neu geschrieben werden.
+        .with_tool(ToolSpec("skill_write", Effect.WRITE, reversible=False))
         # Fragen wirkt nicht: kein Byte bewegt sich, kein Kommando läuft. READ hält es
         # deshalb ohne eigene Freigabe-Runde bei ALLOW — eine Rückfrage, die selbst
         # freigabepflichtig wäre, müsste den Betreiber um Erlaubnis bitten, ihn fragen

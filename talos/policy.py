@@ -223,6 +223,52 @@ def claude_job_workspace(job_id: str) -> str:
     return str(Path(claude_work_root()) / f"job-{safe}")
 
 
+_SKILL_WRITE_NAME = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
+SKILL_WRITE_NAME_MAX = 40
+
+
+def skill_write_root() -> str:
+    """Wurzel, UNTERHALB derer ein neu geschriebener Skill landet.
+
+    Wird hier aus der Umgebung gelesen, nicht aus config.py — ein Floor, der
+    config fragte, schuetzte das Verzeichnis erst, NACHDEM es gelesen wurde
+    (die _config_files-Regel). Die Aufloesung spiegelt `load_config`:
+    `TALOS_SKILLS_DIRS` schlaegt die ausgelieferte Liste. Geschrieben wird in
+    die Wurzel, die `~/.talos/skills` IST — nur wenn der Betreiber die Liste
+    ganz ersetzt hat, in deren erste. So landet ein geschriebener Skill
+    garantiert dort, wo `discover_skills` ihn beim naechsten Zug auch sucht.
+    """
+    raw = os.environ.get("TALOS_SKILLS_DIRS", "").strip()
+    if raw:
+        roots = [part for part in raw.split(os.pathsep) if part.strip()]
+    else:
+        roots = [
+            str(INSTALL_DIR / "skills"),
+            str(HOME / ".talos" / "skills"),
+            str(HOME / ".claude" / "skills"),
+        ]
+    talos_root = os.path.realpath(_expand(str(HOME / ".talos" / "skills")))
+    for root in roots:
+        if os.path.realpath(_expand(root)) == talos_root:
+            return _expand(root)
+    return _expand(roots[0]) if roots else str(HOME / ".talos" / "skills")
+
+
+def skill_write_path(name: object) -> str:
+    """Wohin ein neuer Skill geschrieben wird — allein aus dem Namen abgeleitet.
+
+    Das frame_output_path-Muster: der Runner ruft genau diese Funktion, der
+    Kernel urteilt ueber genau diesen Pfad — das Modell waehlt ihn nie. Ein
+    ungueltiger Name liefert die Wurzel selbst: der Runner lehnt ihn ohnehin
+    ab, und das Urteil faellt ueber ein Verzeichnis statt ueber einen
+    erfundenen Pfad.
+    """
+    text = str(name or "")
+    if len(text) > SKILL_WRITE_NAME_MAX or not _SKILL_WRITE_NAME.fullmatch(text):
+        return skill_write_root()
+    return str(Path(skill_write_root()) / text / "SKILL.md")
+
+
 TARGET_EXTRACTORS = {
     "read_file": lambda args: (str(args.get("path", "")),) if "path" in args else (),
     # Sehen hat ein echtes Ziel — den Bildpfad. Das ist der Grund, warum Talos die Datei
@@ -289,6 +335,12 @@ TARGET_EXTRACTORS = {
     "undo_last": lambda args: tuple(
         str(entry[0]) for entry in (args.get("entries") or ()) if entry
     ),
+    # Ein neuer Skill: das Ziel ist der kernel-abgeleitete Pfad der SKILL.md —
+    # das Modell nennt einen Namen, nie einen Pfad (skill_write_path). Es ist die
+    # haerteste Persistenz im Haus: der Text steht ab dem naechsten Zug in JEDEM
+    # Prompt. Das Manifest deklariert das Werkzeug darum irreversible — der
+    # Kernel antwortet ausnahmslos NEEDS_HUMAN, konfigurierbar ist das nicht.
+    "skill_write": lambda args: (skill_write_path(args.get("name", "")),),
     # Web: bewusst KEIN Ziel, wie bei `run_shell` und `vault_search`. Der Kernel schickt
     # jedes Ziel durch `os.path.realpath`; aus `https://example.com/x` wuerde dabei ein
     # Pfad `<cwd>/https:/example.com/x`, und der Snapshotter legte einen Undo-Eintrag auf

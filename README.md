@@ -15,13 +15,13 @@
 </p>
 
 <p align="center">
-  <!-- ⚠️ Bewusst „tests", nicht „passing": die Zahl kommt aus dem Einsammeln (2005).
+  <!-- ⚠️ Bewusst „tests", nicht „passing": die Zahl kommt aus dem Einsammeln (2063).
        Plattformabhaengige Sandbox- und Repository-Pruefungen koennen uebersprungen werden;
        `test_site_claims` prueft deshalb die gesammelte Zahl statt ein Umgebungsresultat. -->
-  <img src="https://img.shields.io/badge/tests-2005-2e7d32.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-2063-2e7d32.svg" alt="Tests">
   <img src="https://img.shields.io/badge/red%20team-179%2F179-2e7d32.svg" alt="Red team">
-  <img src="https://img.shields.io/badge/gate%20path-593%20lines-8a4318.svg" alt="Gate path">
-  <img src="https://img.shields.io/badge/tools-22%20gated-8a4318.svg" alt="Tools">
+  <img src="https://img.shields.io/badge/gate%20path-645%20lines-8a4318.svg" alt="Gate path">
+  <img src="https://img.shields.io/badge/tools-23%20gated-8a4318.svg" alt="Tools">
   <img src="https://img.shields.io/badge/default%20identities-0-c62828.svg" alt="Default identities">
   <img src="https://img.shields.io/badge/python-3.11%2B-1565c0.svg" alt="Python">
   <img src="https://img.shields.io/badge/licence-MIT-616161.svg" alt="MIT">
@@ -59,7 +59,7 @@ The installer verifies the signature and the checksum, runs the full suite — a
 ---
 
 <details>
-<summary><b>Contents</b> — twenty sections, in the order they matter</summary>
+<summary><b>Contents</b> — twenty-two sections, in the order they matter</summary>
 
 **Start here**
 [Why this exists](#why-this-exists) ·
@@ -80,6 +80,8 @@ The installer verifies the signature and the checksum, runs the full suite — a
 [Announced plans](#announced-plans) ·
 [The browser that only reads](#the-browser-that-only-reads) ·
 [Delegating](#delegating) ·
+[WhatsApp through your own broker](#whatsapp-through-your-own-broker) ·
+[The MCP registry](#the-mcp-registry) ·
 [Identity](#identity)
 
 **Evidence**
@@ -130,11 +132,13 @@ Stated plainly, because a security claim without its limits is marketing:
 - **Search needs no account.** Without `TALOS_BRAVE_API_KEY` it used to refuse; now it
   answers over DuckDuckGo (the `ddgs` package, imported at call time). A key decides
   *which* provider answers, not *whether* one does.
-- **It has two ways in, and both of them fetch** (Telegram long-polling, mail over IMAP).
-  That is the rule, not an accident: an inbound webhook would need a port the world can
-  reach, which turns "outbound only" into "publicly reachable". Mail sits at `Trust.ASK` —
-  an address proves no account, so it may ask and receive answers but never approve
-  anything. WhatsApp is delivery-only for the same reason.
+- **It has three ways in, and all of them fetch** (Telegram long-polling, mail over
+  IMAP, the WhatsApp broker queue over SSH). That is the rule, not an accident: an
+  inbound webhook would need a port the world can reach, which turns "outbound only"
+  into "publicly reachable". Mail sits at `Trust.ASK` — an address proves no account,
+  so it may ask and receive answers but never approve anything. WhatsApp over the
+  Cloud API stays delivery-only for the same reason; the broker channel below is the
+  one that fetches.
 - **It hears locally or not at all.** `hear` transcribes a recording with faster-whisper
   on the machine it runs on — what was said is often the most private thing in a day, and
   sending it to somebody else's model to be understood is the one place where "runs on your
@@ -170,7 +174,7 @@ pip install -r requirements.txt
 
 python -m talos setup                    # asks three things, writes a file, stops
 python -m talos doctor                   # what is still missing
-python -m pytest tests/ -q               # 2005 tests
+python -m pytest tests/ -q               # 2063 tests
 python redteam.py                        # 179 adversarial cases
 python -m talos                          # run it
 ```
@@ -494,6 +498,43 @@ of permission wearing a different name. So delegation buys reach, never power: i
 looking things up without filling the main run's context with the search. What comes back
 is data, bounded like any tool result, never an instruction.
 
+## WhatsApp through your own broker
+
+The Cloud-API channel (`whatsapp.py`) can only deliver, because Meta's inbound path is a
+webhook — and a webhook is a port the world can reach. The broker channel
+(`wabroker.py`) gets inbound without breaking the rule: a listener on **an
+operator-controlled WhatsApp broker reachable over SSH** appends the messages routed to
+Talos to a JSONL queue, and Talos *pulls* that queue over SSH with a persisted byte
+cursor. Every connection goes outward, to a machine the operator controls, with the
+operator's own key. Nothing listens.
+
+Replies go back the same way — through the broker's send script, base64-safe; files
+travel as `scp` plus broker. The sender number comes out of the operator's own WhatsApp
+account rather than a text field, so the channel carries `Trust.FULL`, and the
+conversations live in the same `whatsapp:<number>` namespace as before. Three env vars,
+all off by default: `TALOS_WA_BROKER_SSH` (the SSH target — empty means the channel does
+not exist), `TALOS_WA_BROKER_QUEUE` and `TALOS_WA_BROKER_CLI_DIR`. Configured, the broker
+wins over the Cloud-API variant: both are named `whatsapp`, and this is the one that
+fetches. A failed poll is a loud `channel.error`, and the cursor never advances on
+failure — silence would look exactly like an empty queue. Operator details:
+[docs/whatsapp-broker.md](docs/whatsapp-broker.md).
+
+## The MCP registry
+
+MCP is shipped — over the claude-worker seam, not into the agent. Talos itself never
+speaks MCP; the `claude -p` child inside a UID-separated worker job does, and Talos only
+writes the MCP config and passes it through. Which servers may exist at all is an
+operator decision, declared in `data/mcp-servers.json` (gitignored, fail-closed like
+`entities.json`): `version: 1` mandatory, absolute commands only, an `env` field costs
+the whole entry, sixteen servers at most. The socket frame carries server *names*, never
+commands or args.
+
+And it is gated twice: a server must appear in the registry file **and** in the worker's
+`TALOS_CLAUDE_WORKER_MCP_SERVERS` allowlist, or the request is refused by name before any
+job starts. There is no marketplace and no third-party code in the agent process — a
+curated starting point is [examples/mcp-servers.json](examples/mcp-servers.json), the
+full contract is [docs/claude-worker.md](docs/claude-worker.md).
+
 ## Identity
 
 `SOUL.md` carries the agent's **name and character**. Its first heading is the name —
@@ -532,7 +573,7 @@ permitted it. `/log` shows the last effects, `/undo` rolls back the last file ch
 
 ## Tools
 
-Twenty-two, and every one of them passes the same gate. There is no privileged tool and no
+Twenty-three, and every one of them passes the same gate. There is no privileged tool and no
 tool that skips the kernel — a tool without a target extractor is `DENY` by construction.
 
 | | |
@@ -548,6 +589,7 @@ tool that skips the kernel — a tool without a target extractor is `DENY` by co
 | `delegate_code` / `delegate_dag` / `delegate_status` | a bounded coding job — or a small acyclic graph of them — for a confined Claude worker: opt-in, off by default, writes only into a kernel-derived disposable workspace |
 | `agent_consult` | bounded advice from a second, operator-configured agent — data, never permission |
 | `ask_operator` | the one way it can ask you something on purpose |
+| `skill_write` | a new skill, written exactly once — and never without a human's yes |
 
 ### Operator-owned entity knowledge
 
@@ -563,6 +605,23 @@ cp examples/entities.json data/entities.json
 `data/entities.json` is runtime state: Git ignores it, updates preserve it, and Talos reads
 it as context rather than authority. `entity_status` accepts only a configured entity name;
 the fixed URL or systemd user unit comes from this file and cannot be supplied by the model.
+
+### Skills it writes for itself
+
+`skill_write` is the one write path into the skills directory — and the hardest gate in the
+house. A skill is the strongest persistence there is: its text lands in *every* prompt from
+the next turn on. So the tool is declared irreversible, the kernel answers `NEEDS_HUMAN`
+without exception, and under the unattended ceiling that becomes `DENY`. It creates only —
+never overwrites (atomically, not by looking first), never writes `allowed-tools` (a second
+permission source next to the kernel), never anything that looks like a credential, and
+never outside the skills root. Improving a skill means the operator deletes it first.
+
+Two blueprints use it on a schedule. `skill-distillation` ("every sunday 20:15") reads the
+week's event log and distils at most one repeated, proven workflow into a skill candidate —
+written through `skill_write` when a human is there to approve, parked as a vault note under
+`patterns/` when the unattended run is refused. And `daily-reflection` closes each day with
+a look at the same log — verified live against a real installation, schedules and ceiling
+included, not only in the suite.
 
 There is no image generation. That is a decision, not a gap: an agent that can produce
 photographs is a different conversation than one that can only look at them.
@@ -593,7 +652,7 @@ executing anything. It is the fastest way to understand the kernel.
 
 ## Architecture
 
-Small modules on purpose. The gate path (`policy.py`, 593 lines) has to be readable in one
+Small modules on purpose. The gate path (`policy.py`, 645 lines) has to be readable in one
 sitting — a gate you cannot read is not a gate.
 
 | Module | Role |
@@ -612,13 +671,14 @@ sitting — a gate you cannot read is not a gate.
 | `credentials.py` | one route per provider — key *and* address, resolved at call time |
 | `sandbox.py` | bubblewrap / `sandbox-exec`; refuses rather than running unconfined |
 | `identity.py` / `ux.py` | name and glyphs |
-| `telegram.py` / `mail.py` / `whatsapp.py` | channels — every way in fetches, none listens |
+| `telegram.py` / `mail.py` / `whatsapp.py` / `wabroker.py` | channels — every way in fetches, none listens |
 | `vision.py` / `hearing.py` / `speech.py` / `frames.py` | reading a picture, hearing a recording, speaking, one still out of a video — ordinary READ/WRITE with a target |
 | `cli.py` / `doctor.py` / `configcli.py` / `schema.py` | the subcommands: diagnose, read and change settings — the schema decides what may be written, and the allowlist and the network exceptions never are |
 | `askcli.py` | `talos ask` — one turn from a script, as a channel with no special right |
 | `models.py` | live model lists, cached on disk, added to the curated catalogue and never replacing it |
 | `updater.py` | update beside the old tree, both suites in the new one, switch only if green |
 | `eventlog.py` / `memory.py` / `usage.py` | durable log, conversation memory, metering |
+| `mcpservers.py` / `skillwrite.py` | the operator-owned MCP registry, and the one gated write into the skills directory |
 
 ## Roadmap
 
@@ -628,13 +688,7 @@ sitting — a gate you cannot read is not a gate.
    (`TARGET_EXTRACTORS`). The seam should make a new effect routine without making the
    kernel optional — everything still passes the same gate, the same tokens, the same
    snapshots, the same receipts.
-3. **MCP**, over that seam and over the official SDK, so a server's tools are proposals
-   like any other — never a second place where permission is decided. The hard part is
-   not the transport: a foreign tool arrives without a target extractor, and a tool
-   without one is `DENY` by construction. Either a target can be derived from its schema,
-   or the tool is read-only and has none — anything else would hand the decision to the
-   server.
-4. **Ownership as the boundary, not just the floor.** While the agent and its config file
+3. **Ownership as the boundary, not just the floor.** While the agent and its config file
    belong to the same writable user, the floor and the sandbox are code in the same
    process. A separate user for the model worker would make it a real separation. On a
    hardened installation the config already belongs to root and the agent may only read it.
@@ -644,8 +698,11 @@ Landed since this list was first written: the sandbox for `run_shell` (bubblewra
 timed runs under a ceiling that makes them weaker than typed ones,
 [announced plans](#announced-plans) built so that planning tightens a run instead of
 widening it, read-only delegation, a render-only browser, the media tools, hearing on the
-machine itself, one still out of a video, keyless search, **mail as a second way in**, and
-a command line that grants nothing by being one.
+machine itself, one still out of a video, keyless search, **mail as a second way in**,
+a command line that grants nothing by being one, **MCP over the claude-worker seam**
+(an [operator-owned registry](#the-mcp-registry) instead of a marketplace),
+[WhatsApp through an operator-controlled broker](#whatsapp-through-your-own-broker), and
+[skills the agent may write — but never alone](#skills-it-writes-for-itself).
 
 ## Contributing
 

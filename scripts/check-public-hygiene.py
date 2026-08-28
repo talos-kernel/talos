@@ -94,6 +94,11 @@ ALLOWED_SECRET_FIXTURE_DIGESTS = {
         "ae3835d83840555d511563e66d7556731c258469041314250bdfcfdefacfd7d0",
         "fb594133029efc5439a745824c088a6a59acc2fcbf78369aa09296618cff21ad",
     }),
+    "tests/test_skillwrite.py": frozenset({
+        "3021d90eb9437b2d8f30e8363695c4418b5e5f1870801b5c317e9398ee0f572d",
+        "e1907fbd890671209060b885921f107cbbb23a550eed070d99a0608507d5f10a",
+        "3c8138dc6b94851b47ac8bf46b9e2968e7d3f9748bd6196443fec9e93a63a2ec",
+    }),
     "tests/test_telegram_ux.py": frozenset({
         "3a1be4ebcfb5e066c2fb26c1e8752978a3e6d225bbad636783fdf3828e02d5e2",
     }),
