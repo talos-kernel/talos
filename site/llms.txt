@@ -1,0 +1,26 @@
+# Talos
+
+> An autonomous AI agent you can hand a shell to — because it can prove what it will not do. Every tool call passes a small permission kernel (allow / needs-human / deny), every run lands in a hash-chained audit log, and every update is an Ed25519-signed tarball.
+
+## Facts
+
+- Permission kernel: ~645 lines of Python, the only code that decides
+- 23 tools, all gated; unattended runs cannot escalate
+- 2063 tests, 179/179 red-team cases green at release time
+- MCP servers run only inside a UID-separated worker, from an operator-owned registry — no marketplace, no third-party code in the agent process
+- Channels: Telegram, CLI, WhatsApp via an operator-controlled broker (outbound-only posture, no webhook)
+- Updates: signed tarballs, verified before anything is unpacked
+- License: MIT
+
+## Pages
+
+- [Home](https://talos-agent.ch/): what it is, live policy-kernel demo in the browser
+- [Field manual](https://talos-agent.ch/docs/): install, identity, memory, channels, commands
+- [The MCP registry](https://talos-agent.ch/registry/): extension model without a marketplace
+- [Honest comparison](https://talos-agent.ch/vergleich/): Talos vs. OpenClaw vs. Hermes, including what Talos does not have
+- [Console](https://talos-agent.ch/console.html): one real session, replayed
+- [Changelog](https://talos-agent.ch/dist/CHANGELOG.md)
+
+## Source
+
+- [github.com/talos-kernel/talos](https://github.com/talos-kernel/talos)
