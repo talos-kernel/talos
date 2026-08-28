@@ -2717,6 +2717,75 @@ _result(_cw_ok, "delegate_code targets follow a model-supplied path",
 if not _cw_ok:
     failures += 1
 
+# 6) Generischer MCP-Pfad: ein Frame, der einen MCP-Server anfordert, den
+#    Registry ODER Worker-Gate nicht kennen, wird benannt abgelehnt — kein Job
+#    startet, kein stiller Verzicht. Hier: Registry kennt ihn, Gate ist AUS.
+from talos import mcpservers as _mcp  # noqa: E402
+
+_cw_reg = _mcp.McpServerRegistry(
+    [_mcp.McpServer(name="filesystem", command="/usr/bin/fs-mcp")])
+_cw_jobs = _cw._Jobs(worker_home=tempfile.mkdtemp(prefix="talos-cw-mcp-"),
+                     mcp_registry=_cw_reg)          # Gate AUS — die Datei allein reicht nicht
+_cw_spawned: list = []
+
+
+def _cw_spy(argv, cwd, env, limits):
+    _cw_spawned.append(argv)
+    raise AssertionError("kein Job haette starten duerfen")
+
+
+_cw_rahmen = json.dumps({"op": "submit", "job_id": "rt-mcp", "prompt": "p",
+                         "workspace": tempfile.mkdtemp(prefix="talos-cw-mcpw-"),
+                         "mcp_servers": ["filesystem"]}).encode()
+_cw_antwort = _cw.handle_frame(
+    _cw_rahmen, _cw_jobs, spawn=_cw_spy,
+    limits=_cw_sandbox.SandboxLimits(timeout_s=30))
+_cw_ok = (_cw_antwort["ok"] is False
+          and _cw_antwort["kind"] == "invalid_request"
+          and "filesystem" in _cw_antwort["message"] and not _cw_spawned)
+_result(_cw_ok, "A frame requests an MCP server the worker gate never enabled",
+        "named invalid_request, no job started" if _cw_ok else f"GOT THROUGH: {_cw_antwort}")
+if not _cw_ok:
+    failures += 1
+
+# 7) Credential-Regel: ein Registry-Eintrag mit "env" wird beim Laden
+#    verworfen, und die erzeugte MCP-Konfiguration traegt NIE einen
+#    "env"-Schluessel — auch nicht aus einem manipulierten Eintrag.
+_cw_boese = _mcp.McpServerRegistry.from_mapping({"version": 1, "servers": [
+    {"name": "evil", "command": "/usr/bin/evil", "env": {"KEY": "x"}},
+    {"name": "filesystem", "command": "/usr/bin/fs-mcp", "args": ["--root", "/srv"]},
+]})
+_cw_gut = _cw_boese.get("filesystem")
+_cw_cfg = _mcp.mcp_config([_cw_gut]) if _cw_gut is not None else {}
+_cw_ok = (_cw_boese.get("evil") is None
+          and set(_cw_cfg.get("mcpServers", {})) == {"filesystem"}
+          and '"env"' not in json.dumps(_cw_cfg))
+_result(_cw_ok, "An env-carrying registry entry smuggles a credential into the MCP config",
+        "entry discarded at load; config carries no env key" if _cw_ok else "SMUGGLED")
+if not _cw_ok:
+    failures += 1
+
+# 8) Agent-Gate: ein gueltig geformter, aber nicht freigeschalteter Servername
+#    in "mcp" scheitert am Runner, BEVOR ein Frame den Prozess verlaesst — die
+#    Erlaubnis ist die Schnittmenge aus Registry und TALOS_MCP_SERVERS, nicht
+#    der Modelltext.
+from talos.tools import make_delegate_code_runner as _mk_dcr  # noqa: E402
+
+
+def _cw_boom(path, frame, deadline):
+    raise AssertionError("haette nie abgeschickt werden duerfen")
+
+
+_cw_runner = _mk_dcr(socket_path="/s/rt.sock", work_root="/tmp/rt-root",
+                     exchange=_cw_boom, mcp_allowed=frozenset({"filesystem"}))
+_cw_out = _cw_runner(ToolRequest("delegate_code", OWNER,
+                                 {"prompt": "x", "mcp": ["shell-aufmachen"]}))
+_cw_ok = "nicht freigeschaltet" in _cw_out and "shell-aufmachen" in _cw_out
+_result(_cw_ok, "delegate_code submits an MCP server outside the agent-side grant",
+        "refused by name before any frame" if _cw_ok else f"SUBMITTED: {_cw_out}")
+if not _cw_ok:
+    failures += 1
+
 # Gezaehlt, nicht addiert. Auf einer Maschine ohne Isolation faellt der
 # Identitaets-Block als SKIP heraus — dann steht hier ehrlich eine kleinere Zahl,
 # statt zwei Faelle zu behaupten, die niemand gefahren hat.

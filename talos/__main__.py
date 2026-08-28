@@ -34,12 +34,13 @@ from .capability import CapabilityMint, GrantedRunner
 from .channel import ChannelRegistry, Inbound, Principal
 from .commands import CommandCenter, is_command, parse
 from .conductor import Conductor, reply_starter
-from .config import BLUEPRINTS_DIR, DATA_DIR, ENTITIES_FILE, MODEL_CACHE, PIPER_BIN, RECALL_DB, SCHEDULE_DB, TRANSCRIPT_DB, VOICE_DIR, load_config
+from .config import BLUEPRINTS_DIR, DATA_DIR, ENTITIES_FILE, MCP_SERVERS_FILE, MODEL_CACHE, PIPER_BIN, RECALL_DB, SCHEDULE_DB, TRANSCRIPT_DB, VOICE_DIR, load_config
 from .eventlog import Event, EventLog, new_run_id
 from .executor import Executor
 from .fallback import FallbackReasoner, parse_chain
 from .memory import Memory
 from .intelligence import EntityRegistry, IntelligenceLayer, make_entity_status_runner
+from .mcpservers import McpServerRegistry
 from .policy import WORKSPACE_DIR, PolicyKernel, claude_work_root
 from .question import QuestionDesk
 from .recall import Recall
@@ -297,6 +298,15 @@ def run(once: bool = False, ask: str = "", chat: bool = False) -> None:
     # ohne Archiv weiter (fail-open, wie Recall).
     transcript_store = TranscriptStore(TRANSCRIPT_DB)
     entity_registry = EntityRegistry.from_path(ENTITIES_FILE)
+    # Die MCP-Server-Registry (operator-owned, fail-closed leer): welche Server
+    # ein delegate_code-Job ueberhaupt anfordern darf. Erlaubt ist die
+    # Schnittmenge mit dem Agent-Schalter TALOS_MCP_SERVERS; der
+    # Browser-Schalter impliziert zusaetzlich chrome-devtools, damit
+    # Bestandskonfigurationen ohne Registry-Datei unveraendert weiterlaufen.
+    mcp_registry = McpServerRegistry.from_path(MCP_SERVERS_FILE)
+    mcp_allowed = frozenset(
+        name for name in mcp_registry.names() if name in config.mcp_servers
+    ) | ({"chrome-devtools"} if config.browser_mcp_enabled else frozenset())
     intelligence = IntelligenceLayer(
         entity_registry,
         consult_aliases=config.agent_consult_aliases,
@@ -363,7 +373,8 @@ def run(once: bool = False, ask: str = "", chat: bool = False) -> None:
                 tools.make_delegate_code_runner(
                     socket_path=config.claude_worker_socket,
                     work_root=claude_work_root(),
-                    browser_enabled=config.browser_mcp_enabled),
+                    browser_enabled=config.browser_mcp_enabled,
+                    mcp_allowed=mcp_allowed),
                 desk=pushes,
                 context=lambda: conductor.ask_contexts.current(),
             ),

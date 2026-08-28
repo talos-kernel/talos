@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import socket
 import time
-from typing import Callable
+from typing import Callable, Sequence
 
 # Die Naht: Tests injizieren ein Double, das konservierte Antwort-Zeilen
 # liefert; Produktion nimmt `_default_exchange` (Socket path, Frame, Frist
@@ -80,18 +80,25 @@ def _anfrage(socket_path: str, obj: dict, *, timeout_s: float,
 
 def submit_job(socket_path: str, job_id: str, prompt: str, workspace: str, *,
                timeout_s: float = 30.0, exchange: Exchange | None = None,
-               browser_mcp: bool = False) -> dict:
+               browser_mcp: bool = False,
+               mcp_servers: Sequence[str] = ()) -> dict:
     """Meldet einen Job an. Die Antwort ist der Worker-Frame (accepted/busy/…).
 
     `browser_mcp=True` fordert chrome-devtools-mcp IM Job an — das Flag steht
     nur dann im Frame, wenn es gemeint ist: der Vorgabe-Frame bleibt Byte fuer
     Byte der alte, und der Worker lehnt eine Anforderung ab, die er nicht
-    freigeschaltet hat.
+    freigeschaltet hat. `mcp_servers` ist die generische Form: eine Liste von
+    NAMEN aus der operator-owned Registry (`data/mcp-servers.json`) — der
+    Frame traegt niemals command/args, denn die ausfuehrbare Wahrheit gehoert
+    dem Worker, nicht der Leitung. Auch diese Liste steht nur im Frame, wenn
+    sie nicht leer ist.
     """
     frame = {"op": "submit", "job_id": job_id, "prompt": prompt,
              "workspace": workspace}
     if browser_mcp:
         frame["browser_mcp"] = True
+    if mcp_servers:
+        frame["mcp_servers"] = list(mcp_servers)
     return _anfrage(socket_path, frame, timeout_s=timeout_s, exchange=exchange)
 
 

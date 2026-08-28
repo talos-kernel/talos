@@ -16,6 +16,7 @@ from .credentials import (
     from_lookup,
     parse_worker_socket,
 )
+from .mcpservers import SERVER_NAME
 from .web import parse_allowed_addresses
 
 HOME = Path.home()
@@ -78,6 +79,13 @@ MODEL_CACHE = DATA_DIR / "models-cache.json"
 # is declarative context rather than a database: names, distinctions and fixed status
 # sources are reviewable in one bounded JSON file.
 ENTITIES_FILE = DATA_DIR / "entities.json"
+# Operator-owned MCP-Server-Registry fuer delegate_code-Jobs (`mcpservers.py`):
+# welche MCP-Server ein Job ueberhaupt anfordern darf. Dieselbe Zusicherung wie
+# entities.json — deklarativ, gehoert dem Betreiber, gitignored, ein Update
+# kopiert `data/` statt es zu ersetzen. Der Worker liest sie ueber einen eigenen
+# Env-Pfad (`TALOS_CLAUDE_WORKER_MCP_REGISTRY`), nie ueber diese Konstante:
+# er importiert config.py bewusst nicht.
+MCP_SERVERS_FILE = DATA_DIR / "mcp-servers.json"
 # Stimmmodelle fuer die Sprachausgabe. Neben `data/`, weil sie dem Betreiber
 # gehoeren und ein Update sie mitnimmt statt sie zu ersetzen.
 VOICE_DIR = DATA_DIR / "voices"
@@ -190,6 +198,12 @@ class TalosConfig:
     # mit Netz im Job erweitert die Angriffsflaeche der Sandbox, also ist es ein
     # bewusster Betreiber-Entscheid und kein Mitlaeufer des Worker-Schalters.
     browser_mcp_enabled: bool = False
+    # Agent-seitige Freigabe generischer MCP-Server fuer delegate_code
+    # (TALOS_MCP_SERVERS, Komma-Liste, Vorgabe LEER = keiner): erlaubt ist die
+    # Schnittmenge dieser Liste mit der Registry data/mcp-servers.json.
+    # TALOS_BROWSER_MCP_ENABLED impliziert zusaetzlich chrome-devtools, damit
+    # Bestandskonfigurationen unveraendert weiterlaufen.
+    mcp_servers: tuple[str, ...] = ()
     # Der Completion-Push: eine kurze, faktische Meldung, wenn ein delegierter Job
     # endet. Voreingestellt AN — ein Job, der nebenher laeuft, hat sonst keinen Weg
     # zurueck. Er liefert nie Modellprosa; wer ihn abstellt, fragt per delegate_status.
@@ -403,6 +417,15 @@ def load_config(*, require_channel: bool = True) -> TalosConfig:
             _value("TALOS_CLAUDE_WORKER_JOB_TIMEOUT") or "900"
         ),
         browser_mcp_enabled=_value("TALOS_BROWSER_MCP_ENABLED") == "1",
+        # Ungueltige Namen fallen heraus statt die Liste unbrauchbar zu machen
+        # — sie wuerden gegen die Registry ohnehin nie matchen (fail-closed).
+        mcp_servers=tuple(
+            dict.fromkeys(
+                teil for teil in (t.strip() for t in
+                                  _value("TALOS_MCP_SERVERS").split(","))
+                if SERVER_NAME.fullmatch(teil)
+            )
+        ),
         completion_push=_value("TALOS_COMPLETION_PUSH") != "0",
         attended_autoapprove=_value("TALOS_ATTENDED_AUTOAPPROVE") != "0",
         status_style=(

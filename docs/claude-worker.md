@@ -25,7 +25,8 @@ nicht.
 JSON-Lines über `/run/talos/claude.sock`, eine Anfrage pro Verbindung:
 
 ```
-→  {"op": "submit", "job_id": "…", "prompt": "…", "workspace": "…"}
+→  {"op": "submit", "job_id": "…", "prompt": "…", "workspace": "…",
+    "browser_mcp": false, "mcp_servers": ["chrome-devtools"]}
 ←  {"ok": true, "state": "accepted"}
 →  {"op": "status", "job_id": "…"}
 ←  {"ok": true, "state": "done", "summary": "…", "files": ["…"], "returncode": 0}
@@ -101,6 +102,71 @@ die Worker-Root (`policy.claude_work_root()`), und der Job-Workspace wird
 kernel-seitig aus der `job_id` abgeleitet (`policy.claude_job_workspace()`) —
 kein Modell-Argument wählt je, wohin ein delegierter Claude schreibt.
 Unbeaufsichtigte Deckel (unattended ceilings) verschärfen wie bisher.
+
+## MCP-Server im Job (generisch, operator-owned)
+
+Über den Browser-Sonderfall hinaus kann ein Job weitere MCP-Server mitbekommen
+— derselbe Mechanismus, verallgemeinert: Talos spricht selbst **nie** MCP, das
+`claude -p`-Kind im Job tut es; Talos erzeugt nur die MCP-Konfiguration und
+reicht sie per `--mcp-config` durch. Der Frame trägt **nur Namen**, niemals
+command/args.
+
+Die Wahrheit liegt in der Registry-Datei `data/mcp-servers.json`
+(operator-owned, gitignored, fail-closed wie `entities.json`):
+
+```json
+{
+  "version": 1,
+  "servers": [
+    {
+      "name": "chrome-devtools",
+      "command": "/usr/local/bin/chrome-devtools-mcp",
+      "package": "chrome-devtools-mcp@latest",
+      "args": ["--headless=true", "--executablePath=/usr/bin/chromium"],
+      "description": "Browser-Automatisierung im Job; command leer = Start per npx <package>"
+    },
+    {
+      "name": "filesystem",
+      "command": "/usr/local/bin/mcp-server-filesystem",
+      "args": ["/var/lib/talos/claude-jobs"],
+      "description": "Dateizugriff, auf die Worker-Root gerootet — NICHT weiter"
+    }
+  ]
+}
+```
+
+Regeln des Parsers (`talos/mcpservers.py`), hart und fail-closed: `version: 1`
+Pflicht; Datei fehlt/kaputt/zu gross → **leere** Registry; ein ungültiger
+Eintrag fällt einzeln heraus. Namen müssen `[a-z0-9-]{1,32}` genügen,
+`command` muss ein **absoluter** Pfad sein (oder leer — dann startet
+`npx <package>`), `args` ist eine gedeckelte String-Liste, und ein
+**`env`-Feld kostet den ganzen Eintrag**: der MCP-Server erbt exakt das
+minimierte Job-Env, eine eigene Env-Tabelle wäre ein zweiter, ungeprüfter
+Credential-Weg. Beim filesystem-Beispiel oben: als Wurzel gehört die
+Worker-Root (oder ein Pfad darunter) in die args — der Job kann ohnehin nur
+dort schreiben; eine weiter gefasste Wurzel gäbe dem Kind Lesezugriff, den die
+Sandbox-Form nicht vorsieht.
+
+Zwei Gates, wie beim Browser — beide müssen den Server nennen, sonst wird die
+Anforderung **benannt abgelehnt** und kein Job startet:
+
+- **Agent** (`Environment=` der Agent-Unit): `TALOS_MCP_SERVERS=filesystem,…`
+  — erlaubt ist die *Schnittmenge* mit der Registry.
+  `TALOS_BROWSER_MCP_ENABLED=1` impliziert weiterhin `chrome-devtools`;
+  Bestandskonfigurationen laufen unverändert weiter.
+- **Worker** (`/etc/talos/claude-worker.env`):
+  `TALOS_CLAUDE_WORKER_MCP_SERVERS=filesystem,…` und
+  `TALOS_CLAUDE_WORKER_MCP_REGISTRY=/home/…/talos/data/mcp-servers.json`
+  (Pfad zur Registry — der Worker importiert `config.py` nicht und findet die
+  Datei nur über diese Variable). `TALOS_CLAUDE_WORKER_BROWSER_MCP=1`
+  impliziert weiterhin `chrome-devtools`; fehlt der Registry-Eintrag dafür,
+  baut der Worker die Konfiguration wie bisher aus den
+  `TALOS_CLAUDE_WORKER_BROWSER_*`-Schlüsseln (Env-Synthese).
+
+Im Agenten fordert das Modell Server über `delegate_code {"prompt": "…",
+"mcp": ["filesystem"]}` an; `browser: true` bleibt der Alias für
+`mcp: ["chrome-devtools"]`. Pro angefragtem Server bekommt `--allowedTools`
+genau ein `mcp__<name>`-Präfix — nie mehr als angefragt wurde.
 
 ## Fail-closed-Verhalten
 

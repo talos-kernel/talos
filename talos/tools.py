@@ -418,6 +418,7 @@ def make_delegate_code_runner(
     work_root: str,
     exchange: claudejobs.Exchange | None = None,
     browser_enabled: bool = False,
+    mcp_allowed: frozenset[str] = frozenset(),
 ) -> Callable[[ToolRequest], str]:
     """Baut den `delegate_code`-Runner. Dumm: ableiten, abschicken, formatieren.
 
@@ -430,7 +431,11 @@ def make_delegate_code_runner(
     fordert chrome-devtools-mcp IM Job an — nur wirksam, wenn der Betreiber den
     Schalter gesetzt hat; eine Anforderung gegen einen abgeschalteten Schalter
     wird benannt abgelehnt, nie still ohne Browser gefahren (die Evidenz des
-    Kernels wuerde sonst luegen).
+    Kernels wuerde sonst luegen). `"mcp": ["name", …]` ist die generische Form:
+    `mcp_allowed` ist die fertig gerechnete Schnittmenge aus Registry-Datei
+    (`data/mcp-servers.json`) und Agent-Schalter (`TALOS_MCP_SERVERS`), und ein
+    Name ausserhalb davon wird benannt abgelehnt, BEVOR ein Frame den Prozess
+    verlaesst. Das Worker-Gate dahinter bleibt eigenstaendig scharf.
     """
 
     def delegate_code(req: ToolRequest) -> str:
@@ -439,13 +444,24 @@ def make_delegate_code_runner(
         if browser and not browser_enabled:
             return ("delegate_code: browser angefordert, aber der Browser-MCP "
                     "ist abgeschaltet (TALOS_BROWSER_MCP_ENABLED=0)")
+        gewuenscht = req.args.get("mcp", [])
+        if (not isinstance(gewuenscht, list)
+                or not all(isinstance(n, str) for n in gewuenscht)):
+            return ("delegate_code: mcp muss eine Liste von Servernamen sein "
+                    '(z.B. "mcp": ["chrome-devtools"])')
+        namen = list(dict.fromkeys(gewuenscht))
+        for name in namen:
+            if name not in mcp_allowed:
+                return (f"delegate_code: mcp-Server {name!r} ist nicht "
+                        "freigeschaltet (Registry data/mcp-servers.json "
+                        "geschnitten mit TALOS_MCP_SERVERS)")
         job_id = uuid.uuid4().hex[:12]
         # Blattname aus der Kernelfunktion, Wurzel aus der Verdrahtung — im
         # Dienst ist das policy.claude_work_root(), und beide stimmen ueberein.
         workspace = str(Path(work_root) / Path(claude_job_workspace(job_id)).name)
         antwort = claudejobs.submit_job(
             socket_path, job_id, prompt, workspace, exchange=exchange,
-            browser_mcp=browser)
+            browser_mcp=browser, mcp_servers=namen)
         if not antwort.get("ok"):
             return (f"delegate_code: worker {antwort.get('kind', 'unavailable')}"
                     f" — {antwort.get('message', '')}")

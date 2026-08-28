@@ -20,7 +20,7 @@ fremder Agent ist keine Degradation, sondern ein anderes Produkt.
 Protokoll — JSON-Lines, eine Anfrage pro Verbindung:
 
     →  {"op": "submit", "job_id": "…", "prompt": "…", "workspace": "…",
-        "browser_mcp": false}
+        "browser_mcp": false, "mcp_servers": []}
     →  {"op": "status", "job_id": "…"}
     ←  {"ok": true, "state": "accepted"|"running"|"done"|"failed"|"timeout", …}
     ←  {"ok": false, "kind": "invalid_request"|"unknown_job"|"busy"|"unavailable",
@@ -34,6 +34,18 @@ sie separat frei (`TALOS_CLAUDE_WORKER_BROWSER_MCP=1`, Vorgabe AUS): ein Frame,
 der sie anfordert, ohne dass der Dienst sie kennt, wird ABGELEHNT statt still
 ohne Browser zu laufen — eine still degradierte Erlaubnis waere eine Luege
 gegenueber der Policy-Evidenz des Agenten.
+
+`mcp_servers` ist die generische Form desselben Mechanismus: eine Liste von
+NAMEN aus der operator-owned Registry (`data/mcp-servers.json`, siehe
+`mcpservers.py`) — `browser_mcp: true` mappt intern auf `["chrome-devtools"]`,
+und alte Clients bleiben so bedienbar. Der Frame traegt NIE command/args: der
+Worker baut die MCP-Konfiguration ausschliesslich aus seiner eigenen Env
+(`TALOS_CLAUDE_WORKER_MCP_SERVERS` als zweites Gate, Vorgabe leer = keiner)
+und der Registry-Datei. Einen Server, den Registry ODER Gate nicht kennen,
+lehnt er benannt ab — kein Job startet. Definiert die Registry
+`chrome-devtools` selbst, gilt ihr Eintrag; sonst faellt der Worker fuer
+genau diesen einen Namen auf die Env-Synthese (`BrowserMcp`) zurueck, damit
+Bestandsinstallationen ohne Registry-Datei unveraendert weiterlaufen.
 
 Bei "done" zusaetzlich: "summary" (aus dem `result`-Event des Streams),
 "files" (Pfade relativ zum Arbeitsbereich, aus `tool_use`-Events — Beweis
@@ -59,7 +71,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterator, Mapping
 
-from . import sandbox
+from . import mcpservers, sandbox
+from .mcpservers import SERVER_NAME, McpServerRegistry
 from .sandbox import SandboxLimits
 
 __all__ = [
@@ -72,6 +85,7 @@ __all__ = [
     "MAX_PARALLEL",
     "MAX_PROMPT_CHARS",
     "MAX_SUMMARY_CHARS",
+    "MCP_CONFIG_FILE",
     "SOCKET_ENV_VAR",
     "BrowserMcp",
     "browser_mcp_config",
@@ -123,6 +137,15 @@ BROWSER_MCP_SERVER = "chrome-devtools"
 BROWSER_MCP_FILE = ".chrome-devtools.mcp.json"
 BROWSER_MCP_PACKAGE = "chrome-devtools-mcp@latest"
 BROWSER_MCP_ALLOWED_TOOLS = f"mcp__{BROWSER_MCP_SERVER}"
+
+# Die generische MCP-Konfigurationsdatei eines Jobs (im Job-Workspace). Der
+# alte Name oben bleibt fuer den reinen Legacy-Fall (nur chrome-devtools aus
+# der Env-Synthese), damit sich am Bestandspfad kein Bit aendert; sobald die
+# Registry beteiligt ist, traegt die Datei diesen neutralen Namen.
+MCP_CONFIG_FILE = ".talos-mcp.json"
+# Wie viele MCP-Server ein einzelner Frame anfordern darf — Deckel gegen ein
+# Kind, das die Allowlist flutet.
+MAX_MCP_SERVERS = 8
 
 
 @dataclass(frozen=True)
@@ -262,15 +285,18 @@ def parse_stream_event(line: dict, workspace: Path) -> tuple[str | None, str | N
     return (None, None)
 
 
-def _job_argv(prompt: str, *, mcp_config: Path | None = None) -> list[str]:
+def _job_argv(prompt: str, *, mcp_config: Path | None = None,
+              mcp_servers: tuple[str, ...] = ()) -> list[str]:
     """Die Argumente NACH dem Binary. Das Binary selbst gehoert der
     Worker-Konfiguration (`make_spawn`) — kein Frame der Leitung darf es waehlen.
-    Die MCP-Konfiguration (nur bei Browser-Jobs) hat der Worker selbst in den
+    Die MCP-Konfiguration (nur bei MCP-Jobs) hat der Worker selbst in den
     Arbeitsbereich geschrieben; auch ihre WERKZEUGE stehen in der Allowlist,
-    sonst stuenden sie ungenutzt hinter dem Berechtigungs-Prompt."""
+    sonst stuenden sie ungenutzt hinter dem Berechtigungs-Prompt. Pro Server
+    genau ein `mcp__<name>`-Praefix — nie mehr als angefragt wurde."""
     erlaubt = ALLOWED_TOOLS
     if mcp_config is not None:
-        erlaubt = f"{erlaubt},{BROWSER_MCP_ALLOWED_TOOLS}"
+        namen = mcp_servers or (BROWSER_MCP_SERVER,)
+        erlaubt = f"{erlaubt}," + ",".join(f"mcp__{name}" for name in namen)
     argv = [
         "-p", prompt,
         "--output-format", "stream-json",
@@ -291,11 +317,17 @@ class _Job:
     damit `status` nie einen halb geschriebenen Zustand liest."""
 
     def __init__(self, job_id: str, prompt: str, workspace: str, *,
-                 browser_mcp: BrowserMcp | None = None) -> None:
+                 mcp_eintraege: dict[str, dict] | None = None,
+                 legacy_browser: bool = False) -> None:
         self.job_id = job_id
         self.prompt = prompt
         self.workspace = workspace
-        self.browser_mcp = browser_mcp
+        # Vom WORKER aufgeloeste MCP-Konfigurationseintraege (Name →
+        # {"command": …, "args": […]}) — der Frame lieferte nur Namen.
+        self.mcp_eintraege = mcp_eintraege or {}
+        # Reiner Legacy-Fall: genau chrome-devtools aus der Env-Synthese —
+        # die Datei behaelt dann den alten Namen (BROWSER_MCP_FILE).
+        self.legacy_browser = legacy_browser
         self.state = "accepted"
         self.summary = ""
         self.files: list[str] = []
@@ -325,16 +357,51 @@ class _Jobs:
     """In-memory Job-Tabelle. Zustaende: accepted → running → done|failed|timeout."""
 
     def __init__(self, *, max_parallel: int = MAX_PARALLEL, worker_home: str = "",
-                 browser: BrowserMcp | None = None) -> None:
+                 browser: BrowserMcp | None = None,
+                 mcp_registry: McpServerRegistry | None = None,
+                 mcp_enabled: frozenset[str] = frozenset()) -> None:
         self._max_parallel = max_parallel
         self._worker_home = worker_home
         self._browser = browser if browser is not None else BrowserMcp()
+        # Registry (operator-owned Datei) und das Worker-Gate: ein Server ist
+        # nur fahrbar, wenn BEIDE ihn kennen — die Datei allein ist eine
+        # Beschreibung, das Gate allein ein Versprechen ohne Inhalt.
+        self._mcp_registry = (mcp_registry if mcp_registry is not None
+                              else McpServerRegistry())
+        self._mcp_enabled = frozenset(mcp_enabled)
         self._schloss = threading.Lock()
         self._jobs: dict[str, _Job] = {}
 
+    def _loese_mcp(self, namen: list[str]) -> tuple[dict[str, dict], bool]:
+        """Namen → Konfigurationseintraege, ausschliesslich aus Gate + Registry
+        (+ der Legacy-Env-Synthese fuer chrome-devtools). Wirft ValueError mit
+        benanntem Grund — der Aufrufer macht daraus den Fehler-Frame."""
+        eintraege: dict[str, dict] = {}
+        legacy = False
+        for name in namen:
+            freigegeben = (name in self._mcp_enabled
+                           or (name == BROWSER_MCP_SERVER and self._browser.enabled))
+            if not freigegeben:
+                raise ValueError(f"mcp server {name!r} is not enabled on this worker")
+            server = self._mcp_registry.get(name)
+            if server is not None:
+                eintraege[name] = server.config_entry()
+            elif name == BROWSER_MCP_SERVER:
+                # Bestandsinstallation ohne Registry-Datei: die Env-Synthese
+                # (headless, chrome_path, command, chrome_args) baut denselben
+                # Eintrag wie bisher — Bit fuer Bit.
+                eintraege[name] = browser_mcp_config(
+                    self._browser)["mcpServers"][name]
+                legacy = True
+            else:
+                raise ValueError(
+                    f"mcp server {name!r} is not in the worker registry")
+        return eintraege, legacy and len(eintraege) == 1
+
     def submit(self, job_id: str, prompt: str, workspace: str, *,
                spawn: Spawn, limits: SandboxLimits,
-               browser_mcp: bool = False) -> str:
+               browser_mcp: bool = False,
+               mcp_servers: Sequence[str] = ()) -> str:
         with self._schloss:
             if job_id in self._jobs:
                 raise ValueError(f"job_id {job_id!r} is already known")
@@ -342,12 +409,18 @@ class _Jobs:
                          if j.state in ("accepted", "running"))
             if aktive >= self._max_parallel:
                 raise _Busy
-            einstellung = None
-            if browser_mcp:
-                if not self._browser.enabled:
-                    raise ValueError("browser mcp is not enabled on this worker")
-                einstellung = self._browser
-            job = _Job(job_id, prompt, workspace, browser_mcp=einstellung)
+            if browser_mcp and not self._browser.enabled:
+                raise ValueError("browser mcp is not enabled on this worker")
+            # `browser_mcp: true` mappt auf ["chrome-devtools"] — der alte
+            # Client und der neue sprechen denselben Mechanismus an.
+            namen = list(dict.fromkeys(
+                ([BROWSER_MCP_SERVER] if browser_mcp else []) + list(mcp_servers)))
+            eintraege: dict[str, dict] = {}
+            legacy_browser = False
+            if namen:
+                eintraege, legacy_browser = self._loese_mcp(namen)
+            job = _Job(job_id, prompt, workspace, mcp_eintraege=eintraege,
+                       legacy_browser=legacy_browser)
             self._jobs[job_id] = job
         deadline = time.monotonic() + limits.timeout_s
         thread = threading.Thread(
@@ -398,18 +471,20 @@ def _run_job(job: _Job, worker_home: str, spawn: Spawn,
     try:
         workspace.mkdir(parents=True, exist_ok=True)
         (workspace / ".home").mkdir(exist_ok=True)
-        if job.browser_mcp is not None:
+        if job.mcp_eintraege:
             # Der WORKER schreibt die MCP-Konfiguration, bevor das Kind startet:
             # das Kind findet sie fertig vor und kann ihren Inhalt nie waehlen.
-            mcp_pfad = workspace / BROWSER_MCP_FILE
+            datei = BROWSER_MCP_FILE if job.legacy_browser else MCP_CONFIG_FILE
+            mcp_pfad = workspace / datei
             mcp_pfad.write_text(
-                json.dumps(browser_mcp_config(job.browser_mcp)), encoding="utf-8")
+                json.dumps({"mcpServers": job.mcp_eintraege}), encoding="utf-8")
             os.chmod(mcp_pfad, 0o600)
     except OSError as ungueltig:
         job.beenden("failed", fehler=f"workspace not creatable: {ungueltig}")
         return
     job.beenden("running", returncode=-1)
-    argv = _job_argv(job.prompt, mcp_config=mcp_pfad)
+    argv = _job_argv(job.prompt, mcp_config=mcp_pfad,
+                     mcp_servers=tuple(job.mcp_eintraege))
     env = job_env(worker_home, workspace,
                   oauth_token=_lies_oauth_token(worker_home))
     try:
@@ -590,10 +665,15 @@ def handle_frame(raw: bytes, jobs: _Jobs, *, spawn: Spawn | None = None,
             browser_mcp = frame.get("browser_mcp", False)
             if not isinstance(browser_mcp, bool):
                 return _invalid("browser_mcp must be a boolean")
+            mcp_roh = frame.get("mcp_servers", [])
+            if (not isinstance(mcp_roh, list) or len(mcp_roh) > MAX_MCP_SERVERS
+                    or not all(isinstance(n, str) and SERVER_NAME.fullmatch(n)
+                               for n in mcp_roh)):
+                return _invalid("mcp_servers must be a list of server names")
             try:
                 jobs.submit(job_id, prompt, workspace,
                             spawn=hersteller, limits=grenzen,
-                            browser_mcp=browser_mcp)
+                            browser_mcp=browser_mcp, mcp_servers=mcp_roh)
             except _Busy:
                 return _fehler(KIND_BUSY, "parallel job limit reached")
             except ValueError as ungueltig:
@@ -711,8 +791,20 @@ def serve(socket_path: str = DEFAULT_SOCKET, env_path: str = DEFAULT_ENV, *,
         command=cfg("TALOS_CLAUDE_WORKER_BROWSER_CMD"),
         chrome_args=cfg("TALOS_CLAUDE_WORKER_BROWSER_CHROME_ARGS"),
     )
+    # Das generische MCP-Gate des Dienstes: Vorgabe LEER = kein Server. Es ist
+    # die zweite Schicht neben der Registry-Datei — der Worker vertraut keinem
+    # Frame, und ein Versehen auf Agent-Seite oeffnet hier nichts. Ungueltige
+    # Namen in der Liste fallen still heraus; sie wuerden ohnehin nie matchen.
+    mcp_enabled = frozenset(
+        teil for teil in (t.strip() for t in
+                          cfg("TALOS_CLAUDE_WORKER_MCP_SERVERS").split(","))
+        if SERVER_NAME.fullmatch(teil))
+    mcp_registry_pfad = cfg("TALOS_CLAUDE_WORKER_MCP_REGISTRY")
+    mcp_registry = (McpServerRegistry.from_path(Path(mcp_registry_pfad))
+                    if mcp_registry_pfad else McpServerRegistry())
     jobs = _Jobs(max_parallel=max_parallel, worker_home=worker_home,
-                 browser=browser)
+                 browser=browser, mcp_registry=mcp_registry,
+                 mcp_enabled=mcp_enabled)
     limits = SandboxLimits(timeout_s=timeout_s)
     hersteller = spawn if spawn is not None else make_spawn(claude_bin)
 

@@ -1,7 +1,7 @@
 {
   "version": "0.13.1-alpha",
-  "tests": 1920,
-  "redteam_faelle": 173,
+  "tests": 1953,
+  "redteam_faelle": 176,
   "kernel_zeilen": 589,
   "werkzeuge": 21,
   "sha": "6929bcf56c",

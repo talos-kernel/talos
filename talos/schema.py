@@ -80,6 +80,22 @@ def _positive_int(value: str) -> str:
     return text
 
 
+def _mcp_server_list(value: str) -> str:
+    """Komma-Liste von MCP-Servernamen. Leer ist erlaubt (= keiner frei);
+    jeder Eintrag muss dem Namensmuster der Registry genuegen — ein Tippfehler
+    hier ist ein lauter Fehler, keine stille Leerstelle im Gate."""
+    from .mcpservers import SERVER_NAME
+
+    text = _one_line(value)
+    if not text:
+        return ""
+    namen = [teil.strip() for teil in text.split(",")]
+    if any(not SERVER_NAME.fullmatch(teil) for teil in namen):
+        raise ValueError("expected a comma-separated list of server names "
+                         "matching [a-z0-9-]{1,32}")
+    return ",".join(namen)
+
+
 KEYS: tuple[Key, ...] = (
     # --- Politik: die drei, mit denen man den Kernel umstellt statt ihn zu ueberreden.
     Key("TALOS_ALLOWED_PRINCIPALS", POLICY,
@@ -111,10 +127,24 @@ KEYS: tuple[Key, ...] = (
         "(chrome-devtools-mcp) — a Chrome with network inside the job widens "
         "the sandbox's attack surface, so it is opt-in, not a side effect of "
         "the worker switch", default="0", validate=_bool01),
+    Key("TALOS_MCP_SERVERS", POLICY,
+        "comma-separated MCP server names delegate_code may request — the "
+        "grant is the intersection of this list with the operator-owned "
+        "registry data/mcp-servers.json; empty means none", default="",
+        validate=_mcp_server_list),
     Key("TALOS_CLAUDE_WORKER_BROWSER_MCP", POLICY,
         "the worker's own gate for browser jobs — a frame asking for the "
         "browser without it is REJECTED, never silently run without", default="0",
         validate=_bool01),
+    Key("TALOS_CLAUDE_WORKER_MCP_SERVERS", POLICY,
+        "the worker's own gate for generic MCP servers (comma-separated "
+        "names) — a frame asking for one outside this list AND the registry "
+        "is rejected by name, never silently run without", default="",
+        validate=_mcp_server_list),
+    Key("TALOS_CLAUDE_WORKER_MCP_REGISTRY", POLICY,
+        "path to the operator-owned MCP server registry (mcp-servers.json) — "
+        "the worker builds MCP configs only from this file and its own env, "
+        "never from frame contents", default="", validate=_one_line),
     # ⚠️ Die Basis-Adressen stehen nicht hier, sondern werden unten aus dem Katalog
     # erzeugt — eine pro Anbieter. Eine einzige `TALOS_API_BASE_URL` fuer alle war der
     # Weg, auf dem OpenAI-Anfragen an Anthropics Basis gingen (Befund 05.08.).
