@@ -7,10 +7,11 @@ enthalten keine Sicherheitslogik — Trennung von Gate und Vollzug.
 """
 from __future__ import annotations
 
-from . import browser, claudejobs, frames, hearing, sandbox, speech, transcript, vision, web
+from . import browser, claudejobs, dag, frames, hearing, sandbox, speech, transcript, vision, web
 
 import subprocess
 import threading
+import time
 import uuid
 from pathlib import Path
 from typing import Callable
@@ -294,6 +295,14 @@ def default_manifest() -> ToolManifest:
         .with_tool(ToolSpec("delegate_code", Effect.EXEC, reversible=False,
                             requires_env=frozenset({"TALOS_CLAUDE_WORKER_SOCKET"}),
                             sandbox_required=True))
+        # Ein DAG von Coding-Teilaufgaben an denselben eingesperrten Worker:
+        # dieselbe Vertrauensform wie delegate_code (EXEC mit sandbox_required) —
+        # jeder Knoten ist ein eigener `claude -p`-Job im kernel-abgeleiteten
+        # Wegwerf-Workspace, die Einsperrung vertritt den Prompt. Die
+        # Freigabe-Reihenfolge haelt der Desk (dag.py), nicht das Modell.
+        .with_tool(ToolSpec("delegate_dag", Effect.EXEC, reversible=False,
+                            requires_env=frozenset({"TALOS_CLAUDE_WORKER_SOCKET"}),
+                            sandbox_required=True))
         # Den Stand eines delegierten Jobs lesen: READ wie `session_search` — der
         # Aufruf fasst nichts an, er fragt den Worker.
         .with_tool(ToolSpec("delegate_status", Effect.READ, reversible=True,
@@ -469,6 +478,60 @@ def make_delegate_code_runner(
                 f" (workspace {workspace})")
 
     return delegate_code
+
+
+def make_delegate_dag_runner(
+    desk: dag.DagDesk,
+    *,
+    socket_path: str,
+    work_root: str,
+    mcp_allowed: frozenset[str] = frozenset(),
+    context: Callable[[], object | None],
+    submit: Callable = claudejobs.submit_job,
+    clock: Callable[[], float] = time.monotonic,
+    deadline_s: float = dag.DEADLINE_S,
+) -> Callable[[ToolRequest], str]:
+    """Baut den `delegate_dag`-Runner. Dumm wie der delegate_code-Runner:
+    validieren, anlegen, die wurzelfertigen Knoten abschicken, formatieren.
+
+    Die Validierung (`dag.validate_nodes`) laeuft VOR jedem Submit und lehnt
+    benannt ab — ein Zyklus, eine unbekannte Referenz oder ein MCP-Name
+    ausserhalb der Schnittmenge legen nichts im Desk ab und schicken keinen
+    Frame. Die Konversation kommt aus dem Thread-Kontext des Conductors
+    (spaet gebunden wie bei `ask_operator`), nie aus den Werkzeug-Argumenten:
+    das Modell entscheidet nicht, WOHIN berichtet wird — und ohne bekannten
+    Rueckweg wird der DAG gar nicht erst angenommen. Knoten, die der Worker
+    wegen `busy` ablehnt, bleiben `ready`; der Ticker (`dag.poll_dags`)
+    submitted sie, sobald ein Slot frei ist, und dreht den Graphen weiter.
+    """
+
+    def delegate_dag(req: ToolRequest) -> str:
+        try:
+            knoten = dag.validate_nodes(req.args.get("nodes"),
+                                        mcp_allowed=mcp_allowed)
+        except dag.DagError as fehler:
+            return f"delegate_dag: {fehler}"
+        ziel = context()
+        if ziel is None:
+            return ("delegate_dag: kein Gespraechskontext — ohne Rueckweg kein "
+                    "DAG (Knoten-Pushes und Bericht haetten keinen Empfaenger)")
+        lauf = dag.Dag(
+            dag_id=uuid.uuid4().hex[:12],
+            conversation=ziel.conversation,
+            nodes={n.id: n for n in knoten},
+            started_at=clock(),
+            deadline_s=deadline_s,
+        )
+        gestartet = dag.start_ready(
+            lauf,
+            submit_one=lambda job_id, prompt, workspace, mcp: submit(
+                socket_path, job_id, prompt, workspace, mcp_servers=mcp),
+            work_root=work_root)
+        desk.register(lauf)
+        return (f"delegate_dag dag_id={lauf.dag_id} state=accepted "
+                f"({len(knoten)} Knoten, {gestartet} sofort gestartet)")
+
+    return delegate_dag
 
 
 def make_delegate_status_runner(

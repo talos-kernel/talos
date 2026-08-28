@@ -57,6 +57,7 @@ TOOL_PROTOCOL = (
     '- delegate {"question": "…"}\n'
     '- agent_consult {"question": "…", "attempted": "…", "failure": "…"}\n'
     '- delegate_code {"prompt": "…", "mcp": ["chrome-devtools", …], "browser": true|false} — hand a bounded coding task to the confined Claude worker; returns a job_id. mcp names operator-enabled MCP servers added inside the job sandbox (registry data/mcp-servers.json ∩ TALOS_MCP_SERVERS); browser=true is the alias for mcp: ["chrome-devtools"]\n'
+    '- delegate_dag {"nodes": [{"id": "a", "prompt": "…", "depends_on": ["b"], "mcp": ["…"]}]} — a small acyclic graph (≤ 8 nodes) of bounded coding tasks for the confined worker; dependency-free nodes run in parallel, dependents fire when their parents finish, a failed parent skips its children; per-node pushes plus a final report come back to this conversation\n'
     '- delegate_status {"job_id": "…"} — read a delegated job\'s state and result\n'
     '- browse {"url": "https://…"}\n'
     '- see_image {"path": "…", "question": "…"}\n'

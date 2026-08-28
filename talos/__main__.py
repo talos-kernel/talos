@@ -24,7 +24,7 @@ from typing import Callable
 
 import requests
 
-from . import claudejobs, consult, notify, tools
+from . import claudejobs, consult, dag, notify, tools
 from .api_reasoner import SUPPORTED_PROVIDERS, ApiReasoner
 from .approval import ApprovalPicker, ApprovalStore
 from .autonomy import AutonomyGovernor, GovernedKernel, restore_level
@@ -293,6 +293,11 @@ def run(once: bool = False, ask: str = "", chat: bool = False) -> None:
     # Die angemeldeten delegierten Jobs, deren Endzustand gepusht wird. Eine Instanz,
     # geteilt zwischen dem delegate_code-Runner (Anmeldung) und dem Ticker weiter unten.
     pushes = notify.CompletionDesk()
+    # Die laufenden delegate_dag-Graphen: eine Instanz, geteilt zwischen dem
+    # delegate_dag-Runner (Anmeldung) und demselben Ticker wie die Completions.
+    # In-memory wie der BackgroundDesk — was ein Neustart verliert, behandelt
+    # der Worker ohnehin als `unknown_job`, und der Desk meldet das ehrlich.
+    dags = dag.DagDesk()
     # Das Gespraechsarchiv. Ueberlebt Neustart und /new — gelesen wird es nur ueber das
     # gegatete session_search-Werkzeug, nie automatisch. Faellt es aus, laeuft der Agent
     # ohne Archiv weiter (fail-open, wie Recall).
@@ -380,6 +385,16 @@ def run(once: bool = False, ask: str = "", chat: bool = False) -> None:
             ),
             "delegate_status": tools.make_delegate_status_runner(
                 socket_path=config.claude_worker_socket),
+            # Der DAG-Runner: gleiche Bauart wie delegate_code. Die Konversation
+            # kommt aus dem Thread-Kontext (spaet gebunden), nie aus den
+            # Werkzeug-Argumenten; den Graphen dreht der Ticker weiter unten.
+            "delegate_dag": tools.make_delegate_dag_runner(
+                dags,
+                socket_path=config.claude_worker_socket,
+                work_root=claude_work_root(),
+                mcp_allowed=mcp_allowed,
+                context=lambda: conductor.ask_contexts.current(),
+            ),
         } if config.claude_worker_enabled else {}),
         # Netz. Die Grenze liegt in `web.guard_url`, nicht im Pfad-Floor: ein Werkzeug,
         # das beliebige URLs holt, ist sonst ein Tor ins interne Netz.
@@ -553,6 +568,20 @@ def run(once: bool = False, ask: str = "", chat: bool = False) -> None:
                     status=lambda job_id: claudejobs.job_status(
                         config.claude_worker_socket, job_id),
                     send=registry.send,
+                    log=log,
+                )
+                # Derselbe Takt fuer die DAG-Graphen: Endzustaende pushen, Kinder
+                # freigeben oder skippen, am Ende den Gesamtbericht. Kein eigener
+                # Thread — ein Ticker, ein Takt, dieselbe Fail-open-Einordnung.
+                dag.poll_dags(
+                    dags,
+                    status=lambda job_id: claudejobs.job_status(
+                        config.claude_worker_socket, job_id),
+                    submit=lambda job_id, prompt, workspace, mcp: claudejobs.submit_job(
+                        config.claude_worker_socket, job_id, prompt, workspace,
+                        mcp_servers=mcp),
+                    send=registry.send,
+                    work_root=claude_work_root(),
                     log=log,
                 )
             except Exception as error:  # ein kaputter Push darf den Agenten nicht anhalten

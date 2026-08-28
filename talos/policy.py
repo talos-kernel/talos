@@ -277,6 +277,10 @@ TARGET_EXTRACTORS = {
     # Wurzel, unter der jeder Job-Workspace liegt — nie ein Modellpfad. Der
     # Floor greift also, bevor ein einziger Byte des fremden Agenten faellt.
     "delegate_code": lambda args: (claude_work_root(),),
+    # DAG-Delegation: dasselbe Ziel wie `delegate_code` — jeder Knoten wird ein
+    # eigener Job in einem kernel-abgeleiteten Workspace unter dieser Wurzel.
+    # Der Floor greift also, bevor ein einziger Frame den Prozess verlaesst.
+    "delegate_dag": lambda args: (claude_work_root(),),
     # Status lesen fasst nichts an — aber der Eintrag muss stehen: ein
     # Werkzeug ohne Extractor ist per Bauart DENY (siehe `decide`, Schritt 0.5).
     "delegate_status": lambda args: (),

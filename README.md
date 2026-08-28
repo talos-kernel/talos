@@ -15,13 +15,13 @@
 </p>
 
 <p align="center">
-  <!-- ⚠️ Bewusst „tests", nicht „passing": die Zahl kommt aus dem Einsammeln (1953).
+  <!-- ⚠️ Bewusst „tests", nicht „passing": die Zahl kommt aus dem Einsammeln (1987).
        Plattformabhaengige Sandbox- und Repository-Pruefungen koennen uebersprungen werden;
        `test_site_claims` prueft deshalb die gesammelte Zahl statt ein Umgebungsresultat. -->
-  <img src="https://img.shields.io/badge/tests-1953-2e7d32.svg" alt="Tests">
-  <img src="https://img.shields.io/badge/red%20team-176%2F176-2e7d32.svg" alt="Red team">
-  <img src="https://img.shields.io/badge/gate%20path-589%20lines-8a4318.svg" alt="Gate path">
-  <img src="https://img.shields.io/badge/tools-21%20gated-8a4318.svg" alt="Tools">
+  <img src="https://img.shields.io/badge/tests-1987-2e7d32.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/red%20team-179%2F179-2e7d32.svg" alt="Red team">
+  <img src="https://img.shields.io/badge/gate%20path-593%20lines-8a4318.svg" alt="Gate path">
+  <img src="https://img.shields.io/badge/tools-22%20gated-8a4318.svg" alt="Tools">
   <img src="https://img.shields.io/badge/default%20identities-0-c62828.svg" alt="Default identities">
   <img src="https://img.shields.io/badge/python-3.11%2B-1565c0.svg" alt="Python">
   <img src="https://img.shields.io/badge/licence-MIT-616161.svg" alt="MIT">
@@ -103,7 +103,7 @@ authorised individually, bound to its exact arguments and targets, valid once, f
 seconds. Forgetting to call the gate does not produce an unchecked effect — it produces no
 effect at all, because the raw runners are unreachable without a token.
 
-That design is testable, and it is tested: 176 adversarial scenarios run on every change and
+That design is testable, and it is tested: 179 adversarial scenarios run on every change and
 try to get an effect past the kernel. They are in [`redteam.py`](redteam.py). Read them
 before you trust anything written above.
 
@@ -170,8 +170,8 @@ pip install -r requirements.txt
 
 python -m talos setup                    # asks three things, writes a file, stops
 python -m talos doctor                   # what is still missing
-python -m pytest tests/ -q               # 1953 tests
-python redteam.py                        # 176 adversarial cases
+python -m pytest tests/ -q               # 1987 tests
+python redteam.py                        # 179 adversarial cases
 python -m talos                          # run it
 ```
 
@@ -532,7 +532,7 @@ permitted it. `/log` shows the last effects, `/undo` rolls back the last file ch
 
 ## Tools
 
-Twenty-one, and every one of them passes the same gate. There is no privileged tool and no
+Twenty-two, and every one of them passes the same gate. There is no privileged tool and no
 tool that skips the kernel — a tool without a target extractor is `DENY` by construction.
 
 | | |
@@ -545,7 +545,7 @@ tool that skips the kernel — a tool without a target extractor is `DENY` by co
 | `vault_search` / `vault_get` / `vault_write_note` | a markdown knowledge base, if you point it at one |
 | `session_search` | what was said in earlier turns |
 | `delegate` | a sub-run that can only read |
-| `delegate_code` / `delegate_status` | a bounded coding job for a confined Claude worker — opt-in, off by default, writes only into a kernel-derived disposable workspace |
+| `delegate_code` / `delegate_dag` / `delegate_status` | a bounded coding job — or a small acyclic graph of them — for a confined Claude worker: opt-in, off by default, writes only into a kernel-derived disposable workspace |
 | `agent_consult` | bounded advice from a second, operator-configured agent — data, never permission |
 | `ask_operator` | the one way it can ask you something on purpose |
 
@@ -593,7 +593,7 @@ executing anything. It is the fastest way to understand the kernel.
 
 ## Architecture
 
-Small modules on purpose. The gate path (`policy.py`, 589 lines) has to be readable in one
+Small modules on purpose. The gate path (`policy.py`, 593 lines) has to be readable in one
 sitting — a gate you cannot read is not a gate.
 
 | Module | Role |

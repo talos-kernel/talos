@@ -272,6 +272,12 @@ CASES: list[tuple[str, ToolRequest, Status]] = [
         ToolRequest("delegate_status", OWNER, {"job_id": "x"}),
         Status.DENIED,
     ),
+    (
+        "Delegate DAG without worker configured",
+        ToolRequest("delegate_dag", OWNER,
+                    {"nodes": [{"id": "a", "prompt": "rewrite the repo"}]}),
+        Status.DENIED,
+    ),
 ]
 
 tmp = Path(tempfile.mkdtemp(prefix="talos-redteam-"))
@@ -2782,6 +2788,48 @@ _cw_out = _cw_runner(ToolRequest("delegate_code", OWNER,
                                  {"prompt": "x", "mcp": ["shell-aufmachen"]}))
 _cw_ok = "nicht freigeschaltet" in _cw_out and "shell-aufmachen" in _cw_out
 _result(_cw_ok, "delegate_code submits an MCP server outside the agent-side grant",
+        "refused by name before any frame" if _cw_ok else f"SUBMITTED: {_cw_out}")
+if not _cw_ok:
+    failures += 1
+
+# 9) delegate_dag: ein Zyklus in der Deklaration (a→b→a) wird benannt abgelehnt,
+#    BEVOR ein Frame den Prozess verlaesst — ein zyklischer Graph wuerde sonst
+#    fuer immer auf einen Elternteil warten, der nie fertig werden kann.
+from talos import dag as _dag  # noqa: E402
+from talos.tools import make_delegate_dag_runner as _mk_ddr  # noqa: E402
+
+_cw_desk = _dag.DagDesk()
+_cw_dag_runner = _mk_ddr(
+    _cw_desk, socket_path="/s/rt.sock", work_root="/tmp/rt-root",
+    mcp_allowed=frozenset({"filesystem"}),
+    context=lambda: type("Z", (), {"conversation": "telegram:rt"})(),
+    submit=_cw_boom)
+_cw_out = _cw_dag_runner(ToolRequest("delegate_dag", OWNER, {"nodes": [
+    {"id": "a", "prompt": "x", "depends_on": ["b"]},
+    {"id": "b", "prompt": "y", "depends_on": ["a"]},
+]}))
+_cw_ok = "yklus" in _cw_out and _cw_desk.busy() == 0
+_result(_cw_ok, "delegate_dag with a cycle in the declaration",
+        "refused by name, no frame, nothing registered" if _cw_ok
+        else f"SUBMITTED: {_cw_out}")
+if not _cw_ok:
+    failures += 1
+
+# 10) delegate_dag: ein MCP-Servername ausserhalb der Agent-Freigabe an EINEM
+#     Knoten lehnt den ganzen Graphen ab — dieselbe Schnittmenge wie bei
+#     delegate_code, dieselbe Stelle: vor dem ersten Frame.
+_cw_desk2 = _dag.DagDesk()
+_cw_dag_runner2 = _mk_ddr(
+    _cw_desk2, socket_path="/s/rt.sock", work_root="/tmp/rt-root",
+    mcp_allowed=frozenset({"filesystem"}),
+    context=lambda: type("Z", (), {"conversation": "telegram:rt"})(),
+    submit=_cw_boom)
+_cw_out = _cw_dag_runner2(ToolRequest("delegate_dag", OWNER, {"nodes": [
+    {"id": "a", "prompt": "x", "mcp": ["shell-aufmachen"]},
+]}))
+_cw_ok = ("nicht freigeschaltet" in _cw_out and "shell-aufmachen" in _cw_out
+          and _cw_desk2.busy() == 0)
+_result(_cw_ok, "delegate_dag submits an MCP server outside the agent-side grant",
         "refused by name before any frame" if _cw_ok else f"SUBMITTED: {_cw_out}")
 if not _cw_ok:
     failures += 1

@@ -140,7 +140,7 @@ EXPRESSIVE = Style(
         "hear": "👂", "speak": "🔊",
         "grab_frame": "🎞️", "entity_status": "📡", "agent_consult": "🤝",
         "ask_operator": "🙋", "delegate": "🧭", "session_search": "🗂️",
-        "delegate_code": "🛠️", "delegate_status": "🔍",
+        "delegate_code": "🛠️", "delegate_status": "🔍", "delegate_dag": "🧩",
     },
     tool_verbs={
         "read_file": "Reading", "write_file": "Writing", "run_shell": "Running",
@@ -152,6 +152,7 @@ EXPRESSIVE = Style(
         "agent_consult": "Consulting", "ask_operator": "Asking you",
         "delegate": "Delegating", "session_search": "Searching history",
         "delegate_code": "Delegating code", "delegate_status": "Checking job",
+        "delegate_dag": "Delegating task graph",
     },
 )
 
