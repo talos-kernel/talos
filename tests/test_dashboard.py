@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import http.client
 import json
+import re
 import sqlite3
 import sys
 import threading
@@ -176,7 +177,11 @@ def test_index_serves_a_self_contained_page(server) -> None:
     assert code == 200 and "text/html" in typ
     # Keine externe Referenz: der Beobachter darf nichts nachladen, was Dritte sehen.
     assert "http://" not in body and "https://" not in body
-    assert "src=" not in body and "link " not in body and "<link" not in body
+    assert "link " not in body and "<link" not in body
+    # Fonts und Sigil sind base64-eingebettet (dashboard_assets): jedes src= und
+    # jedes url( muss eine data:-URI sein — geladen wird aus dem Prozess, nie fremd.
+    for ref in re.findall(r'(?:src=|url\()\s*"([^"]+)"', body):
+        assert ref.startswith("data:"), ref
     assert "/api/status" in body  # die Seite pollt die eigenen Endpunkte
 
 

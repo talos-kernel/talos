@@ -6,6 +6,18 @@ they make possible that was not possible before — or, more often, what they ta
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions are alpha: the kernel's rules are stable, the surface around them is not.
 
+## [0.15.1-alpha] — 2026-08-28
+
+### Changed
+
+- The dashboard (`talos dashboard`) wears the public site's design: the same
+  oklch tokens, VT323 + Sometype Mono and the sigil — embedded as base64, so the
+  page still loads nothing from anywhere. Raw JSON blocks are gone; status,
+  runs, approvals, schedules and the event log render as structured cards,
+  tables and verdict pills, still refreshed every five seconds, still GET-only,
+  still without any button that could answer an approval. Data is rendered via
+  `textContent` only.
+
 ## [0.15.0-alpha] — 2026-08-28
 
 ### Added

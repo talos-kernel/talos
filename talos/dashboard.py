@@ -425,65 +425,526 @@ class Collector:
         return antwort
 
 
-# --- Die Seite: self-contained, dunkel, Maschinenraum ----------------------------------------
+# --- Die Seite: self-contained, im Look von talos-agent.ch --------------------------------------
 #
-# Anmutung an site/console.html (dunkel/Terminal), aber ohne deren Marketing-Teil:
-# diese Seite ist ein Instrument, keine Vitrine. Inline CSS/JS, keine externen
-# Assets — der Beobachter darf nichts nachladen, was ein Dritter sehen koennte.
-PAGE = """<!DOCTYPE html>
+# Dieselbe Designsprache wie die oeffentliche Site (VT323 + Sometype Mono, die
+# oklch-Tokens, Scanline-Overlay, spec-row, Stempel) — aber als Instrument, nicht
+# als Vitrine: jede Zahl kommt aus den /api-Routen, gerendert wird ausschliesslich
+# ueber textContent (Daten beruehren nie innerHTML). Fonts und Sigil sind base64-
+# eingebettet (dashboard_assets): kein Request verlaesst den Prozess, kein Dritter
+# sieht einen Abruf — die Self-contained-Regel gilt unverkuerzt.
+from .dashboard_assets import (
+    FONT_SOMETYPE_MONO_WOFF2_B64,
+    FONT_VT323_WOFF2_B64,
+    SIGIL_PNG_B64,
+)
+
+
+def _asset(text: str) -> str:
+    """base64 ohne die Umbrueche des generierten Moduls."""
+    return "".join(text.split())
+
+
+_PAGE_TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>talos dashboard — observing only</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TALOS — machine room</title>
+<meta name="theme-color" content="#17140F">
 <style>
-  :root { color-scheme: dark; }
-  body { background: #17140F; color: #d8d2c4; font: 14px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 0; padding: 24px; }
-  h1 { font-size: 17px; color: #e8dfc8; margin: 0 0 4px; }
-  h2 { font-size: 14px; color: #a89e88; border-bottom: 1px solid #35301f; padding-bottom: 4px; margin: 28px 0 8px; }
-  .note { color: #8a8272; font-size: 12px; max-width: 72ch; }
-  .ok { color: #7fb069; } .bad { color: #d1603d; }
-  pre { background: #1e1a13; border: 1px solid #35301f; border-radius: 6px; padding: 12px; overflow-x: auto; white-space: pre-wrap; word-break: break-word; }
-  #stamp { float: right; color: #8a8272; font-size: 12px; }
+@font-face { font-family:"VT323"; src:url("data:font/woff2;base64,__FONT_VT323__") format("woff2"); font-weight:400; font-display:swap; }
+@font-face { font-family:"Sometype Mono"; src:url("data:font/woff2;base64,__FONT_MONO__") format("woff2"); font-weight:400 700; font-style:normal; font-display:swap; }
+
+/* Dieselben Tokens wie talos-agent.ch — ein System, ein Look. */
+:root{
+  --bg:    oklch(0.115 0.012 75);
+  --bg2:   oklch(0.145 0.016 78);
+  --amber: oklch(0.80 0.155 80);
+  --hot:   oklch(0.92 0.13 85);
+  --dim:   oklch(0.56 0.09 80);
+  --faint: oklch(0.38 0.055 80);
+  --line:  oklch(0.28 0.04 80);
+  --deny:  oklch(0.64 0.19 32);
+  --allow: oklch(0.74 0.14 145);
+  --crt:   "VT323", monospace;
+  --mono:  "Sometype Mono", monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth; scroll-padding-top:80px}
+body{
+  background:var(--bg); color:var(--amber);
+  font-family:var(--mono); font-size:14px; line-height:1.7;
+  font-variant-numeric:tabular-nums;
+}
+::selection{background:var(--amber); color:var(--bg)}
+
+/* Scanlines + Vignette, dezent dosiert wie im Manual. */
+.crt-fx{position:fixed; inset:0; pointer-events:none; z-index:90}
+.crt-fx::before{
+  content:""; position:absolute; inset:0;
+  background:repeating-linear-gradient(0deg, oklch(0 0 0/.13) 0 1px, transparent 1px 3px);
+}
+.crt-fx::after{
+  content:""; position:absolute; inset:0;
+  background:radial-gradient(ellipse at 50% 40%, transparent 62%, oklch(0 0 0/.34) 100%);
+}
+
+.wrap{max-width:1100px; margin:0 auto; padding:0 clamp(18px,4vw,52px)}
+
+nav{position:fixed; inset:0 0 auto 0; z-index:50; border-bottom:1px solid var(--line);
+  background:color-mix(in oklch, var(--bg) 88%, transparent); backdrop-filter:blur(8px)}
+nav .wrap{display:flex; gap:24px; align-items:baseline; padding-top:13px; padding-bottom:13px}
+.brand{font-family:var(--crt); font-size:25px; color:var(--hot); letter-spacing:.1em;
+  text-shadow:0 0 10px oklch(0.8 0.155 80/.6);
+  display:inline-flex; align-items:center; gap:10px}
+.brand .mark{width:24px; height:24px; display:block}
+nav a.lnk{font-size:11px; color:var(--dim); text-decoration:none; letter-spacing:.16em;
+  text-transform:uppercase}
+nav a.lnk:hover{color:var(--hot)}
+nav .sp{flex:1}
+.live{font-size:11px; color:var(--faint); letter-spacing:.12em; white-space:nowrap}
+.live i{color:var(--allow); font-style:normal; animation:pulse 2s infinite}
+@keyframes pulse{50%{opacity:.3}}
+@media(max-width:820px){nav a.lnk{display:none}}
+
+main{padding-top:58px}
+
+.hero{padding:clamp(36px,6vh,64px) 0 26px}
+.doc-line{font-size:10.5px; letter-spacing:.18em; text-transform:uppercase; color:var(--dim);
+          display:flex; gap:24px; flex-wrap:wrap; margin-bottom:22px}
+.doc-line::before{content:"● "; color:var(--allow)}
+h1{font-family:var(--crt); font-weight:400; font-size:clamp(40px,5.5vw,68px); line-height:.98;
+   color:var(--hot); text-shadow:0 0 18px oklch(0.8 0.155 80/.5), 0 0 60px oklch(0.8 0.155 80/.22)}
+.hero .lede{margin-top:20px; max-width:66ch; color:var(--dim); font-size:13.5px}
+.hero .lede strong{color:var(--hot); font-weight:600}
+
+.spec-row{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:1px;
+          background:var(--line); border:1px solid var(--line); margin-top:30px}
+.spec{background:var(--bg); padding:18px 20px; font-size:11px; color:var(--dim); line-height:1.55;
+      letter-spacing:.08em; text-transform:uppercase}
+.spec b{display:block; font-family:var(--crt); font-weight:400; font-size:clamp(26px,3vw,36px);
+        color:var(--hot); line-height:1.1; letter-spacing:.03em; text-transform:none;
+        text-shadow:0 0 14px oklch(0.8 0.155 80/.45)}
+.spec b.bad{color:var(--deny); text-shadow:0 0 14px oklch(0.64 0.19 32/.5)}
+.spec b.good{color:var(--allow); text-shadow:0 0 14px oklch(0.74 0.14 145/.4)}
+
+section{padding:34px 0 8px; scroll-margin-top:76px}
+h2{font-family:var(--crt); font-weight:400; font-size:clamp(28px,3.4vw,40px); line-height:1.05;
+   color:var(--hot); text-shadow:0 0 14px oklch(0.8 0.155 80/.4); margin-bottom:4px}
+h2 .n{display:block; font-size:15px; letter-spacing:.14em; color:var(--dim);
+      text-shadow:none; margin-bottom:6px}
+h2 .n::before{content:"┌─[ "}
+h2 .n::after{content:" ]"}
+h3{font-family:var(--crt); font-weight:400; font-size:19px; color:var(--hot);
+   margin:22px 0 6px; text-shadow:0 0 10px oklch(0.8 0.155 80/.3)}
+.basis{font-size:11px; color:var(--faint); letter-spacing:.05em; margin:2px 0 10px}
+
+.note{border:1px solid var(--line); border-left:3px solid var(--faint);
+      background:var(--bg2); padding:12px 15px; margin:14px 0; max-width:70ch;
+      font-size:12.5px; color:var(--amber)}
+.note.warn{border-left-color:var(--deny)}
+.note.good{border-left-color:var(--allow)}
+.note b{display:block; font-size:10px; letter-spacing:.16em; text-transform:uppercase;
+        color:var(--faint); margin-bottom:5px; font-weight:700}
+.note.warn b{color:var(--deny)}
+.note.good b{color:var(--allow)}
+
+.kv{display:grid; grid-template-columns:minmax(170px,250px) 1fr; border:1px solid var(--line);
+    margin:14px 0; font-size:12.5px}
+.kv>div{padding:7px 13px; border-bottom:1px solid var(--line); word-break:break-word}
+.kv>div:nth-child(odd){color:var(--dim); border-right:1px solid var(--line); background:var(--bg2)}
+.kv>div:nth-last-child(-n+2){border-bottom:none}
+
+.cards{display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:1px;
+       background:var(--line); border:1px solid var(--line); margin:14px 0}
+.card{background:var(--bg); padding:13px 15px; font-size:12.5px; color:var(--dim); line-height:1.6}
+.card b{display:block; font-family:var(--crt); font-weight:400; font-size:18px;
+        color:var(--hot); letter-spacing:.04em; margin-bottom:2px}
+.card.warn{background:color-mix(in oklch, var(--bg) 92%, var(--deny))}
+
+.tw{overflow-x:auto; margin:14px 0; border:1px solid var(--line); background:var(--bg)}
+table{border-collapse:collapse; width:100%; font-size:12px; min-width:560px}
+th,td{text-align:left; padding:8px 13px; border-bottom:1px solid var(--line); vertical-align:top}
+th{font-size:10px; letter-spacing:.15em; text-transform:uppercase; color:var(--dim);
+   font-weight:400; background:var(--bg2)}
+tr:last-child td{border-bottom:none}
+tbody tr:nth-child(even){background:color-mix(in oklch, var(--bg) 94%, var(--amber))}
+td.d{color:var(--dim)}
+td.mono{font-size:11.5px; word-break:break-word}
+
+.pill{display:inline-block; border:1.5px solid currentColor; padding:0 8px; font-size:10px;
+      letter-spacing:.13em; text-transform:uppercase; white-space:nowrap}
+.pill.good{color:var(--allow)} .pill.bad{color:var(--deny)}
+.pill.warn{color:var(--amber)} .pill.dim{color:var(--dim)}
+
+.chips{display:flex; flex-wrap:wrap; gap:8px; margin:14px 0}
+.chip{border:1px solid var(--line); background:var(--bg2); padding:6px 12px;
+      font-size:12px; color:var(--dim)}
+.chip .on{color:var(--allow); font-style:normal}
+.chip .off{color:var(--deny); font-style:normal}
+.chip .t{color:var(--hot)}
+
+footer{border-top:1px solid var(--line); margin-top:44px; padding:30px 0 44px;
+       font-size:11.5px; color:var(--faint)}
+footer .wrap{display:flex; gap:22px; flex-wrap:wrap}
+footer .sp{flex:1}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important; transition:none!important}}
 </style>
 </head>
 <body>
-<span id="stamp"></span>
-<h1>talos dashboard</h1>
-<div class="note">Observing, not intervening. Read-only views of the event log, the
-schedule store and the installed blueprints. Approvals stay in the operator's chat —
-there is no button here, by design. Bind: loopback only; reach comes from a
-tailnet proxy in front, never from this process.</div>
 
-<h2>status</h2><pre id="status">…</pre>
-<h2>runs</h2><pre id="runs">…</pre>
-<h2>approvals</h2><pre id="approvals">…</pre>
-<h2>schedules &amp; blueprints</h2><pre id="schedules">…</pre>
-<h2>events</h2><pre id="events">…</pre>
+<div class="crt-fx" aria-hidden="true"></div>
+
+<nav>
+  <div class="wrap">
+    <span class="brand"><img class="mark" src="data:image/png;base64,__SIGIL__" alt="" width="24" height="24">TALOS</span>
+    <a class="lnk" href="#status">Status</a>
+    <a class="lnk" href="#runs">Runs</a>
+    <a class="lnk" href="#approvals">Approvals</a>
+    <a class="lnk" href="#schedules">Schedules</a>
+    <a class="lnk" href="#events">Events</a>
+    <span class="sp"></span>
+    <span class="live"><i>●</i> OBSERVING · <span id="rev">…</span></span>
+  </div>
+</nav>
+
+<main>
+<div class="wrap">
+
+  <div class="hero">
+    <div class="doc-line">
+      <span>Dashboard · read-only</span>
+      <span>Feed · event log + schedule store</span>
+      <span id="stamp">connecting…</span>
+    </div>
+    <h1>The machine room.</h1>
+    <p class="lede"><strong>Observing, not intervening.</strong> This page reads the same
+    files <code>talos health</code> and <code>talos events</code> read — opened read-only and
+    locked that way. Approvals stay in the operator&rsquo;s chat: there is no button here,
+    by design. Bind is loopback; reach comes from a tailnet proxy in front, never from
+    this process.</p>
+    <div class="spec-row">
+      <div class="spec"><b id="spec-version">…</b>agent version</div>
+      <div class="spec"><b id="spec-chain">…</b>hash chain</div>
+      <div class="spec"><b id="spec-runs">…</b>runs · 24 h</div>
+      <div class="spec"><b id="spec-errors">…</b>errors · 24 h</div>
+      <div class="spec"><b id="spec-running">…</b>running now</div>
+    </div>
+  </div>
+
+  <section id="status">
+    <h2><span class="n">01</span>Status</h2>
+    <div id="status-body"><div class="note">…</div></div>
+  </section>
+
+  <section id="runs">
+    <h2><span class="n">02</span>Runs</h2>
+    <div class="basis" id="runs-basis"></div>
+    <div id="runs-body"><div class="note">…</div></div>
+  </section>
+
+  <section id="approvals">
+    <h2><span class="n">03</span>Approvals</h2>
+    <div class="basis" id="approvals-basis"></div>
+    <div id="approvals-body"><div class="note">…</div></div>
+  </section>
+
+  <section id="schedules">
+    <h2><span class="n">04</span>Schedules &amp; blueprints</h2>
+    <div id="schedules-body"><div class="note">…</div></div>
+  </section>
+
+  <section id="events">
+    <h2><span class="n">05</span>Event log</h2>
+    <div class="basis">the last entries — capped, redacted, run ids shortened</div>
+    <div id="events-body"><div class="note">…</div></div>
+  </section>
+
+</div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>TALOS dashboard — observing only</span>
+    <span class="sp"></span>
+    <span>GET only · POST/PUT/DELETE → 405 · unknown → 404 · no approve endpoint, by design</span>
+  </div>
+</footer>
 
 <script>
-// Die rohen Sektionen sind die Wahrheit — formatiert wird nur, was nichts verfaelscht:
-// JSON mit Einzug, keine eigene Deutung daneben. Die Routen stehen ausgeschrieben
-// hier, nicht zusammengebaut: was die Seite abfragt, soll im Quelltext zu sehen sein.
-const SECTIONS = {
-  status: "/api/status",
-  runs: "/api/runs",
-  approvals: "/api/approvals",
-  schedules: "/api/schedules",
-  events: "/api/events",
-};
+// Jeder Wert auf dieser Seite kommt aus den /api-Routen und wird ausschliesslich
+// per textContent gesetzt — Daten beruehren nie innerHTML. Die Routen stehen
+// ausgeschrieben hier, nicht zusammengebaut: was die Seite abfragt, ist sichtbar.
+"use strict";
+
+function el(tag, cls, text) {
+  const node = document.createElement(tag);
+  if (cls) node.className = cls;
+  if (text !== undefined && text !== null) node.textContent = String(text);
+  return node;
+}
+function $(id) { return document.getElementById(id); }
+function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
+
+function fmtAge(seconds) {
+  const s = Math.max(0, Number(seconds) || 0);
+  if (s < 60) return Math.round(s) + " s";
+  if (s < 3600) return Math.round(s / 60) + " m";
+  if (s < 86400) return (s / 3600).toFixed(1) + " h";
+  return (s / 86400).toFixed(1) + " d";
+}
+function fmtInterval(seconds) {
+  const s = Number(seconds) || 0;
+  if (s >= 86400 && s % 86400 === 0) return "every " + (s / 86400) + " d";
+  if (s >= 3600 && s % 3600 === 0) return "every " + (s / 3600) + " h";
+  if (s >= 60 && s % 60 === 0) return "every " + (s / 60) + " m";
+  return "every " + s + " s";
+}
+function statusPill(status) {
+  const s = String(status || "").toLowerCase();
+  let cls = "pill dim";
+  if (["answered", "done", "ok", "completed", "success"].includes(s)) cls = "pill good";
+  else if (["failed", "error", "critical", "broken"].includes(s)) cls = "pill bad";
+  else if (["needs_human", "step_limit", "denied", "refused"].includes(s)) cls = "pill warn";
+  return el("span", cls, status || "—");
+}
+function noteBox(kind, label, text) {
+  const box = el("div", "note" + (kind ? " " + kind : ""));
+  if (label) box.appendChild(el("b", "", label));
+  box.appendChild(document.createTextNode(text));
+  return box;
+}
+function unavailable(body, data) {
+  clear(body);
+  body.appendChild(noteBox("warn", "unavailable", String((data && data.reason) || "source missing")));
+}
+function unreachable(body) {
+  clear(body);
+  body.appendChild(noteBox("warn", "unreachable", "the route did not answer — agent down or proxy flapping"));
+}
+
+// --- 01 status -------------------------------------------------------------
+function renderStatus(data) {
+  if (data.version) { $("rev").textContent = "REV " + String(data.version).toUpperCase(); }
+  if (data.version) { $("spec-version").textContent = data.version; }
+  const chain = data.chain || {};
+  const chainOk = chain.chain_ok === true;
+  const sc = $("spec-chain");
+  sc.textContent = chain.chain_ok === undefined ? "—" : (chainOk ? "OK" : "BROKEN");
+  sc.className = chainOk ? "good" : "bad";
+  const log = data.event_log || {};
+  $("spec-runs").textContent = log.runs_24h !== undefined ? log.runs_24h : "—";
+  const se = $("spec-errors");
+  se.textContent = log.errors_24h !== undefined ? log.errors_24h : "—";
+  se.className = (log.errors_24h || 0) > 0 ? "bad" : "good";
+
+  const body = $("status-body");
+  clear(body);
+  const kv = el("div", "kv");
+  function row(k, v) { kv.appendChild(el("div", "", k)); kv.appendChild(el("div", "", v)); }
+  const health = el("span");
+  health.appendChild(statusPill(data.status || "?"));
+  kv.appendChild(el("div", "", "health"));
+  const healthCell = el("div");
+  healthCell.appendChild(health);
+  kv.appendChild(healthCell);
+  row("measured at", (data.ts !== undefined ? new Date(Number(data.ts) * 1000).toLocaleString() : "—"));
+  row("events total", log.total !== undefined ? log.total : "—");
+  row("last event", log.last_ts ? new Date(Number(log.last_ts) * 1000).toLocaleString() : "—");
+  row("chain", (chain.chained !== undefined ? chain.chained + " chained / " + chain.total + " total" : "—"));
+  if (!chainOk && chain.chain_broken_id) row("chain broken at", "event id " + chain.chain_broken_id);
+  const anchor = data.anchor || {};
+  if (anchor.count !== undefined) row("anchor", anchor.count + " entries · verify " + (anchor.verify_ok ? "ok" : "FAILED"));
+  const sched = data.schedules || {};
+  if (sched.count !== undefined) row("schedules", sched.count);
+  body.appendChild(kv);
+}
+
+// --- 02 runs ---------------------------------------------------------------
+function renderRuns(data) {
+  $("spec-running").textContent = (data.running || []).length;
+  const basis = $("runs-basis");
+  basis.textContent = data.basis || "";
+  const body = $("runs-body");
+  clear(body);
+  const running = data.running || [];
+  const done = data.completed || [];
+  if (running.length) {
+    body.appendChild(el("h3", "", "running"));
+    const grid = el("div", "cards");
+    for (const r of running) {
+      const card = el("div", "card");
+      card.appendChild(el("b", "", String(r.run_id || "").slice(0, 8)));
+      card.appendChild(el("span", "", "for " + fmtAge(r.age_s) + " · " + (r.tool_calls || 0) + " tool calls · since " + (r.started || "?")));
+      grid.appendChild(card);
+    }
+    body.appendChild(grid);
+  } else {
+    body.appendChild(noteBox("good", "quiet", "nothing running right now"));
+  }
+  if (done.length) {
+    body.appendChild(el("h3", "", "completed"));
+    const tw = el("div", "tw");
+    const table = el("table");
+    const head = el("tr");
+    for (const h of ["run", "status", "duration", "tools", "finished"]) head.appendChild(el("th", "", h));
+    const thead = el("thead"); thead.appendChild(head); table.appendChild(thead);
+    const tbody = el("tbody");
+    for (const r of done) {
+      const tr = el("tr");
+      tr.appendChild(el("td", "d", String(r.run_id || "").slice(0, 8)));
+      const st = el("td"); st.appendChild(statusPill(r.status)); tr.appendChild(st);
+      tr.appendChild(el("td", "d", fmtAge(r.duration_s)));
+      tr.appendChild(el("td", "d", r.tool_calls !== undefined ? r.tool_calls : "—"));
+      tr.appendChild(el("td", "d", r.done || ""));
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody); tw.appendChild(table); body.appendChild(tw);
+  }
+}
+
+// --- 03 approvals ----------------------------------------------------------
+function renderApprovals(data) {
+  const basis = $("approvals-basis");
+  basis.textContent = (data.open && data.open.basis) || "";
+  const body = $("approvals-body");
+  clear(body);
+  const open = (data.open && data.open.items) || [];
+  const standing = data.standing || [];
+  if (open.length) {
+    body.appendChild(el("h3", "", "waiting for a human"));
+    const grid = el("div", "cards");
+    for (const item of open) {
+      const card = el("div", "card warn");
+      card.appendChild(el("b", "", item.tool || "?"));
+      const targets = Array.isArray(item.targets) ? item.targets.join(", ") : String(item.targets || "");
+      card.appendChild(el("span", "", targets || "(no target)"));
+      card.appendChild(el("br"));
+      card.appendChild(el("span", "", "waiting " + fmtAge(item.age_s) + " · since " + (item.since || "?")));
+      grid.appendChild(card);
+    }
+    body.appendChild(grid);
+    body.appendChild(noteBox("", "by design", "approve or deny in the operator's chat — this page watches, it cannot answer."));
+  } else {
+    body.appendChild(noteBox("good", "nothing pending", "no approval is waiting for a human"));
+  }
+  if (standing.length) {
+    body.appendChild(el("h3", "", "standing rules"));
+    const tw = el("div", "tw");
+    const table = el("table");
+    const head = el("tr");
+    for (const h of ["tool", "rule", "conversation", "granted"]) head.appendChild(el("th", "", h));
+    const thead = el("thead"); thead.appendChild(head); table.appendChild(thead);
+    const tbody = el("tbody");
+    for (const r of standing) {
+      const tr = el("tr");
+      tr.appendChild(el("td", "", r.tool || ""));
+      tr.appendChild(el("td", "mono", r.label || ""));
+      tr.appendChild(el("td", "d", r.conversation || ""));
+      tr.appendChild(el("td", "d", r.created || ""));
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody); tw.appendChild(table); body.appendChild(tw);
+  }
+}
+
+// --- 04 schedules & blueprints ----------------------------------------------
+function renderSchedules(data) {
+  const body = $("schedules-body");
+  clear(body);
+  const names = Object.keys(data.blueprints || {});
+  if (names.length) {
+    body.appendChild(el("h3", "", "blueprints"));
+    const chips = el("div", "chips");
+    for (const name of names.sort()) {
+      const bp = data.blueprints[name];
+      const chip = el("span", "chip");
+      chip.appendChild(el("i", bp.enabled ? "on" : "off", bp.enabled ? "● " : "○ "));
+      chip.appendChild(el("span", "t", name));
+      if (bp.next_run) chip.appendChild(el("span", "", " · next " + bp.next_run));
+      chips.appendChild(chip);
+    }
+    body.appendChild(chips);
+  }
+  const upcoming = data.upcoming || [];
+  if (upcoming.length) {
+    body.appendChild(el("h3", "", "next due (" + (data.count !== undefined ? data.count : upcoming.length) + " total)"));
+    const tw = el("div", "tw");
+    const table = el("table");
+    const head = el("tr");
+    for (const h of ["task", "next run", "rhythm", "once"]) head.appendChild(el("th", "", h));
+    const thead = el("thead"); thead.appendChild(head); table.appendChild(thead);
+    const tbody = el("tbody");
+    for (const s of upcoming) {
+      const tr = el("tr");
+      tr.appendChild(el("td", "d", String(s.task_id || "").slice(0, 8)));
+      tr.appendChild(el("td", "", s.next_run || ""));
+      tr.appendChild(el("td", "d", s.cron ? "cron " + s.cron : fmtInterval(s.interval_s)));
+      tr.appendChild(el("td", "d", s.once ? "once" : ""));
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody); tw.appendChild(table); body.appendChild(tw);
+  } else if (!names.length) {
+    body.appendChild(noteBox("", "empty", "no schedules, no blueprints installed"));
+  }
+}
+
+// --- 05 events ---------------------------------------------------------------
+function renderEvents(data) {
+  const body = $("events-body");
+  clear(body);
+  const events = data.events || [];
+  if (!events.length) {
+    body.appendChild(noteBox("", "empty", "no events"));
+    return;
+  }
+  const tw = el("div", "tw");
+  const table = el("table");
+  const head = el("tr");
+  for (const h of ["time", "type", "actor", "run", "payload"]) head.appendChild(el("th", "", h));
+  const thead = el("thead"); thead.appendChild(head); table.appendChild(thead);
+  const tbody = el("tbody");
+  for (const e of events) {
+    const tr = el("tr");
+    tr.appendChild(el("td", "d", String(e.time || "").slice(11)));
+    tr.appendChild(el("td", "", e.type || ""));
+    tr.appendChild(el("td", "d", e.actor || ""));
+    tr.appendChild(el("td", "d", e.run_id || ""));
+    const payload = e.payload || {};
+    const parts = [];
+    for (const k of Object.keys(payload)) {
+      const v = payload[k];
+      parts.push(k + "=" + (typeof v === "object" ? JSON.stringify(v) : String(v)));
+    }
+    let line = parts.join(" · ");
+    if (line.length > 160) line = line.slice(0, 157) + "…";
+    tr.appendChild(el("td", "mono", line));
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody); tw.appendChild(table); body.appendChild(tw);
+}
+
+// --- poll loop ---------------------------------------------------------------
 async function poll() {
-  for (const [name, route] of Object.entries(SECTIONS)) {
+  const jobs = [
+    ["/api/status", $("status-body"), renderStatus],
+    ["/api/runs", $("runs-body"), renderRuns],
+    ["/api/approvals", $("approvals-body"), renderApprovals],
+    ["/api/schedules", $("schedules-body"), renderSchedules],
+    ["/api/events", $("events-body"), renderEvents],
+  ];
+  for (const [route, body, render] of jobs) {
     try {
       const answer = await fetch(route);
       const data = await answer.json();
-      document.getElementById(name).textContent = JSON.stringify(data, null, 2);
+      if (data && data.available === false) { unavailable(body, data); continue; }
+      render(data);
     } catch (error) {
-      document.getElementById(name).textContent = "(unreachable)";
+      unreachable(body);
     }
   }
-  document.getElementById("stamp").textContent =
-    "refreshed " + new Date().toLocaleTimeString() + " · every 5 s";
+  $("stamp").textContent = "refreshed " + new Date().toLocaleTimeString() + " · every 5 s";
 }
 poll();
 setInterval(poll, 5000);
@@ -491,6 +952,13 @@ setInterval(poll, 5000);
 </body>
 </html>
 """
+
+PAGE = (
+    _PAGE_TEMPLATE
+    .replace("__FONT_VT323__", _asset(FONT_VT323_WOFF2_B64))
+    .replace("__FONT_MONO__", _asset(FONT_SOMETYPE_MONO_WOFF2_B64))
+    .replace("__SIGIL__", _asset(SIGIL_PNG_B64))
+)
 
 
 # --- HTTP: feste Routen, kein Input in der Ausfuehrung ----------------------------------------
