@@ -1,0 +1,54 @@
+# Beispiel-Einheit fuer das Live-Dashboard — Doku-Qualitaet, vor Gebrauch anpassen.
+#
+# Was sie tut: `talos dashboard` im Dauerbetrieb — laufende Laeufe, offene
+# Freigaben, Event-Log und Zeitplaene als read-only JSON/HTML auf 127.0.0.1:8810.
+# Der Prozess ist ein BEOBACHTER, kein Eingriffsweg: es gibt nur GET, keine
+# Freigabe-Endpunkte, und die Datenbanken werden read-only geoeffnet
+# (mode=ro + query_only). Freigaben bleiben im Chat des Betreibers.
+#
+# Erreichbar wird er ueber einen Tailnet-Proxy davor, nie direkt:
+#   tailscale serve --bg 8810        # https://<maschine>.<tailnet>.ts.net
+# Zwei Schranken statt einer: faellt die Proxy-Regel weg, steht der Dienst
+# trotzdem nicht im offenen Netz (Bind ist Loopback).
+#
+# User: derselbe wie der Agent — die DBs unter data/ sind 0600 und gehoeren
+# ihm. Ein eigener, schwaecherer User kaeme nicht heran; ein staerkerer waere
+# falsch. ReadOnlyPaths nimmt dem Prozess zusaetzlich die Schreibbarkeit von
+# data/ auf Mount-Ebene: selbst ein Fehler im Dashboard kann das Protokoll
+# nicht anfassen. Pfade und Benutzer sind Platzhalter wie bei den Nachbar-Units.
+[Unit]
+Description=Talos dashboard — observing only, no intervention path
+# Kein Netz-Zwang: der Dienst bindet Loopback und braucht kein Interface.
+After=network.target
+
+[Service]
+Type=simple
+User=talos
+Group=talos
+WorkingDirectory=/opt/talos
+ExecStart=/usr/bin/python3 -m talos dashboard
+Restart=on-failure
+RestartSec=2
+# Lesen ist seine ganze Arbeit — unter allen anderen Diensten.
+Nice=10
+
+# Haertung. ProtectSystem=strict macht das Dateisystem read-only; ReadOnlyPaths
+# zeichnet data/ noch einmal ausdruecklich nach — die Richtung ist der Punkt:
+# der Beobachter KANN nicht schreiben, er wird nicht nur gebeten, es zu lassen.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadOnlyPaths=/opt/talos/data
+ProtectHome=read-only
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+# Der Dienst braucht genau eine Adresse: binden auf Loopback. Alles andere —
+# raw, packet, Netlink — bleibt aus.
+RestrictAddressFamilies=AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

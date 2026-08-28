@@ -10,6 +10,7 @@ haelt die Liste kurz, und jeder beantwortet eine Frage, die ein Betreiber wirkli
     models   womit kann es denken
     status   was hat es zuletzt getan
     health   ist es gesund — Laeufe, Fehler, Zeitplaene, Anker
+    dashboard was laeuft und was wartet — beobachten, nicht eingreifen
     verify   wurde das Protokoll nachtraeglich geaendert
     anchor   wurde das Protokoll gekuerzt — der Kopf, festgehalten
     briefing das Morgen-Briefing — Stand aus den haltbaren Quellen
@@ -47,6 +48,7 @@ HELP = f"""
   models [--refresh]                 which models a provider offers
   status                             what it did last
   health [--json]                    is it well — runs, errors, schedules, anchor
+  dashboard                          live view — observing only, localhost only
   events [--limit n] [--tool t] [--since 4h]    what happened — filterable, read-only
   why <event-id>                     why that was allowed or refused
   verify                             prove the log was not edited after the fact
@@ -253,6 +255,7 @@ TABLE: dict[str, object] = {
     "chat": cmd_chat,
     "status": lambda _rest: cmd_status(),
     "health": _lazy("health", "run_health"),
+    "dashboard": _lazy("dashboard", "run_dashboard"),
     "events": _lazy("eventscli", "run_events"),
     "why": _lazy("eventscli", "run_why"),
     "verify": lambda _rest: cmd_verify(),

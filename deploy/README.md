@@ -1,14 +1,16 @@
 # deploy/ — systemd-Beispiele (Doku-Qualitaet)
 
-Vier Dateien, zwei Ablaeufe, beide **send-only**: sie lesen die haltbaren Quellen
-(Event-Log, Zeitplan-DB, Anker-Datei) und senden einen Bericht an den Betreiber. Kein
+Zwei Ablaeufe sind **send-only**: sie lesen die haltbaren Quellen (Event-Log,
+Zeitplan-DB, Anker-Datei) und senden einen Bericht an den Betreiber. Kein
 Agentenlauf, kein Modell, keine Werkzeug-Kette — und deshalb auch nichts, was der
-Kernel freigeben muesste.
+Kernel freigeben muesste. Die dritte Sorte (`talos-dashboard.service`) ist ein
+Dauer-Beobachter: read-only HTTP auf Loopback, hinter einem Tailnet-Proxy.
 
 | Einheit | Was sie tut | Wann |
 |---|---|---|
 | `talos-anchor.timer` / `.service` | `talos anchor --send` — Kettenkopf festhalten, Digest an den Owner-Chat (mit `--mail` zusaetzlich per Mail) | taeglich 06:30 |
 | `talos-briefing.timer` / `.service` | `talos briefing --send` — Morgen-Briefing (Gesundheit, Kette, offene Freigaben, Fehler des Vortags, Anker-Alter) an den Owner-Chat | taeglich 07:00 |
+| `talos-dashboard.service` | `talos dashboard` — laufende Laeufe, offene Freigaben, Event-Log, Zeitplaene als read-only Seite/API auf 127.0.0.1:8810. **Beobachten, nicht eingreifen** — Freigaben bleiben im Chat | Dauerbetrieb |
 
 ## Benutzung
 
