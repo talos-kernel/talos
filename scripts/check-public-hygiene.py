@@ -62,6 +62,11 @@ ALLOWED_SECRET_FIXTURE_DIGESTS = {
         "3eb9ff68623bde249c57b58d404b9f3aac3268e3d1fa1a47b0b6999e46d7d139",
         "f1b6cd0adfe68809a716388675998748384e785eaf1f6332a5cd66bd0844d8f0",
     }),
+    "tests/test_dashboard.py": frozenset({
+        "7e65f47df01dbc8677d2ced7c8ad02a06afbb21e07c1e872713d2bfaf8773128",
+        "b0c133c8d9ecb16ecee2de43935b769132232b3cf4c919ab91e223bd65f8c1c0",
+        "a013c4766773da0716eac88cec641f9ba27e01c370130a804612ffc416a76b23",
+    }),
     "tests/test_fallback.py": frozenset({
         "7cf431ebfb5fb0893c24f5539ad5ba6afb3f953d1711d6c09214d532d35a194a",
     }),
