@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Sechs Seiten, Stand 2026-08-28 — dossier.html ist in die Startseite aufgegangen
+  Sieben Seiten, Stand 2026-08-28 — dossier.html ist in die Startseite aufgegangen
   (#ledger, #myth, #limits; 301 in der .htaccess). Eine Sitemap, die Seiten auffuehrt,
   die es nicht gibt, ist schlechter als keine: die Search Console meldet sie als
   Fehler, und man sucht den Grund an der falschen Stelle. Umgekehrt gilt dasselbe —
@@ -31,6 +31,12 @@
     <lastmod>2026-08-28</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://talos-agent.ch/redteam/</loc>
+    <lastmod>2026-08-28</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
   </url>
   <url>
     <loc>https://talos-agent.ch/vergleich/</loc>
