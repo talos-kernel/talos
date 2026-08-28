@@ -241,13 +241,13 @@ html.js .rv.in{opacity:1; transform:none}
     <h1>Setting it up</h1>
     <p class="lede">Talos takes instructions over a chat channel, reasons with a language
     model, and runs tools: a real shell, a confined Claude worker, a browser on request.
-    But a tool runs only after a deterministic kernel has ruled on the
+    None of the 23 tools runs until a deterministic kernel has ruled on the
     action. <strong>The model proposes; it does not decide.</strong></p>
-    <p class="lede">That one sentence explains most of what follows, including why the
-    command line is short and why a few obvious conveniences are missing on purpose.</p>
+    <p class="lede">That one decision shapes the rest of this manual. It is why the
+    command list is short, and why a few obvious conveniences are missing on purpose.</p>
     <div class="spec-row">
       <div class="spec"><b>2063</b>unit tests</div>
-      <div class="spec"><b>179</b>adversarial</div>
+      <div class="spec"><b>179/179</b>adversarial</div>
       <div class="spec"><b>645</b>gate lines</div>
       <div class="spec"><b>23</b>gated tools</div>
       <div class="spec"><b>30s</b>token life</div>
@@ -287,9 +287,10 @@ pip install -r requirements.txt
 python -m pytest tests/ -q</pre>
     <div class="note good">
       <b>The installer starts nothing</b>
-      <p>It proves the build and hands you back your shell. Nothing begins listening
-      until you say so — an installer that silently launches a process holding a shell
-      tool is not something you can audit after the fact.</p>
+      <p>It proves the build and hands you back your shell. Nothing starts listening
+      until you say so. I didn't want an installer that quietly launches a process
+      holding a shell tool — that thing would be running before you ever reviewed
+      its configuration or its state.</p>
     </div>
     <p>Python 3.11 or newer, Linux or macOS. The shell tool needs
     <code>bubblewrap</code> on Linux; macOS uses the built-in <code>sandbox-exec</code>.
@@ -299,9 +300,9 @@ python -m pytest tests/ -q</pre>
 
   <section id="identity" class="rv">
     <h2><span class="n">Section 02</span>Give it an identity</h2>
-    <p>Talos ships with <strong>zero</strong> identities that may command it. Not an
-    oversight to fix during setup — it is the state it starts in, and the reason it is
-    safe to install before you have decided anything.</p>
+    <p>Talos ships with <strong>zero</strong> identities allowed to command it. That is
+    not an oversight. It is the starting state, and the reason you can install it
+    before you have decided anything.</p>
 <pre>python -m talos setup</pre>
     <p>The wizard writes <code>talos.env</code> and stops. The key that matters:</p>
 <pre><span class="f">TALOS_ALLOWED_PRINCIPALS</span>=telegram:123456789,cli:1000</pre>
@@ -373,9 +374,9 @@ speaking as cli:1000  ·  approvals possible — you are at a terminal
 /help for commands, `exit` to leave
 
 › what changed in the log today?</pre>
-    <p>The second line is the one to read. It says, before you ask for anything, whether
-    an approval is even possible in this session — so a refusal later is explained in
-    advance rather than guessed at.</p>
+    <p>The second line is the one to read. Before you ask for anything, it tells you
+    whether an approval is even possible in this session. A refusal later is explained
+    up front instead of guessed at.</p>
 
     <h3>Approvals hang on the terminal</h3>
     <p>When the kernel needs a person to answer, whether one is there is
@@ -415,8 +416,8 @@ Background #1 started: go through /var/log and summarise today's…
     <div class="note warn">
       <b>A background task is a scheduled run, not a helper with your rights</b>
       <p>Nobody is sitting in front of it. So the same ceiling applies as for a timed
-      run: anything that would need a human becomes a refusal. Putting a question into a
-      chat where a different conversation is going on is the most reliable way to land a
+      run: anything that would need a human becomes a refusal. A question dropped into
+      a chat where another conversation is running is the most reliable way to get a
       “yes” on the wrong thing.</p>
       <p>Its context is <strong>empty</strong> — it gets the task and nothing else. Two
       runs sharing one history write into each other, and afterwards nobody can say which
@@ -574,14 +575,15 @@ talos why 4831                    <span class="c"># the verdict, the rule, and w
     a reachable one.</p>
     <p>WhatsApp has two implementations of one channel name. The Cloud-API variant stays
     delivery-only: Meta's inbound path is a webhook, and a webhook is exactly the port
-    this design refuses to open. The broker variant receives without one — a listener on
-    <strong>an operator-controlled WhatsApp broker reachable over SSH</strong> appends the
-    messages routed to Talos to a JSONL queue, and Talos pulls that queue over SSH with a
-    persisted byte cursor, first run at end-of-file, cursor never advanced by a failed
-    poll. Replies go back through the broker's send script. The sender number comes out of
-    the operator's own WhatsApp account, so this variant carries <code>Trust.FULL</code> —
-    conversations live in the same <code>whatsapp:&lt;number&gt;</code> namespace either
-    way. Off by default: <code>TALOS_WA_BROKER_SSH</code> (the SSH target),
+    this design refuses to open. The broker variant receives without one. A listener on
+    <strong>an operator-controlled WhatsApp broker reachable over SSH</strong> appends
+    the messages routed to Talos to a JSONL queue. Talos pulls that queue over SSH with
+    a persisted byte cursor: first run at end-of-file, cursor never advanced by a failed
+    poll. Replies go back through the broker's send script. The sender number comes out
+    of the operator's own WhatsApp account, so this variant carries
+    <code>Trust.FULL</code> — conversations live in the same
+    <code>whatsapp:&lt;number&gt;</code> namespace either way. Off by default:
+    <code>TALOS_WA_BROKER_SSH</code> (the SSH target),
     <code>TALOS_WA_BROKER_QUEUE</code>, <code>TALOS_WA_BROKER_CLI_DIR</code>. Configured,
     the broker wins over the Cloud API — the registry demands unique names, and this is
     the one that fetches.</p>
@@ -590,7 +592,7 @@ talos why 4831                    <span class="c"># the verdict, the rule, and w
       <tbody>
       <tr><td>telegram</td><td class="d">FULL</td><td class="d">Buttons for approvals, live status, images in.</td></tr>
       <tr><td>cli</td><td class="d">FULL</td><td class="d"><code>chat</code> and <code>ask</code>. Approvals only at a terminal.</td></tr>
-      <tr><td>mail</td><td class="d">ASK</td><td class="d">Sender proven from our own server's <code>Authentication-Results</code>, fail-closed.</td></tr>
+      <tr><td>mail</td><td class="d">ASK</td><td class="d">Sender proven from the receiving server's <code>Authentication-Results</code>, fail-closed.</td></tr>
       <tr><td>whatsapp</td><td class="d">FULL · NOTIFY</td><td class="d">Broker over SSH pull (FULL) — or Cloud API, outbound only (NOTIFY).</td></tr>
       </tbody>
     </table></div>

@@ -1,6 +1,6 @@
 # Talos
 
-> An autonomous AI agent you can hand a shell to — because it can prove what it will not do. Every tool call passes a small permission kernel (allow / needs-human / deny), every run lands in a hash-chained audit log, and every update is an Ed25519-signed tarball.
+> An autonomous AI agent you can hand a shell to. It can prove what it will not do. Tool calls pass a small permission kernel (allow / needs-human / deny). Runs land in a hash-chained audit log. Updates are Ed25519-signed tarballs, verified before anything is unpacked.
 
 ## Facts
 

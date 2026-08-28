@@ -4,18 +4,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>TALOS — 179 ways to break an agent</title>
-<meta name="description" content="What our red team throws at Talos before every release: 179 adversarial cases across 25 attack surfaces — token bypass, dial escalation, DNS smuggling, credential exfiltration — and the one door they all hit.">
+<meta name="description" content="What I throw at Talos before every release: 179 adversarial cases across 25 attack surfaces — token bypass, dial escalation, DNS smuggling, credential exfiltration — and what a green run does and doesn't prove.">
 <link rel="icon" href="../brand/favicon.ico" sizes="any">
 <link rel="apple-touch-icon" href="../brand/apple-touch-icon.png">
 <meta property="og:title" content="TALOS — 179 ways to break an agent">
-<meta property="og:description" content="179 adversarial cases, 25 attack surfaces, one kernel. What attacking our own agent before every release taught us.">
+<meta property="og:description" content="179 adversarial cases, 25 attack surfaces, one kernel. What attacking my own agent before every release taught me.">
 <meta property="og:image" content="https://talos-agent.ch/brand/og-logo.png">
 <meta property="og:url" content="https://talos-agent.ch/redteam/">
 <link rel="canonical" href="https://talos-agent.ch/redteam/">
 <meta name="theme-color" content="#17140F">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="TALOS — 179 ways to break an agent">
-<meta name="twitter:description" content="179 adversarial cases, 25 attack surfaces, one kernel. What attacking our own agent before every release taught us.">
+<meta name="twitter:description" content="179 adversarial cases, 25 attack surfaces, one kernel. What attacking my own agent before every release taught me.">
 <meta name="twitter:image" content="https://talos-agent.ch/brand/og-logo.png">
 <script>document.documentElement.classList.add('js')</script>
 <style>
@@ -219,16 +219,16 @@ html.js .rv.in{opacity:1; transform:none}
     <div class="doc-line">
       <span>Field notes · Red team</span>
       <span>Classification · Public</span>
-      <span>Subject · Attacking ourselves first</span>
+      <span>Subject · Attacking my own agent first</span>
     </div>
     <h1>179 ways to break an agent.</h1>
-    <p class="lede">Before every release, we run <strong>redteam.py</strong> against our own
-    agent: 179 adversarial cases across <strong>25 attack surfaces</strong> — token forgery,
+    <p class="lede">Every release runs <strong>redteam.py</strong> against the
+    kernel: 179 adversarial cases across <strong>25 attack surfaces</strong> — token forgery,
     dial escalation, DNS smuggling, credential exfiltration, forged senders, prompt-level
-    manipulation. Not because we enjoy losing, but because a security claim you cannot
-    attack is <strong>marketing</strong>, and we ship neither.</p>
+    manipulation. Not because I enjoy losing. A security claim you cannot attack is
+    <strong>marketing</strong>.</p>
     <p class="lede">Every case below is real, runs in CI, and is named after what it tries.
-    This page is what attacking ourselves taught us — including the two cases we would
+    This page is what attacking my own agent taught me — including the two cases I would
     not have caught by thinking harder.</p>
     <div class="spec-row">
       <div class="spec"><b>179</b>adversarial cases</div>
@@ -241,7 +241,7 @@ html.js .rv.in{opacity:1; transform:none}
   </div>
 
   <div class="index rv"><ol>
-    <li><a href="#why">Why we attack ourselves</a></li>
+    <li><a href="#why">Why I attack my own agent</a></li>
     <li><a href="#map">The map: 25 surfaces</a></li>
     <li><a href="#dns">Case: two A-records</a></li>
     <li><a href="#keys">Case: the traveling key</a></li>
@@ -250,7 +250,7 @@ html.js .rv.in{opacity:1; transform:none}
   </ol></div>
 
   <section id="why" class="rv">
-    <h2><span class="n">Section 01</span>Why we attack ourselves</h2>
+    <h2><span class="n">Section 01</span>Why I attack my own agent</h2>
     <p>An agent with a shell is a strange employee: brilliant, tireless, and unable to
     tell a real instruction from a well-written trap. Most frameworks answer that with
     a system prompt — a polite request to the model, written in the same channel the
@@ -258,12 +258,12 @@ html.js .rv.in{opacity:1; transform:none}
     <p>Talos answers with a kernel: ~645 lines of Python that return
     <code>allow</code>, <code>needs-human</code> or <code>deny</code> for every tool
     call, below the model, unreachable from its output. But a kernel is a claim like
-    any other — so before every release we try to break it. The red team suite is not
-    a demo. It is the regression net for every attack shape we know, and it grows
-    every time we learn a new one.</p>
+    any other, so before every release I try to break it. The red team suite is not
+    a demo. It is the regression net for every attack shape I know, and it grows
+    every time I learn a new one.</p>
     <div class="note warn">
       <b>The uncomfortable premise</b>
-      <p>The attacker in our suite is not a stranger on the internet. It is the model
+      <p>The attacker in my suite is not a stranger on the internet. It is the model
       itself — manipulated, confused or outright owned by something it read. If your
       security model only works while the model stays friendly, you don't have one.</p>
     </div>
@@ -325,7 +325,7 @@ html.js .rv.in{opacity:1; transform:none}
     their own server in the tailnet, <code>100.100.100.100</code>. The danger is not
     the address. It is the moment "one address" quietly becomes "a range": then any
     document the agent fetches can point it sideways into the whole network.</p>
-    <p>The case we almost shipped: a hostname that resolves to
+    <p>The case I almost shipped: a hostname that resolves to
     <strong>two</strong> A-records — the allowed one and a foreign one.</p>
 <pre><span class="c"># what the attacker needs: one hostname, two answers</span>
 halb.example  →  [ <span class="g">100.100.100.100</span>, <span class="d">93.184.216.34</span> ]
@@ -364,17 +364,17 @@ headers sent  →  <span class="g">only the openai key</span>   <span class="c">
 
   <section id="proves" class="rv">
     <h2><span class="n">Section 05</span>What a green run proves — and what it doesn't</h2>
-    <p>A green <code>179/179</code> means: every attack shape we know fails the way the
+    <p>A green <code>179/179</code> means: every attack shape I know fails the way the
     doctrine says it should, and no fix since has reopened one. That is a regression
     net, and it is genuinely useful — most agent CVEs are old shapes in new clothing.</p>
-    <p>It does <strong>not</strong> prove the system is secure. It proves we have not
+    <p>It does <strong>not</strong> prove the system is secure. It proves I have not
     yet imagined the 180th way. That is exactly why the file is public, named in plain
-    language, and structured so that the next attack somebody teaches us becomes case
+    language, and structured so that the next attack somebody teaches me becomes case
     180 the same day — not a blog post.</p>
     <div class="note good">
       <b>The honest claim, restated</b>
-      <p>We do not say "Talos is secure." We say: here is the kernel, here are the
-      179 ways we tried to get past it, here is the log that lets you check our work.
+      <p>I don't say "Talos is secure." I say: here is the kernel, here are the
+      179 ways I tried to get past it, here is the log that lets you check the work.
       Security you can poke at beats security you have to believe.</p>
     </div>
   </section>
@@ -386,11 +386,11 @@ headers sent  →  <span class="g">only the openai key</span>   <span class="c">
 cd talos && python3 -m venv .venv && .venv/bin/pip install -q requests cryptography
 .venv/bin/python redteam.py   <span class="c"># 179 cases, named after what they try</span></pre>
     <p>If you find case 180, that is the most valuable contribution this project
-    accepts — the issue tracker is open, and the kernel demo on the
+    accepts. The issue tracker is open, and the kernel demo on the
     <a href="/">front page</a> lets you probe the policy logic in your browser before
     you install anything. The design behind all of it is in the
     <a href="/docs/">field manual</a>; what it costs in features is on the
-    <a href="/vergleich/">comparison page</a>, written down just as honestly.</p>
+    <a href="/vergleich/">comparison page</a>, written the same way.</p>
   </section>
 
 </div>

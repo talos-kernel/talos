@@ -367,8 +367,8 @@ html.js .rv.in{opacity:1;transform:none}
     <p class="sys">talos 0.15.1-alpha · operator console · MIT</p>
     <span class="rec-chip">recorded · replayed · not a live feed</span>
     <h1>Watch one session, end to end.</h1>
-    <p class="lede">This console replays a single real session, recorded on the production
-    machine on 26 August 2026 and replayed here event for event. <strong>A message comes in,
+    <p class="lede">This console replays one real session, recorded on my production machine
+    on 26 August 2026, event for event. <strong>A message comes in,
     the reasoner thinks, the gate refuses one call and authorises another, a coding job runs
     in the sandboxed worker, and the completion push finds its own way back.</strong>
     Every line below is the shape the append-only log actually writes.</p>
@@ -392,7 +392,7 @@ html.js .rv.in{opacity:1;transform:none}
   <div class="wrap">
     <p class="sec-tag rv">the stream</p>
     <h2 class="rv">The event log, replayed at reading speed.</h2>
-    <p class="sub rv">The operator asked Talos to cap the retry backoff in
+    <p class="sub rv">I asked Talos to cap the retry backoff in
     <code>talos/provider.py</code> using the sandboxed coding worker, and to report back when the
     job landed. What follows is the session the kernel recorded: twelve events across two runs,
     one refusal, one grant, one push. Timestamps and chain links are the recorded ones.</p>
@@ -519,7 +519,7 @@ html.js .rv.in{opacity:1;transform:none}
           </ul>
           <p class="job-note">The chat knew a job id and nothing else. The way back is a
           watcher, not a poll from the model: it reads the worker's own protocol and pushes
-          the end state to the conversation the order came from.</p>
+          the end state to the conversation that asked for it.</p>
           <div class="push" id="pushBlock"><span class="push-tag">the push · completion_text() from notify.py, verbatim</span><span class="p-head">delegate_code job 3f9a1c2b7d04 finished — <b>done</b></span>
   Cap the retry backoff in provider.py at 30 s
 <span class="p-key">summary:</span> 41 passed; backoff now capped at 30 s
@@ -532,7 +532,7 @@ html.js .rv.in{opacity:1;transform:none}
     <div class="legend rv">
       <div class="lg"><span class="k">task.received</span><span>the message at the door, deduplicated by key</span></div>
       <div class="lg"><span class="k">reason.*</span><span>the model thinks; it proposes, it never decides</span></div>
-      <div class="lg"><span class="k c-deny">exec.intent · deny</span><span>written before the effect, with verdict and target</span></div>
+      <div class="lg"><span class="k c-deny">exec.intent · deny</span><span>written before the call runs, with verdict and target</span></div>
       <div class="lg"><span class="k c-allow">grant.issued</span><span>authority for exact arguments, once, 30 seconds</span></div>
       <div class="lg"><span class="k">exec.result</span><span>the receipt, bound to its grant</span></div>
       <div class="lg"><span class="k">reply.sent</span><span>the answer streams back to the operator</span></div>
@@ -546,7 +546,7 @@ html.js .rv.in{opacity:1;transform:none}
 <section id="measured">
   <div class="wrap">
     <p class="sec-tag rv">this release, measured</p>
-    <h2 class="rv">Numbers the release brings with it.</h2>
+    <h2 class="rv">Numbers this release ships.</h2>
     <p class="sub rv">The console tries to read <code>./status.json</code>, generated
     from the release itself. If the file is not there, the page falls back to the snapshot
     embedded below. Either way the digits come from a count, not from memory.</p>
@@ -578,7 +578,7 @@ html.js .rv.in{opacity:1;transform:none}
     <a href="/console.html">Console</a>
     <a href="https://github.com/talos-kernel/talos">GitHub</a>
     <span class="sp"></span>
-    <span>MIT · the gate is why the work can be trusted</span>
+    <span>MIT · the gate is why I trust the work</span>
   </div>
 </footer>
 

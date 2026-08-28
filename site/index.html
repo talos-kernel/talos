@@ -402,11 +402,11 @@ html.js .rv.in{opacity:1;transform:none}
   <div class="wrap hero-grid">
     <div>
       <p class="sys">talos 0.15.1-alpha · deterministic gate · MIT</p>
-      <h1>Strong enough to hand a shell to.</h1>
-      <p class="lede"><strong>Verifiable enough that you can.</strong> A real shell, a
-      confined Claude worker that builds, tests and browses for you, four chat channels.
-      Every tool call passes a deterministic security kernel before it runs: each effect
-      authorised individually, <strong>bound to its exact arguments, valid once, for
+      <h1>I wanted an agent I could hand a shell to.</h1>
+      <p class="lede"><strong>So I built the gate first.</strong> A real shell. A
+      confined worker that builds, tests and browses for you. Four chat channels.
+      Before any tool call runs, the kernel has to sign off. That approval is
+      <strong>tied to the exact arguments, works once, and expires after
       thirty seconds.</strong></p>
       <div class="cta-row">
         <a class="btn" href="#kernel">Watch it work ▾</a>
@@ -429,7 +429,7 @@ html.js .rv.in{opacity:1;transform:none}
     <figure class="scanbox">
       <pre id="portrait" aria-label="ASCII portrait of Talos"></pre>
       <div class="scanline" id="sl"></div>
-      <figcaption class="scan-label">subject acquired · the watcher of crete</figcaption>
+      <figcaption class="scan-label">the gate, deciding</figcaption>
     </figure>
   </div>
 </header>
@@ -437,11 +437,10 @@ html.js .rv.in{opacity:1;transform:none}
 <section id="kernel">
   <div class="wrap">
     <p class="sec-tag rv">PolicyKernel.decide()</p>
-    <h2 class="rv">Watch it work. The gate, in the open.</h2>
-    <p class="sub rv">The real shell pipeline, running in this page: <strong>path floor →
-    hardline → dangerous → effect</strong>. Type any shell command. Clean work runs,
-    and every verdict is computed in front of you, with its reason. Nothing is
-    sent anywhere.</p>
+    <h2 class="rv">Don't trust the copy. Try the gate.</h2>
+    <p class="sub rv">The real shell pipeline, ported into this page: <strong>path floor →
+    hardline → dangerous → effect</strong>. Type a command. The page returns the
+    verdict with its reason. Nothing executes, nothing leaves your browser.</p>
 
     <div class="demo rv">
       <div class="demo-head">
@@ -457,14 +456,14 @@ html.js .rv.in{opacity:1;transform:none}
         <div class="samples" id="samples"></div>
         <div class="verdict" id="verdict" aria-live="polite"></div>
         <div class="chain" id="chainEl"></div>
-        <p class="demo-note">A re-implementation of the kernel's shell path for the browser,
-        modelling the shipped default: commands run <strong>sandboxed</strong>, so what is
-        clean runs — and is logged. Simplified, not exhaustive: the Python original decides
-        more cases than these patterns name. Two things the page cannot show: before any of
-        these stages the real kernel checks <em>who</em> is asking (and there is no default
-        allowlist), and file tools walk their own pipeline — system floor, identity, secrets,
-        persistence, effect. The authoritative version is the Python one; 179 adversarial
-        cases run against it on every install and every update.</p>
+        <p class="demo-note">This page re-implements the kernel's shell path for the browser,
+        with the shipped default: clean commands run <strong>sandboxed</strong>, and each run is
+        logged. It is a simplification. The Python original decides more cases than these
+        patterns name, and it is the authoritative one. Two things a page cannot show: before
+        any of these stages, the real kernel checks <em>who</em> is asking, and there is no
+        default allowlist. And file tools walk their own pipeline — system floor, identity,
+        secrets, persistence, effect. 179 adversarial cases run against the Python kernel on
+        every install and every update.</p>
       </div>
     </div>
   </div>
@@ -473,9 +472,9 @@ html.js .rv.in{opacity:1;transform:none}
 <section id="does">
   <div class="wrap">
     <p class="sec-tag rv">what it does</p>
-    <h2 class="rv">Hand it real work, not just questions.</h2>
-    <p class="sub rv">The strength is the point, and it runs through the same gate as
-    everything else. Nothing here is a promise; each line names the mechanism.</p>
+    <h2 class="rv">Hand it real work.</h2>
+    <p class="sub rv">This is what the agent can do today. Each line tells you how
+    it works, so you can verify it yourself.</p>
     <div class="nails">
       <div class="nail rv"><code>delegate_code</code><p>Hands a bounded coding task to a
       confined Claude worker that builds, runs the tests and, with <code>browser: true</code>,
@@ -501,9 +500,9 @@ html.js .rv.in{opacity:1;transform:none}
   <div class="wrap">
     <p class="sec-tag rv">the manifest</p>
     <h2 class="rv">Twenty-three tools. Each one declared.</h2>
-    <p class="sub rv">The kernel does not guess what a tool might do — every tool declares its
+    <p class="sub rv">The kernel does not guess what a tool might do. Every tool declares its
     <strong>effect</strong> in the manifest, and anything undeclared is refused on sight.
-    <strong>15 read, 5 write, 3 exec.</strong></p>
+    <strong>15 read, 5 write, 3 exec — 23 in all.</strong></p>
     <div class="tools">
       <div class="tool-row rv">
         <div><h3>read</h3><div class="fx">free at autonomy 5</div></div>
@@ -528,14 +527,14 @@ html.js .rv.in{opacity:1;transform:none}
         <div class="set">
           <code>run_shell</code><code>delegate_code</code><code>delegate_dag</code>
         </div>
-        <p>One tool carries all the power, so one tool carries all the suspicion: a path floor
+        <p>One tool carries all the power, so one tool carries all the suspicion. A path floor
         for what is never touched, a hardline with no appeal, a sandbox for everything clean —
-        and the operator for the risky rest. The second exec tool delegates a bounded coding
-        task to a confined Claude worker: <strong>opt-in and off by default</strong>, gated like
-        the shell, writing only into a kernel-derived disposable job workspace — never into a
-        path the model chose. The third fans a small acyclic graph of such tasks out to the
-        same worker: dependency-free nodes run in parallel, a failed parent skips its children,
-        and the origin chat gets a per-node push plus an honest final report.</p>
+        and the operator for the risky rest. The second exec tool hands a bounded coding task
+        to a confined Claude worker: <strong>opt-in and off by default</strong>, gated like the
+        shell, writing only into a kernel-derived disposable job workspace — never into a path
+        the model chose. The third fans a small acyclic graph of such tasks out to the same
+        worker: dependency-free nodes run in parallel, a failed parent skips its children, and
+        the origin chat gets a per-node push plus a final report from the worker records.</p>
       </div>
     </div>
   </div>
@@ -546,11 +545,10 @@ html.js .rv.in{opacity:1;transform:none}
     <span id="myth"></span>
     <p class="sec-tag rv">emergency interface · provenance of the name</p>
     <h2 class="rv">One vein. One nail.</h2>
-    <p class="myth-pull rv">The giant had <b>one vein</b>, closed by <b>a single nail.</b></p>
-    <p class="sub rv">Talos was a giant of bronze who circled Crete three times a day. He is not
-    remembered because he was strong — he is remembered because <strong>someone could stop him,
-    and knew where.</strong> Most agents build the strength first and the brake afterwards.
-    This one was built the other way around.</p>
+    <p class="myth-pull rv">The giant had <b>one vein</b>. <b>One nail</b> closed it.</p>
+    <p class="sub rv">The name is from the bronze giant that circled Crete. He was not beaten
+    by something stronger. Someone knew where the nail was. Most agents are built strength
+    first, brake afterwards. I built this one the other way around.</p>
     <div class="nails">
       <div class="nail rv"><code>/stop</code><p>Aborts the running thought and clears the queue. No model, no thinking round — pure control.</p></div>
       <div class="nail rv"><code>/undo</code><p>Rolls back the last successful file change.</p></div>
@@ -586,8 +584,8 @@ html.js .rv.in{opacity:1;transform:none}
   <div class="wrap">
     <p class="sec-tag rv">known limits</p>
     <h2 class="rv">Known limits</h2>
-    <p class="sub rv">A security claim without its limits is marketing — these are ours,
-    stated first.</p>
+    <p class="sub rv">A security claim without its limits is marketing. These are mine,
+    up front.</p>
     <ul class="limits">
       <li class="rv"><b>The shell needs a sandbox the platform can provide.</b> bubblewrap on Linux,
       sandbox-exec on macOS. Where neither exists it refuses rather than running unprotected.</li>
@@ -605,14 +603,13 @@ html.js .rv.in{opacity:1;transform:none}
   <div class="wrap">
     <p class="sec-tag rv">proof, not adjectives</p>
     <h2 class="rv">Reproducible in under a minute</h2>
-    <p class="sub rv">This is why the strength can be trusted: none of it asks for
-    belief. The installer runs both suites in front of you, and every number on
-    this page is a number the suite reproduces.</p>
+    <p class="sub rv">None of this asks for belief. The installer runs both suites in front
+    of you. Every number on this page is a number the suite reproduces.</p>
     <div class="stats">
       <div class="stat rv"><div class="n cnt" data-n="2063">0</div><div class="l">unit tests, run by the installer in front of you</div></div>
       <div class="stat rv"><div class="n cnt" data-n="179">0</div><div class="l">adversarial cases trying to pass the kernel</div></div>
       <div class="stat rv"><div class="n cnt" data-n="44">0</div><div class="l">end-to-end cases against a real model</div></div>
-      <div class="stat rv"><div class="n cnt" data-n="645">0</div><div class="l">lines in the file that decides everything</div></div>
+      <div class="stat rv"><div class="n cnt" data-n="645">0</div><div class="l">lines in the file that decides every verdict</div></div>
       <div class="stat rv"><div class="n cnt" data-n="23">0</div><div class="l">gated tools, each with a declared effect</div></div>
       <div class="stat rv"><div class="n cnt" data-n="30" data-suf="s">0</div><div class="l">token lifetime, single use</div></div>
       <div class="stat rv"><div class="n cnt" data-n="0">0</div><div class="l">identities allowed by default</div></div>

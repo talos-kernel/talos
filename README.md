@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/talos-icon-256.png" alt="Talos — the guardian's mark" width="132">
+  <img src="assets/talos-icon-256.png" alt="Talos icon" width="132">
 </p>
 
 <h1 align="center">TALOS</h1>
@@ -120,13 +120,13 @@ Stated plainly, because a security claim without its limits is marketing:
 - **It is not a multi-tenant security boundary.** One operator, one machine. Anyone who can
   run code in the process can reach the token mint.
 - **There is no gateway, no setup portal and no `config.yaml`.** Each was considered and
-  left out for the same reason. A gateway terminates foreign identities and then *claims*
-  `channel:id` to the kernel instead of proving it, so identity checking would hang on a
+  left out, for the same reason. A gateway terminates foreign identities and then *claims*
+  `channel:id` to the kernel instead of proving it. Identity checking would then hang on a
   component outside the kernel. A web portal is a network service with its own
-  authentication — by definition a second source of permission beside the allowlist. And a
-  second config file would mean two truths about who may command it, when the path floor
-  protects exactly one. What weakens a guardian is not the number of commands; it is a
-  second way in.
+  authentication, so it is a second source of permission beside the allowlist. And a
+  second config file would be two truths about who may command it, when the path floor
+  protects exactly one. What weakens it is not the number of commands. It is a second
+  way in.
 - **It does not defend against a malicious model.** It defends against a *mistaken* one,
   and against prompt injection arriving through tool output. Those are different threats.
 - **Search needs no account.** Without `TALOS_BRAVE_API_KEY` it used to refuse; now it
@@ -204,11 +204,11 @@ python -m talos report --out audit.txt   # what was done and what was refused
 A full walkthrough — install, identity, the session, every command, and the ones that are
 missing on purpose — is at **[talos-agent.ch/docs](https://talos-agent.ch/docs/)**.
 
-`ask` is not a second way in — it is a **channel like any other**, with the same protocol
+`ask` is not a second way in. It is a **channel like any other**, with the same protocol
 and no special right. Two consequences follow, and both are the point of it. While the
 allowlist is empty the local caller is admitted as `cli:<uid>` automatically, so the first
-run works; the moment the list names one identity it becomes exhaustive, and the uid must
-appear as `cli:<uid>` exactly like a Telegram number — a shell next to the agent is not an
+run works. The moment the list names one identity it becomes exhaustive, and the uid must
+appear as `cli:<uid>` exactly like a Telegram number. A shell next to the agent is not an
 argument for granting it anything. And the turn always runs under
 the **unattended ceiling**: a one-liner waits for nothing, so `NEEDS_HUMAN` becomes `DENY`
 and says so. Approve in the chat, where somebody is actually looking.
@@ -261,7 +261,7 @@ Background #1 started: go through /var/log and summarise today's…
 ```
 
 **A background task is a scheduled run, not a helper carrying your rights.** That is the
-whole security placement, and it saves inventing a new concept. It is *not* a subagent:
+whole security decision, and it avoids inventing a new concept. It is *not* a subagent:
 that one is born from model text and may therefore only read. Here a human typed the task,
 so its origin is the same as any other message. But nobody is sitting in front of it — so
 the ceiling from the timed run applies, and anything that would need approval is refused.
@@ -302,8 +302,8 @@ question into a leak — what was said weeks ago would go out again.
 
 ## Seeing what it did
 
-The thin feeling with a guardian does not come from missing verbs. It comes from not being
-able to see what it did and why. Both of these are **read-only**:
+The thin feeling with an agent like this does not come from missing verbs. It comes from
+not being able to see what it did and why. Both of these are **read-only**:
 
 ```bash
 python -m talos events --tool run_shell   # what happened, filterable
@@ -317,7 +317,7 @@ the question that makes people stop reading logs.
 
 There is deliberately no `talos undo` beside them. `/undo` exists, and since `talos chat`
 it is reachable from the command line through the same path the messenger uses. A second
-one would be convenience against the doctrine.
+one would be convenience against the design.
 
 **`config set` refuses two whole classes of key**, and that is the point of it. Secrets
 never go on a command line — that lands them in the shell history and in `ps` for every
@@ -438,7 +438,7 @@ delivered in full and the system adds its own line beneath it:
 ✕ 1/2 announced checks met — NOT confirmed done. Still open: step 2 (it writes to /tmp/report.md).
 ```
 
-The limit, stated plainly: **the model writes the conditions too.** A met condition proves
+The honest limit: **the model writes the conditions too.** A met condition proves
 that the run's own stated expectation came true — not that the job was done well. Someone
 who sets themselves a trivial condition passes it. What the code guarantees is narrower and
 still worth a lot: that the condition was really *evaluated* rather than asserted, that it
@@ -629,8 +629,7 @@ photographs is a different conversation than one that can only look at them.
 ## Commands
 
 **In a session** — the same set in the terminal and in the messenger, through one
-command centre. A second vocabulary that only worked in one place is exactly the
-duplication this project has paid for elsewhere.
+command centre.
 
 `/stop` `/queue` `/status` `/new` `/retry` `/background` · `/pending` `/approve` `/deny`
 `/allowed` `/revoke` · `/log` `/undo` `/policy` `/autonomy` `/tools` `/whoami` `/version` ·
