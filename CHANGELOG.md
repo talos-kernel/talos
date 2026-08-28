@@ -6,6 +6,35 @@ they make possible that was not possible before — or, more often, what they ta
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions are alpha: the kernel's rules are stable, the surface around them is not.
 
+## [0.14.0-alpha] — 2026-08-28
+
+### Added
+
+- **Operator-owned MCP registry for confined coding jobs.** `delegate_code`
+  accepted exactly one hardwired MCP server (chrome-devtools); it now resolves
+  server *names* against `data/mcp-servers.json` — an operator-owned file with
+  a `version` field, fail-closed parsing, per-entry byte caps, absolute-command
+  and no-`env` rules — gated twice as before (agent `TALOS_MCP_SERVERS` and
+  worker `TALOS_CLAUDE_WORKER_MCP_SERVERS`; the browser switches keep implying
+  chrome-devtools so existing installs do not break). Frames carry names only,
+  never commands or args; the worker still writes the MCP config itself.
+  `browser: true` remains as an alias. Three new red-team cases hold the gates.
+- **`delegate_dag`: an acyclic graph of confined coding tasks.** The model
+  declares up to eight nodes with `depends_on` edges; ready nodes fan out to
+  the UID-separated worker in parallel, dependents fire when their parents
+  reach a terminal state, a failed parent skips its children with the reason
+  stated, and one honest final report lands in the chat — evidence from worker
+  frames only. Cycles, unknown parents, duplicate ids and ungated MCP servers
+  are named refusals before any frame is sent; unattended ceilings DENY the
+  tool like `delegate_code`. Validated in `talos/dag.py`, queued through the
+  existing completions ticker, three new red-team cases.
+- **Live observer dashboard.** `talos dashboard` serves a self-contained page
+  plus `/api/status|runs|approvals|events|schedules` on `127.0.0.1:8810` —
+  read-only SQLite (`mode=ro` + `query_only`), redacted payloads, no schedule
+  prompts, no POST ever (405), a separate observer process by doctrine, not a
+  way in. Running runs and open approvals are log approximations and say so.
+  Ships `deploy/talos-dashboard.service` and `docs/dashboard.md`.
+
 ## [0.13.1-alpha] — 2026-08-27
 
 ### Fixed
