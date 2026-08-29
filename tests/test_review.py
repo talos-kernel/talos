@@ -158,6 +158,25 @@ def test_the_report_says_out_loud_that_it_changed_nothing() -> None:
     assert "Proposals only" in text and "by hand" in text
 
 
+# --- Die Chat-Fassung: eine Zeile, die Liste bleibt einen Befehl entfernt ----------------
+def test_the_chat_version_is_one_line_and_points_at_the_list() -> None:
+    """⚠️ Dieselbe Regel wie bei MAX_FINDINGS, nur haerter: ein langer Bericht im
+    laufenden Chat wird weggewischt, und Wegwischen hat die Wirkung von keinem Bericht.
+    Die Zeile sagt wie viele und wovon das meiste — die Begruendung liegt einen Befehl
+    entfernt, nicht ausser Reichweite."""
+    befunde = review.survey([_fail("run_shell", "x")] * 2 + [_grant("fp1")] * 3)
+    text = review.render_compact(befunde)
+    assert "\n" not in text
+    assert "2 findings" in text
+    assert "biggest: run_shell (fp1) 3×" in text
+    assert "1 worn approval" in text and "1 repeat failure" in text
+    assert "talos review" in text and "Proposals only" in text
+
+
+def test_the_chat_version_says_nothing_when_there_is_nothing() -> None:
+    assert review.render_compact(review.survey([])) == ""
+
+
 def test_the_first_review_happens_instead_of_waiting_out_an_interval() -> None:
     """Eine frische Installation ist der Moment, in dem eine fehlende Bibliothek noch
     billig zu beheben ist."""

@@ -36,7 +36,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-__all__ = ["Finding", "due", "render", "run_review", "survey"]
+__all__ = ["Finding", "due", "render", "render_compact", "run_review", "survey"]
 
 # Zwei ist Zufall, drei ist ein Muster — ausser bei Fehlschlaegen, die Zeit kosten:
 # dort ist schon die Wiederholung teuer genug, um sie zu melden.
@@ -313,6 +313,41 @@ def render(findings, *, now: float | None = None) -> str:
             zeilen.append(f"  {f.note}")
     zeilen += ["", FOOTER]
     return "\n".join(zeilen)
+
+
+_KIND_LABEL = {
+    "repeat-failure": "repeat failures",
+    "repeat-refusal": "repeat refusals",
+    "worn-approval": "worn approvals",
+    "gap-cost": "costly gaps",
+}
+
+
+def render_compact(findings, *, now: float | None = None) -> str:
+    """Die Chat-Fassung: eine Zeile — die begruendete Liste bleibt einen Befehl entfernt.
+
+    ⚠️ Warum zwei Fassungen: der ausfuehrliche Bericht begruendet jeden Befund, und das
+    soll er. Als Nachricht im laufenden Chat las ihn trotzdem niemand mehr — und ein
+    Bericht, den man wegwischt, hat dieselbe Wirkung wie keiner (die Begruendung steht
+    oben bei MAX_FINDINGS). Die Zeile sagt WIE VIELE es sind und WOVON das meiste
+    handelt; wer die Begruendung will, holt sie mit `talos review`. Leer bleibt leer.
+    """
+    if not findings:
+        return ""
+    arten: dict[str, int] = {}
+    for f in findings:
+        beschriftet = _KIND_LABEL.get(f.kind, f.kind)
+        arten[beschriftet] = arten.get(beschriftet, 0) + 1
+    aufteilung = ", ".join(
+        f"{anzahl} {art if anzahl > 1 else art.rstrip('s')}"
+        for art, anzahl in sorted(arten.items(), key=lambda kv: (-kv[1], kv[0]))
+    )
+    groesster = findings[0]
+    return (
+        f"🔎 Self-review: {len(findings)} findings ({aufteilung}) — "
+        f"biggest: {groesster.subject} {groesster.count}×. "
+        "Full list: `talos review`. Proposals only — nothing self-applies."
+    )
 
 
 def run_review(argv: list[str] | None = None, *, out=None, db=None) -> int:

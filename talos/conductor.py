@@ -1015,7 +1015,7 @@ class Conductor:
                 return
             jetzt = time.time()
             befunde = review.survey(protokoll, gaps=self._gaps(), now=jetzt)
-            text = review.render(befunde, now=jetzt)
+            text = review.render_compact(befunde, now=jetzt)
             if not text:
                 return
             self.send(update.conversation, text)
