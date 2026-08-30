@@ -25,6 +25,11 @@ class ToolSpec:
     reversible: bool
     requires_env: frozenset[str] = frozenset()
     sandbox_required: bool = False
+    # Die Wirkung geht nach aussen (entfernte Maschine, fremde API) — keine
+    # Sandbox und keine Credential-Freiheit kann sie einfangen. Die
+    # Attended-Auto-Freigabe (`autonomy.attended_routine`) schliesst solche
+    # Werkzeuge per Bauart aus: ihre Routineklasse endet an der Aussengrenze.
+    outward: bool = False
 
 
 @dataclass(frozen=True)

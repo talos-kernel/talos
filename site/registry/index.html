@@ -249,10 +249,10 @@ html.js .rv.in{opacity:1; transform:none}
     guide with the full protocol is <a href="https://github.com/talos-kernel/talos/blob/master/docs/claude-worker.md">docs/claude-worker.md</a>.
     A curated starting point ships as <code>examples/mcp-servers.json</code>.</p>
     <div class="spec-row">
-      <div class="spec"><b>2099</b>unit tests</div>
-      <div class="spec"><b>186/186</b>adversarial pass</div>
-      <div class="spec"><b>717</b>gate lines</div>
-      <div class="spec"><b>24</b>gated tools</div>
+      <div class="spec"><b>2146</b>unit tests</div>
+      <div class="spec"><b>199/199</b>adversarial pass</div>
+      <div class="spec"><b>779</b>gate lines</div>
+      <div class="spec"><b>26</b>gated tools</div>
       <div class="spec"><b>16</b>servers, at most</div>
       <div class="spec"><b>0</b>env fields, ever</div>
     </div>
@@ -363,7 +363,7 @@ html.js .rv.in{opacity:1; transform:none}
       to social-engineer.</li>
       <li><b>No per-action gate inside a job.</b> What the confined Claude does with its
       MCP tools is bounded by the confinement form: workspace-only writes, read-only
-      root, one deadline. Not by a verdict per call. The 24 gated tools on the agent
+      root, one deadline. Not by a verdict per call. The 26 gated tools on the agent
       side get that verdict; MCP tools inside a job don't. If that is more trust than
       you want to extend, the entry doesn't go in the file.</li>
       <li><b>Network is on in job sandboxes.</b> Claude needs it. The boundary is the

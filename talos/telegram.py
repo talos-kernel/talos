@@ -112,6 +112,8 @@ TOOL_LABELS: dict[str, str] = {
     "write_file": "write",
     "run_shell": "shell",
     "remote_exec": "remote",
+    "http_request": "api call",
+    "git": "git",
     "undo_last": "undo",
     "vault_search": "search vault",
     "vault_get": "read vault note",

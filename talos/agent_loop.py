@@ -428,7 +428,12 @@ def _with_verdict(answer: str, plan: PlanRun | None) -> str:
 
 def tool_history_entry(tool: str, status: str, detail: str, result: object | None) -> str:
     """Bound one untrusted tool result before it re-enters the reasoner prompt."""
+    from . import errors
+
     raw = f"[{tool} -> {status}] {detail} {'' if result is None else result}".strip()
+    # Die Fehlerklasse ist eine Leserichtung, keine Entscheidung: sie aendert
+    # kein Urteil, sie sagt dem naechsten Zug, ob Wiederholen Sinn ergibt.
+    raw += errors.note(status, f"{detail} {'' if result is None else result}")
     if len(raw) <= MAX_TOOL_RESULT_CHARS:
         return raw
     return raw[: MAX_TOOL_RESULT_CHARS - len(TOOL_RESULT_CUT)] + TOOL_RESULT_CUT
@@ -451,6 +456,8 @@ def _safe_tool_summary(tool: str, args: dict, targets: tuple[str, ...]) -> str:
         "write_file": "write",
         "run_shell": "shell",
         "remote_exec": "remote shell",
+        "http_request": "api call",
+        "git": "git network op",
         "undo_last": "undo",
         "vault_search": "search vault",
         "vault_get": "read vault note",

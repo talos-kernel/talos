@@ -191,16 +191,22 @@ class HttpResponse(Protocol):
 
 
 class HttpGet(Protocol):
-    """Die EINZIGE Netz-Naht dieses Moduls: ein GET, eine Antwort.
+    """Die EINZIGE Netz-Naht dieses Moduls: ein Request, eine Antwort.
 
     Es gibt absichtlich kein `allow_redirects`-Argument. Wer folgen darf, entscheidet nicht
     der Aufrufer — die Umsetzung schreibt „nicht folgen" fest, damit die Sprungpruefung in
     `fetch_page` nicht versehentlich uebersprungen werden kann.
+
+    `method` und `data` kamen mit `apiclient.py` dazu (beliebige REST-Methoden mit Body).
+    Vorgabe bleibt der bodenstaendige GET ohne Nutzlast; die Schreibmethoden traegt die
+    Naht, weil `http_request` sonst eine zweite, schwaecher gepruefte Transport-Schicht
+    neben dieser brauchte — und die Pinning-/Host-Logik unten ist genau die Stelle, die
+    es nicht zweimal geben darf.
     """
 
     def __call__(
         self, url: str, *, headers: Mapping[str, str], timeout: float, stream: bool,
-        pin: tuple[str, ...] = (),
+        pin: tuple[str, ...] = (), method: str = "GET", data: bytes | None = None,
     ) -> HttpResponse: ...
 
 
@@ -234,7 +240,7 @@ def _pinned_adapter(address: str):
 
 def _requests_get(
     url: str, *, headers: Mapping[str, str], timeout: float, stream: bool,
-    pin: tuple[str, ...] = (),
+    pin: tuple[str, ...] = (), method: str = "GET", data: bytes | None = None,
 ) -> HttpResponse:
     """Vorgabe-Transport. `requests` steht ohnehin in requirements.txt; es kommt nichts dazu.
 
@@ -265,9 +271,11 @@ def _requests_get(
         # hinter einem CDN), antwortete mit 403. Gemessen, nicht vermutet: dieselbe
         # Adresse lieferte gebunden 403 und ungebunden 200, bei identischem SNI.
         headers = {**dict(headers), "Host": parts.netloc.split("@")[-1]}
-    response = session.get(
+    response = session.request(
+        method,
         url,
         headers=dict(headers),
+        data=data,
         timeout=timeout,
         stream=stream,
         allow_redirects=False,  # festgeschrieben — die Sprungpruefung liegt bei uns

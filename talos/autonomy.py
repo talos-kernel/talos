@@ -134,14 +134,21 @@ def attended_routine(req: ToolRequest, spec: ToolSpec | None, kernel: PolicyKern
         sondern genau der Floor, der auch attended fragt.
 
     Nie dazu: EXEC mit `requires_env` OHNE Confinement — Wirkung auf
-    konfigurierte Infrastruktur nach aussen (Versand mit Zugangsdaten). Weil
-    die Klasse aus den Spec-Eigenschaften abgeleitet ist, faellt ein neues
+    konfigurierte Infrastruktur nach aussen (Versand mit Zugangsdaten). Und nie
+    dazu: `outward`-Werkzeuge — ihre Wirkung liegt jenseits jeder Einsperrung
+    (ferne Maschine, fremde API), egal welche anderen Eigenschaften sie tragen.
+    Weil die Klasse aus den Spec-Eigenschaften abgeleitet ist, faellt ein neues
     Werkzeug automatisch richtig ein, statt auf einer Namensliste vergessen zu
     werden.
     """
     if spec is None:
         return False
     if spec.effect is Effect.EXEC:
+        # `outward` zuerst: eine Wirkung jenseits der Aussengrenze (ferne Maschine,
+        # fremde API) ist per Bauart keine Routine — sie kann nicht eingesperrt
+        # werden, und genau das war die Voraussetzung der Auto-Freigabe.
+        if spec.outward:
+            return False
         return spec.sandbox_required or not spec.requires_env
     if not spec.reversible:
         return False

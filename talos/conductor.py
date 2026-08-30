@@ -752,7 +752,7 @@ class Conductor:
         try:
             with self.ask_contexts.active(context):
                 result = run_agent(
-                    self._propose(text, past, stream),
+                    self._propose(text, past, stream, run_id),
                     self.executor,
                     update.principal,
                     run_id,
@@ -1317,6 +1317,7 @@ class Conductor:
         user_text: str,
         past: tuple[Turn, ...] = (),
         stream: ReplyStream | None = None,
+        run_id: str = "",
     ) -> Callable[[list[str]], str]:
         """Bindet den Reasoner an die Nachricht — davor der bisherige Verlauf, danach die
         Tool-Ergebnisse dieses Laufs. Der Approval-Zustand fließt hier bewusst NICHT ein.
@@ -1340,12 +1341,12 @@ class Conductor:
             snapshot = tuple(history)
             head = head_for(snapshot)
             if not history:
-                return self._ask(head + user_text, stream)
+                return self._ask(head + user_text, stream, run_id)
             joined = "\n".join(history)
-            return self._ask(f"{head}{user_text}\n\n[Tool results so far]\n{joined}", stream)
+            return self._ask(f"{head}{user_text}\n\n[Tool results so far]\n{joined}", stream, run_id)
         return propose
 
-    def _ask(self, prompt: str, stream: ReplyStream | None) -> str:
+    def _ask(self, prompt: str, stream: ReplyStream | None, run_id: str = "") -> str:
         """Ein Reasoner-Zug. Ohne Senke — oder ohne Reasoner, der eine kennt — wie bisher.
 
         Die Signatur wird geprueft, statt die Senke einfach mitzugeben: aeltere Reasoner
@@ -1361,6 +1362,22 @@ class Conductor:
             # Dieselbe Regel wie in `stream.py`: ein kaputter Sink darf den Zug nicht
             # mitnehmen. Dann eben ohne Anzeige — die Antwort laeuft unveraendert.
             return self.reasoner.reason(prompt)
+        push = stream.push
+        if run_id:
+            # TTFT-Beleg: der erste sichtbare Token dieses Zuges. Fail-open wie
+            # jede Quittung — ein Log-Ausfall kostet die Messung, nie die Antwort.
+            erster = {"gesehen": False}
+
+            def marked(delta: str) -> None:
+                if not erster["gesehen"]:
+                    erster["gesehen"] = True
+                    try:
+                        self.log.append(Event(run_id, "reasoner", "reason.first_token", {}))
+                    except Exception:
+                        pass
+                push(delta)
+
+            return self.reasoner.reason(prompt, on_text=marked)
         return self.reasoner.reason(prompt, on_text=stream.push)
 
     def _approval_prompt(self, pending: ToolRequest) -> str:
@@ -1368,6 +1385,22 @@ class Conductor:
         Ziele wortwörtlich, den vollen Command-String und den Grund aus der Decision."""
         reason = self.executor.policy.decide(pending).reason
         lines = [f"{SYM_GATE} Approval required — kernel facts:", f"Tool: {pending.tool}"]
+        if pending.tool == "http_request":
+            # Adresse und Methode sind die Tatsachen, ueber die der Mensch urteilt.
+            # Header und Body stehen hier bewusst NICHT: sie koennen Zugangsdaten
+            # tragen, und ein Freigabe-Dialog ist keine Ablage fuer Geheimnisse.
+            lines.append(f"Method: {str(pending.args.get('method') or 'GET').upper()}")
+            lines.append(f"URL: {pending.args.get('url', '')}")
+        if pending.tool == "git":
+            # Op, Repo und Remote sind die ganze Wahrheit der Handlung — ein
+            # „push" ohne die Zeilen darunter waere nicht unterscheidbar von
+            # einem harmlosen fetch.
+            lines.append(f"Op: git {pending.args.get('op', '')}")
+            lines.append(f"Repo: {pending.args.get('repo', '')}")
+            if pending.args.get("url"):
+                lines.append(f"Remote: {pending.args.get('url')}")
+            if pending.args.get("branch"):
+                lines.append(f"Branch: {pending.args.get('branch')}")
         targets = guard_targets(pending)
         if targets:
             lines.append("Targets: " + ", ".join(targets))

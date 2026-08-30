@@ -53,6 +53,8 @@ TOOL_PROTOCOL = (
     '- skill_write {"name": "kebab-case", "description": "…", "body": "markdown"} — distill a repeated successful workflow into a reusable skill; ALWAYS needs the operator\'s approval, is written once and never overwritten, no allowed-tools, no secrets\n'
     '- undo_last {}\n'
     '- web_fetch {"url": "https://…"}\n'
+    '- http_request {"method": "GET|POST|PUT|PATCH|DELETE", "url": "https://…", "headers": {"…": "…"}, "body": "…"} — call any REST API; read methods run, methods that change remote state ALWAYS need the operator\'s approval (standing approvals bind to exact method+url)\n'
+    '- git {"op": "clone|fetch|pull|push", "repo": "workspace/path", "url": "https://… or git@host:path", "branch": "…"} — git network ops with credentials; EVERY op needs the operator\'s approval (standing approvals bind to exact op+repo+url); local ops (status/diff/commit/branch) belong in run_shell\n'
     '- web_search {"query": "…", "limit": 1..10}\n'
     '- ask_operator {"question": "…", "options": ["…", "…"]}\n'
     '- session_search {"query": "…", "limit": 1..10}\n'

@@ -21,6 +21,8 @@ ALLOWED_ENDPOINT_FIXTURE_HOSTS = {
     "tests/test_agent_consult.py": frozenset({"127.0.0.1"}),
     "tests/test_api_reasoner.py": frozenset({"localhost"}),
     "tests/test_browser.py": frozenset({"127.0.0.1", "192.168.1.1"}),
+    "tests/test_apiclient.py": frozenset({"192.168.1.1", "100.64.0.1", "169.254.169.254"}),
+    "tests/test_gitops.py": frozenset({"192.168.1.1", "100.64.0.1", "169.254.169.254"}),
     "tests/test_credentials.py": frozenset({"localhost"}),
     "tests/test_fallback.py": frozenset({"localhost"}),
     "tests/test_first_run.py": frozenset({"localhost"}),

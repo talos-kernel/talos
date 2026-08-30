@@ -25,6 +25,7 @@ from typing import Callable
 import requests
 
 from . import claudejobs, consult, dag, notify, tools
+from . import apiclient, gitops
 from .api_reasoner import SUPPORTED_PROVIDERS, ApiReasoner
 from .approval import ApprovalPicker, ApprovalStore
 from .autonomy import AutonomyGovernor, GovernedKernel, restore_level
@@ -347,6 +348,16 @@ def run(once: bool = False, ask: str = "", chat: bool = False) -> None:
         **tools.RUNNERS,
         **tools.make_vault_runners(config.vault_dir, config.qmd_bin),
         "undo_last": tools.make_undo_runner(log),
+        # Der API-Connector bekommt dieselbe Netz-Konfiguration wie web_fetch:
+        # Freigabe-Adressen und die http-Erlaubnis kommen aus der Config, nie
+        # aus Modellargumenten.
+        "http_request": apiclient.make_http_request_runner(
+            allow_http=config.web_allow_http,
+            allowed_addresses=config.web_allowed_addresses,
+        ),
+        "git": gitops.make_git_runner(
+            allowed_addresses=config.web_allowed_addresses,
+        ),
         "entity_status": make_entity_status_runner(
             entity_registry,
             web_fetch=network_runners["web_fetch"],

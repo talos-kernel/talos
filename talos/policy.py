@@ -314,6 +314,16 @@ TARGET_EXTRACTORS = {
         else ()
     ),
     "run_shell": lambda args: (),
+    # API-Connector: die URL ist KEIN Pfad (web_fetch-Doktrin) — ein Scheinziel im
+    # Dateisystem-Floor ist schlechter als keins. Die echte Pruefung ist
+    # `web.guard_url` im Runner; die Einordnung der Methode faellt in `_decide_http`.
+    "http_request": lambda args: (),
+    # git-Netz-Ops: das Ziel ist das REPO (fetch/pull/push schreiben `.git`,
+    # clone legt es an) — ein echter Pfad, also greifen die Floors: ein push
+    # im eigenen Quellbaum oder ein clone unter einer Persistenz-Stelle fragt
+    # wie jedes Schreiben dorthin. Die Remote-URL ist KEIN Ziel hier — ihre
+    # Einordnung (guard_url fuer https, Slug fuer ssh) baut der Runner.
+    "git": lambda args: (str(args.get("repo", "")),) if "repo" in args else (),
     # Fernausfuehrung: kein Dateisystem-Ziel — die Wirkung entsteht auf einer
     # anderen Maschine, und der Host ist kein Pfad, sondern ein ssh-Alias aus der
     # Betreiber-Allowlist (remote_hosts). Die eigentliche Einordnung faellt in
@@ -646,6 +656,14 @@ class PolicyKernel:
         # Maschinengrenzen), Hardline trotzdem (Systemzerstoerung ist ortlos).
         if req.tool == "remote_exec":
             return self._decide_remote(req)
+        # API-Connector: die METHODE entscheidet ueber die Vertrauensform —
+        # Lesemethoden wie web_fetch, Schreibmethoden wie ein Versand nach aussen.
+        if req.tool == "http_request":
+            return self._decide_http(req)
+        # git-Netz-Ops: clone/fetch/pull/push — Vertrauensentscheidung (woher
+        # kommt Code) und oeffentliche Wirkung (wohin geht er). Immer fragen.
+        if req.tool == "git":
+            return self._decide_git(req)
         command = req.args.get("command")
 
         # Shell-artiges Tool: der Command-Floor entscheidet (hardline vor Allowlist).
@@ -714,4 +732,48 @@ class PolicyKernel:
             Verdict.NEEDS_HUMAN,
             f"remote effect on '{host.strip()}' — beyond the local sandbox, "
             "needs your approval",
+        )
+
+    def _decide_http(self, req: ToolRequest) -> Decision:
+        """http_request: die Methode ist die Vertrauensform.
+
+        GET/HEAD/OPTIONS sind die Netz-Form von Lesen — dasselbe Urteil wie
+        `web_fetch` (dessen Grenze `guard_url` im Runner traegt, nicht der
+        Pfad-Floor). Alles andere veraendert entfernten Zustand hinter einer
+        fremden API: irreversibel und jenseits jeder Einsperrung, also
+        ausnahmslos NEEDS_HUMAN. Erleichterung nur als stehende Regel auf exakt
+        (methode, url) — der Body gehoert nicht in den Abdruck
+        (write_file-Bindung: „diese Adresse darfst du schreiben").
+        """
+        method = str(req.args.get("method") or "GET").strip().upper()
+        if not req.args.get("url"):
+            return Decision(Verdict.DENY, "http_request without a url")
+        if method in ("GET", "HEAD", "OPTIONS"):
+            return Decision(Verdict.ALLOW, "read via guarded url")
+        return Decision(
+            Verdict.NEEDS_HUMAN,
+            f"{method} changes state behind an external API — needs your approval",
+        )
+
+    def _decide_git(self, req: ToolRequest) -> Decision:
+        """git-Netz-Ops: ausnahmslos NEEDS_HUMAN.
+
+        Keine Op ist harmlos in beide Richtungen: clone/fetch/pull holen Code
+        von einer Gegenstelle, der man erstmals vertraut (und schreiben `.git`),
+        push ist oeffentlich sichtbare Wirkung mit Credentials. Die
+        Attended-Auto-Freigabe endet hier per `outward`. Erleichterung nur als
+        stehende Regel auf exakt (op, repo, url) — „clone von X" deckt
+        „push nach X" nie. Eine unbekannte Op ist DENY, keine Freigabefrage:
+        der Mensch soll nie ueber eine Handlung abstimmen, die es nicht gibt.
+        """
+        op = str(req.args.get("op") or "").strip().lower()
+        if op not in ("clone", "fetch", "pull", "push"):
+            return Decision(Verdict.DENY, f"unknown git op: {op or '(none)'}")
+        repo = str(req.args.get("repo") or "").strip()
+        url = str(req.args.get("url") or "").strip()
+        wohin = f" {url}" if url else ""
+        return Decision(
+            Verdict.NEEDS_HUMAN,
+            f"git {op} {repo}{wohin} — network op with credentials and remote "
+            "effect, needs your approval",
         )

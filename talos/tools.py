@@ -7,7 +7,7 @@ enthalten keine Sicherheitslogik — Trennung von Gate und Vollzug.
 """
 from __future__ import annotations
 
-from . import browser, claudejobs, dag, frames, hearing, remoteexec, sandbox, speech, transcript, vision, web
+from . import apiclient, browser, claudejobs, dag, frames, gitops, hearing, remoteexec, sandbox, speech, transcript, vision, web
 
 import subprocess
 import threading
@@ -249,6 +249,13 @@ RUNNERS = {
     # `remote_exec` liest seine Allowlist pro Aufruf selbst (`policy.remote_hosts`)
     # und waehlt sein einsperrendes Backend selbst — dieselbe Selbstaufloesung.
     "remote_exec": remoteexec.remote_exec,
+    # `http_request` loest seine Freigabe-Adressen pro Aufruf selbst auf
+    # (`apiclient.http_request`, TALOS_WEB_ALLOWED_ADDRESSES) — die Produktiv-
+    # Verdrahtung in __main__ ersetzt ihn durch den config-gebauten Runner.
+    "http_request": apiclient.http_request,
+    # `git` baut seine Kommandos selbst und waehlt sein einsperrendes Backend
+    # (remoteexec.remote_backends: Netz an, ~/.ssh lesbar) — Selbstaufloesung.
+    "git": gitops.git,
 }
 
 
@@ -298,6 +305,21 @@ def default_manifest() -> ToolManifest:
         # Regeln nur auf exakt (host, command).
         .with_tool(ToolSpec("remote_exec", Effect.EXEC, reversible=False,
                             requires_env=frozenset({"TALOS_REMOTE_HOSTS"})))
+        # Der API-Connector: beliebige REST-Endpunkte mit Methode, Headern und
+        # Body. EXEC mit `outward` — die Wirkung eines POST liegt hinter einer
+        # fremden API, jenseits jeder Einsperrung; die Attended-Auto-Freigabe
+        # endet damit per Bauart hier. Die Methode entscheidet im Kernel:
+        # Lesemethoden laufen (guard_url im Runner), Schreibmethoden fragen
+        # ausnahmslos. Irreversible deklariert, weil der haerteste Fall die
+        # ehrliche Vorgabe ist.
+        .with_tool(ToolSpec("http_request", Effect.EXEC, reversible=False,
+                            outward=True))
+        # git-Netz-Ops (clone/fetch/pull/push): Credentials (`~/.ssh`) und
+        # entfernte, oeffentliche Wirkung. EXEC mit `outward` — der Kernel
+        # fragt ausnahmslos (`_decide_git`), die Attended-Auto-Freigabe endet
+        # per Bauart. Lokale Ops (status/diff/commit/branch) bleiben bewusst
+        # bei run_shell: kein Netz noetig, die Sandbox reicht.
+        .with_tool(ToolSpec("git", Effect.EXEC, reversible=False, outward=True))
         # Fragen wirkt nicht: kein Byte bewegt sich, kein Kommando läuft. READ hält es
         # deshalb ohne eigene Freigabe-Runde bei ALLOW — eine Rückfrage, die selbst
         # freigabepflichtig wäre, müsste den Betreiber um Erlaubnis bitten, ihn fragen

@@ -74,6 +74,24 @@ def action_key(req: ToolRequest) -> str | None:
         ):
             return None
         material = ("host", host, "command", command)
+    elif req.tool == "http_request":
+        # Methode UND Adresse: ein „GET registriert" sagt nichts ueber POST auf
+        # denselben Endpunkt. Der Body gehoert bewusst NICHT in den Abdruck —
+        # dieselbe Bindung wie bei write_file: „diese Adresse mit dieser Methode
+        # darfst du schreiben", unabhaengig vom jeweiligen Inhalt.
+        method = req.args.get("method")
+        url = req.args.get("url")
+        if not isinstance(url, str) or not url:
+            return None
+        material = ("method", str(method or "GET").upper(), "url", url)
+    elif req.tool == "git":
+        # Op, Repo UND Remote: „clone von X" darf nie „push nach X" decken,
+        # und derselbe Op auf einem anderen Repo ist eine andere Handlung.
+        op = req.args.get("op")
+        repo = req.args.get("repo")
+        if not isinstance(op, str) or not op or not isinstance(repo, str) or not repo:
+            return None
+        material = ("op", op, "repo", repo, "url", str(req.args.get("url") or ""))
     else:
         targets = guard_targets(req)
         if not targets:
@@ -89,6 +107,12 @@ def action_label(req: ToolRequest) -> str:
         body = str(req.args.get("command", ""))
     elif req.tool == "remote_exec":
         body = f"{req.args.get('host', '')}: {req.args.get('command', '')}"
+    elif req.tool == "http_request":
+        body = f"{str(req.args.get('method') or 'GET').upper()} {req.args.get('url', '')}"
+    elif req.tool == "git":
+        teile = f"{req.args.get('op', '')} {req.args.get('repo', '')}"
+        url = str(req.args.get("url") or "")
+        body = f"{teile} {url}".strip()
     else:
         body = ", ".join(guard_targets(req))
     text = f"{req.tool} {body}".strip()

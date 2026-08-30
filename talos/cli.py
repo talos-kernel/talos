@@ -55,6 +55,7 @@ HELP = f"""
   anchor [--send] [--mail]         pin the chain head — catches tail truncation
   briefing [--send] [--install]    morning status from the logs — health, chain, anchor
   report [--run <id>] [--out <f>]    a record for someone else to read
+  metrics [--since 24h]              latency and tool success rates, from the log
   review [--window <n>]              what this installation should change
   update [--check]                   new version beside the old one, tests first
   version                            {__version__}
@@ -262,6 +263,7 @@ TABLE: dict[str, object] = {
     "anchor": _lazy("anchor", "run_anchor"),
     "briefing": _lazy("briefing", "run_briefing"),
     "report": _lazy("report", "run_report"),
+    "metrics": _lazy("metrics", "run_metrics"),
     "review": _lazy("review", "run_review"),
     "update": _lazy("updater", "run_update"),
     "version": lambda _rest: cmd_version(),

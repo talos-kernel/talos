@@ -55,10 +55,28 @@ def done_detail(decision: Decision) -> str:
     return APPROVED_DETAIL if decision.verdict is Verdict.NEEDS_HUMAN else decision.reason
 
 
-def audit_args(args: dict) -> dict:
+# Arg-Schluessel, deren WERTE Zugangsdaten tragen koennen. Ins Log kommen nur die
+# Struktur (Namen, Anzahl, Laenge), nie der Inhalt — ein Bearer-Token im
+# `headers`-Objekt eines Requests waere sonst fuer immer im append-only Log.
+_SENSITIVE_MAP_KEYS = frozenset({"headers", "authorization", "auth"})
+# `body` ist doppeldeutig: bei `http_request` kann es ein Login-Payload sein
+# (redigieren), bei `skill_write` ist es der Skill-Text selbst — der GEHOERT ins
+# Log, weil genau er die haerteste Persistenz des Hauses auditiert.
+_REDACT_BODY_TOOLS = frozenset({"http_request"})
+
+
+def audit_args(args: dict, tool: str = "") -> dict:
     """Argumente fuers Event-Log: vollstaendig in den Schluesseln, beschnitten im Wert."""
     out: dict[str, str] = {}
     for key, value in args.items():
+        folded = str(key).casefold()
+        if folded in _SENSITIVE_MAP_KEYS and isinstance(value, dict):
+            namen = ", ".join(str(k) for k in value) or "(leer)"
+            out[str(key)] = f"[{len(value)} Eintraege, Werte redigiert: {namen}]"
+            continue
+        if folded == "body" and tool in _REDACT_BODY_TOOLS and isinstance(value, str) and value:
+            out[str(key)] = f"[{len(value)} Zeichen, redigiert]"
+            continue
         text = str(value)
         if len(text) > AUDIT_MAX_CHARS:
             text = text[:AUDIT_MAX_CHARS] + f"…(+{len(text) - AUDIT_MAX_CHARS} Zeichen)"
@@ -208,7 +226,7 @@ class Executor:
                 type=etype,
                 payload={
                     "tool": req.tool,
-                    "args": audit_args(req.args),
+                    "args": audit_args(req.args, req.tool),
                     "targets": list(self.policy.guard_targets(req)),
                     "verdict": decision.verdict.value,
                     "reason": decision.reason,
