@@ -1,9 +1,9 @@
 {
   "version": "0.15.1-alpha",
-  "tests": 2065,
-  "redteam_faelle": 179,
-  "kernel_zeilen": 645,
-  "werkzeuge": 23,
+  "tests": 2088,
+  "redteam_faelle": 185,
+  "kernel_zeilen": 717,
+  "werkzeuge": 24,
   "sha": "cc4f8d6d8f",
   "gebaut_am": "2026-08-28T12:10:00Z"
 }

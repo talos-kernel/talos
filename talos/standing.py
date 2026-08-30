@@ -59,6 +59,21 @@ def action_key(req: ToolRequest) -> str | None:
         if not isinstance(command, str) or not command:
             return None
         material: tuple[str, ...] = ("command", command)
+    elif req.tool == "remote_exec":
+        # Fern wirkt doppelt: WO (host) und WAS (command). Eine Regel, die nur
+        # das Kommando bande, gaelte still fuer jede Maschine in der Allowlist —
+        # „uptime" auf dem Pi und „uptime" auf dem Produktivserver sind nicht
+        # dieselbe Handlung. Beide Felder gehoeren in den Abdruck, exakt.
+        host = req.args.get("host")
+        command = req.args.get("command")
+        if (
+            not isinstance(host, str)
+            or not host
+            or not isinstance(command, str)
+            or not command
+        ):
+            return None
+        material = ("host", host, "command", command)
     else:
         targets = guard_targets(req)
         if not targets:
@@ -72,6 +87,8 @@ def action_label(req: ToolRequest) -> str:
     """Menschenlesbar für `/allowed` — gekürzt, aber nie beschönigt."""
     if req.tool == "run_shell":
         body = str(req.args.get("command", ""))
+    elif req.tool == "remote_exec":
+        body = f"{req.args.get('host', '')}: {req.args.get('command', '')}"
     else:
         body = ", ".join(guard_targets(req))
     text = f"{req.tool} {body}".strip()

@@ -111,6 +111,7 @@ TOOL_LABELS: dict[str, str] = {
     "read_file": "read",
     "write_file": "write",
     "run_shell": "shell",
+    "remote_exec": "remote",
     "undo_last": "undo",
     "vault_search": "search vault",
     "vault_get": "read vault note",
@@ -1058,9 +1059,10 @@ def _tool_text(event: AgentProgress, style: Style = GEOMETRIC) -> str:
     label = style.tool_label(tool, base)
     summary = _redact(event.summary)
     # Ein Shell-Summary bleibt generisch, auch wenn ein fremder Callback rohe Argumente
-    # hineinschreibt. Der volle Befehl gehoert nur in den Freigabe-Dialog.
-    if tool == "run_shell":
-        verb = style.tool_verbs.get("run_shell")
+    # hineinschreibt. Der volle Befehl gehoert nur in den Freigabe-Dialog. Dasselbe gilt
+    # fuer remote_exec: Host und Fernkommando stehen im Freigabe-Dialog, nicht im Fortschritt.
+    if tool in ("run_shell", "remote_exec"):
+        verb = style.tool_verbs.get(tool)
         return f"{verb} command" if verb else LABEL_SHELL_GENERIC
     # Der Loop liefert das Basislabel manchmal mit ("write — notes.md"); es wird abgetrennt,
     # damit das gewaehlte Label nicht doppelt erscheint, sobald der Stil es umbenennt.

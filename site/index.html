@@ -420,9 +420,9 @@ html.js .rv.in{opacity:1;transform:none}
         <span class="t-why" id="tickWhy">clean — runs sandboxed, logged before it runs</span>
       </div>
       <div class="meter-row">
-        <span><b>2065</b>unit tests</span>
-        <span><b>179/179</b>adversarial</span>
-        <span><b>645</b>lines · gate</span>
+        <span><b>2088</b>unit tests</span>
+        <span><b>185/185</b>adversarial</span>
+        <span><b>717</b>lines · gate</span>
         <span><b>30s</b>token life</span>
       </div>
     </div>
@@ -462,7 +462,7 @@ html.js .rv.in{opacity:1;transform:none}
         patterns name, and it is the authoritative one. Two things a page cannot show: before
         any of these stages, the real kernel checks <em>who</em> is asking, and there is no
         default allowlist. And file tools walk their own pipeline — system floor, identity,
-        secrets, persistence, effect. 179 adversarial cases run against the Python kernel on
+        secrets, persistence, effect. 185 adversarial cases run against the Python kernel on
         every install and every update.</p>
       </div>
     </div>
@@ -499,10 +499,10 @@ html.js .rv.in{opacity:1;transform:none}
 <section id="tools">
   <div class="wrap">
     <p class="sec-tag rv">the manifest</p>
-    <h2 class="rv">Twenty-three tools. Each one declared.</h2>
+    <h2 class="rv">Twenty-four tools. Each one declared.</h2>
     <p class="sub rv">The kernel does not guess what a tool might do. Every tool declares its
     <strong>effect</strong> in the manifest, and anything undeclared is refused on sight.
-    <strong>15 read, 5 write, 3 exec — 23 in all.</strong></p>
+    <strong>15 read, 5 write, 4 exec — 24 in all.</strong></p>
     <div class="tools">
       <div class="tool-row rv">
         <div><h3>read</h3><div class="fx">free at autonomy 5</div></div>
@@ -525,7 +525,7 @@ html.js .rv.in{opacity:1;transform:none}
       <div class="tool-row rv">
         <div><h3>exec</h3><div class="fx">sandboxed — or refused where no sandbox exists</div></div>
         <div class="set">
-          <code>run_shell</code><code>delegate_code</code><code>delegate_dag</code>
+          <code>run_shell</code><code>remote_exec</code><code>delegate_code</code><code>delegate_dag</code>
         </div>
         <p>One tool carries all the power, so one tool carries all the suspicion. A path floor
         for what is never touched, a hardline with no appeal, a sandbox for everything clean —
@@ -534,7 +534,11 @@ html.js .rv.in{opacity:1;transform:none}
         shell, writing only into a kernel-derived disposable job workspace — never into a path
         the model chose. The third fans a small acyclic graph of such tasks out to the same
         worker: dependency-free nodes run in parallel, a failed parent skips its children, and
-        the origin chat gets a per-node push plus a final report from the worker records.</p>
+        the origin chat gets a per-node push plus a final report from the worker records.
+        The fourth runs a command on <em>another</em> machine over ssh — the one case the
+        sandbox cannot contain, so the host allowlist is the operator's, the hardline still
+        applies, and every single call waits for a human; standing approvals bind to an
+        exact host+command pair, never to a host alone.</p>
       </div>
     </div>
   </div>
@@ -606,11 +610,11 @@ html.js .rv.in{opacity:1;transform:none}
     <p class="sub rv">None of this asks for belief. The installer runs both suites in front
     of you. Every number on this page is a number the suite reproduces.</p>
     <div class="stats">
-      <div class="stat rv"><div class="n cnt" data-n="2065">0</div><div class="l">unit tests, run by the installer in front of you</div></div>
-      <div class="stat rv"><div class="n cnt" data-n="179">0</div><div class="l">adversarial cases trying to pass the kernel</div></div>
+      <div class="stat rv"><div class="n cnt" data-n="2088">0</div><div class="l">unit tests, run by the installer in front of you</div></div>
+      <div class="stat rv"><div class="n cnt" data-n="185">0</div><div class="l">adversarial cases trying to pass the kernel</div></div>
       <div class="stat rv"><div class="n cnt" data-n="44">0</div><div class="l">end-to-end cases against a real model</div></div>
-      <div class="stat rv"><div class="n cnt" data-n="645">0</div><div class="l">lines in the file that decides every verdict</div></div>
-      <div class="stat rv"><div class="n cnt" data-n="23">0</div><div class="l">gated tools, each with a declared effect</div></div>
+      <div class="stat rv"><div class="n cnt" data-n="717">0</div><div class="l">lines in the file that decides every verdict</div></div>
+      <div class="stat rv"><div class="n cnt" data-n="24">0</div><div class="l">gated tools, each with a declared effect</div></div>
       <div class="stat rv"><div class="n cnt" data-n="30" data-suf="s">0</div><div class="l">token lifetime, single use</div></div>
       <div class="stat rv"><div class="n cnt" data-n="0">0</div><div class="l">identities allowed by default</div></div>
     </div>
@@ -629,9 +633,9 @@ html.js .rv.in{opacity:1;transform:none}
 <span class="p">curl</span> -fsSL https://talos-agent.ch/install.sh | <span class="p">bash</span>
 
   <span class="p">▸</span> Checking prerequisites      <span class="ok">✓ Python 3.11+</span>
-  <span class="p">▸</span> Running the test suite      <span class="ok">2065 passed</span>
+  <span class="p">▸</span> Running the test suite      <span class="ok">2088 passed</span>
   <span class="p">▸</span> Running the adversarial suite
-    <span class="ok">179/179 cases behaved as expected.</span> <span class="c">— any failure aborts the install</span>
+    <span class="ok">185/185 cases behaved as expected.</span> <span class="c">— any failure aborts the install</span>
 
   <span class="ok">Done.</span> Talos is in <b>~/talos</b> — <span class="warn">and it is not running.</span>
   <span class="c">That is not a forgotten step. The switch is yours.</span></pre>
@@ -747,9 +751,9 @@ const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
     ['  <span class="ok">✓</span> Python 3.11+', 140],
     ['  <span class="ok">✓</span> curl, tar available', 200],
     ['▸ Running the test suite', 420],
-    ['  <span class="ok">2065 passed</span>', 300],
+    ['  <span class="ok">2088 passed</span>', 300],
     ['▸ Running the adversarial suite', 460],
-    ['  <span class="ok">179/179 cases behaved as expected.</span>', 380],
+    ['  <span class="ok">185/185 cases behaved as expected.</span>', 380],
     ['', 80],
     ['<span class="ok">Done.</span> The switch is yours. <span class="warn">Entering console…</span>', 520],
   ];

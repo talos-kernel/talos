@@ -1308,15 +1308,26 @@ class Conductor:
             lines.append("Targets: " + ", ".join(targets))
         command = pending.args.get("command")
         if command is not None:
+            if pending.tool == "remote_exec":
+                # Bei Fernausfuehrung gehoert der ORT in die Mitte des Dialogs:
+                # „uptime" ist harmlos hier und harmlos dort — der Unterschied,
+                # ueber den der Mensch urteilt, ist die Maschine.
+                lines.append(f"Host: {pending.args.get('host', '')} (the effect lands on this machine, not here)")
             lines.append(f"Command: {command}")
-            # Shell hat keine ableitbaren Ziele — die Einordnung der Pfade kommt trotzdem
-            # aus dem Kernel, damit `date` und `echo … >> ~/.bashrc` nicht gleich aussehen.
-            marks = command_risk_paths(str(command))
-            if marks:
-                lines.append("Paths in command: " + ", ".join(
-                    f"{path} [{label}]" if label else path for path, label in marks
-                ))
-            lines.append("Note: shell runs have no undo (no snapshot).")
+            if pending.tool == "remote_exec":
+                # Der lokale Pfad-Floor sagt ueber ferne Pfade nichts Ehrliches —
+                # `/etc/hosts` meint dort die Gegenstelle. Die Einordnung uebernimmt
+                # hier der Mensch, mit vollem Kommandotext statt Fehlalarm.
+                lines.append("Note: remote run — the local sandbox cannot limit what this does on the other machine, and there is no undo.")
+            else:
+                # Shell hat keine ableitbaren Ziele — die Einordnung der Pfade kommt trotzdem
+                # aus dem Kernel, damit `date` und `echo … >> ~/.bashrc` nicht gleich aussehen.
+                marks = command_risk_paths(str(command))
+                if marks:
+                    lines.append("Paths in command: " + ", ".join(
+                        f"{path} [{label}]" if label else path for path, label in marks
+                    ))
+                lines.append("Note: shell runs have no undo (no snapshot).")
         from . import lessons
 
         lines.append(f"Reason: {reason}")

@@ -45,6 +45,7 @@ TOOL_PROTOCOL = (
     '- read_file   {"path": "…"}\n'
     '- write_file  {"path": "…", "content": "…"}\n'
     '- run_shell   {"command": "…"}\n'
+    '- remote_exec {"host": "operator-configured ssh alias", "command": "…"} — run a command on another machine over ssh; EVERY call needs the operator\'s approval (the sandbox cannot reach across machines), standing approvals bind to exact host+command\n'
     '- entity_status {"name": "known entity"}\n'
     '- vault_search {"query": "…", "limit": 1..10}\n'
     '- vault_get {"path": "qmd://obsidian/…md or relative/path.md"}\n'
@@ -68,6 +69,11 @@ TOOL_PROTOCOL = (
     "The shell runs inside a sandbox: writing is possible only in the workspace, there is "
     "no network, and the environment carries no credentials. To write anywhere else, use "
     "write_file — it has a clean target, a snapshot and the operator's approval behind it.\n"
+    "remote_exec is the one documented exception to \"no network\": its ssh client runs "
+    "sandboxed but networked, reaching only the ssh aliases the operator configured. Use "
+    "it for live status and administration of the operator's other machines instead of "
+    "guessing. Its effect lands on the remote machine — that is why every call goes to "
+    "the operator, and why only an exact host+command pair can become a standing rule.\n"
     "browse renders a page in a real browser, so JavaScript runs and you see what a "
     "reader would see — use it when web_fetch comes back empty or skeletal. It only "
     "reads: there is no clicking, typing or form submission, and the browser can reach "

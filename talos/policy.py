@@ -17,6 +17,7 @@ import re
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+from typing import Mapping
 
 from . import command_floor
 from .channel import Principal
@@ -254,6 +255,23 @@ def skill_write_root() -> str:
     return _expand(roots[0]) if roots else str(HOME / ".talos" / "skills")
 
 
+REMOTE_HOSTS_ENV = "TALOS_REMOTE_HOSTS"
+
+
+def remote_hosts(environ: Mapping[str, str] | None = None) -> tuple[str, ...]:
+    """Die ssh-Aliase, die `remote_exec` erreichen darf — Betreiberkonfiguration.
+
+    Gelesen wird aus der Umgebung (Kernel und Runner rufen dieselbe Ableitung,
+    das skill_write_root-Muster), nie aus Modellargumenten: die Allowlist ist der
+    einzige Ort, der sagt, welche fernen Maschinen existieren. Ein leerer Wert
+    heisst „das Werkzeug hat keine Gegenstelle" — die `requires_env`-Regel des
+    Kernels macht daraus DENY, bevor hier ueberhaupt geurteilt wird.
+    """
+    raw = (environ if environ is not None else os.environ).get(REMOTE_HOSTS_ENV, "")
+    hosts = [part.strip() for part in raw.split(",") if part.strip()]
+    return tuple(dict.fromkeys(hosts))
+
+
 def skill_write_path(name: object) -> str:
     """Wohin ein neuer Skill geschrieben wird — allein aus dem Namen abgeleitet.
 
@@ -296,6 +314,12 @@ TARGET_EXTRACTORS = {
         else ()
     ),
     "run_shell": lambda args: (),
+    # Fernausfuehrung: kein Dateisystem-Ziel — die Wirkung entsteht auf einer
+    # anderen Maschine, und der Host ist kein Pfad, sondern ein ssh-Alias aus der
+    # Betreiber-Allowlist (remote_hosts). Die eigentliche Einordnung faellt in
+    # `_decide_remote`: Hardline-Floor auch fern, danach ausnahmslos NEEDS_HUMAN,
+    # weil keine lokale Sandbox ueber Maschinengrenzen reicht.
+    "remote_exec": lambda args: (),
     "send_mail": lambda args: (),
     # Rückfrage an den Betreiber: kein Ziel, weil sie nichts anfasst — nur Text und
     # eine Auswahl. Der Eintrag muss trotzdem hier stehen: ein Werkzeug ohne Extractor
@@ -616,6 +640,12 @@ class PolicyKernel:
         return Decision(Verdict.ALLOW, "write, reversible")
 
     def _decide_exec(self, req: ToolRequest) -> Decision:
+        # Fernausfuehrung zuerst: fuer remote_exec gelten andere Grenzen als fuer
+        # die lokale Shell — kein Pfad-Floor (die Pfade meinen die ferne Maschine),
+        # kein SHELL_NEEDS_HUMAN=0-Komfort (die Sandbox reicht nicht ueber
+        # Maschinengrenzen), Hardline trotzdem (Systemzerstoerung ist ortlos).
+        if req.tool == "remote_exec":
+            return self._decide_remote(req)
         command = req.args.get("command")
 
         # Shell-artiges Tool: der Command-Floor entscheidet (hardline vor Allowlist).
@@ -643,3 +673,45 @@ class PolicyKernel:
         if spec is not None and not spec.reversible:
             return Decision(Verdict.NEEDS_HUMAN, f"irreversible: {req.tool}")
         return Decision(Verdict.ALLOW, "exec allowed")
+
+    def _decide_remote(self, req: ToolRequest) -> Decision:
+        """remote_exec: die Wirkung entsteht auf einer ANDEREN Maschine.
+
+        Drei Unterschiede zur lokalen Shell, alle bewusst:
+
+        * **Host gegen die Betreiber-Allowlist** (`remote_hosts`), nicht gegen
+          Muster: ein nicht gelisteter Host ist DENY, keine Freigabefrage — der
+          Mensch soll nie ueber eine Gegenstelle abstimmen, die er nie
+          konfiguriert hat.
+        * **Hardline bleibt Hardline**: `rm -rf /` ist auch fern systemzerstörend
+          und unbypassbar. Der lokale PFAD-Floor gilt dagegen nicht — `/etc/hosts`
+          im Fernkommando meint die ferne Maschine; lokale Secret-Pfade dort
+          hineinzulesen machte echte Fernwartung unmoeglich (Fehlalarm in der
+          sicheren Richtung waere hier trotzdem der falsche Trade-off, weil die
+          ehrliche Grenze die Freigabe mit vollem Kommandotext ist).
+        * **Ausnahmslos NEEDS_HUMAN.** Die Sandbox sperrt nur den lokalen
+          ssh-Clienten ein; was das Kommando fern anrichtet, begrenzt sie nicht.
+          Der `SHELL_NEEDS_HUMAN=0`-Komfort der lokalen Sandbox gilt darum hier
+          nicht. Erleichterung gibt es nur als stehende Regel auf exakt
+          (host, command) — `standing.action_key` bindet beides.
+        """
+        host = req.args.get("host")
+        command = req.args.get("command")
+        if not isinstance(host, str) or not host.strip():
+            return Decision(Verdict.DENY, "remote_exec without a host")
+        hosts = remote_hosts()
+        if host.strip() not in hosts:
+            return Decision(
+                Verdict.DENY,
+                f"remote host not in the operator's allowlist: {host.strip()}",
+            )
+        if not isinstance(command, str) or not command.strip():
+            return Decision(Verdict.DENY, "remote_exec without a command")
+        is_hard, hard_desc = command_floor.detect_hardline(command)
+        if is_hard:
+            return Decision(Verdict.DENY, f"hardline: {hard_desc}")
+        return Decision(
+            Verdict.NEEDS_HUMAN,
+            f"remote effect on '{host.strip()}' — beyond the local sandbox, "
+            "needs your approval",
+        )

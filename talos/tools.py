@@ -7,7 +7,7 @@ enthalten keine Sicherheitslogik — Trennung von Gate und Vollzug.
 """
 from __future__ import annotations
 
-from . import browser, claudejobs, dag, frames, hearing, sandbox, speech, transcript, vision, web
+from . import browser, claudejobs, dag, frames, hearing, remoteexec, sandbox, speech, transcript, vision, web
 
 import subprocess
 import threading
@@ -246,6 +246,9 @@ RUNNERS = {
     # (`policy.skill_write_root`, dieselbe Ableitung wie im Kernel) — er braucht
     # keine Verdrahtung aus __main__.
     "skill_write": skill_write,
+    # `remote_exec` liest seine Allowlist pro Aufruf selbst (`policy.remote_hosts`)
+    # und waehlt sein einsperrendes Backend selbst — dieselbe Selbstaufloesung.
+    "remote_exec": remoteexec.remote_exec,
 }
 
 
@@ -282,6 +285,16 @@ def default_manifest() -> ToolManifest:
         # NEEDS_HUMAN ohnehin DENY. Geschrieben wird genau einmal; verbessern
         # heisst: der Betreiber loescht, danach darf neu geschrieben werden.
         .with_tool(ToolSpec("skill_write", Effect.WRITE, reversible=False))
+        # Ein Kommando auf einer ANDEREN Maschine (ssh auf einen Alias aus der
+        # Betreiber-Allowlist TALOS_REMOTE_HOSTS). EXEC mit sandbox_required —
+        # der lokale Client laeuft eingesperrt (Netz an, ~/.ssh lesbar: die zwei
+        # dokumentierten Abweichungen aus remoteexec.py). Aber die Wirkung
+        # entsteht jenseits der Sandbox, darum antwortet der Kernel hier
+        # ausnahmslos NEEDS_HUMAN; der SHELL_NEEDS_HUMAN=0-Komfort gilt nicht.
+        # Erleichterung nur als stehende Regel auf exakt (host, command).
+        .with_tool(ToolSpec("remote_exec", Effect.EXEC, reversible=False,
+                            requires_env=frozenset({"TALOS_REMOTE_HOSTS"}),
+                            sandbox_required=True))
         # Fragen wirkt nicht: kein Byte bewegt sich, kein Kommando läuft. READ hält es
         # deshalb ohne eigene Freigabe-Runde bei ALLOW — eine Rückfrage, die selbst
         # freigabepflichtig wäre, müsste den Betreiber um Erlaubnis bitten, ihn fragen

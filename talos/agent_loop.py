@@ -450,6 +450,7 @@ def _safe_tool_summary(tool: str, args: dict, targets: tuple[str, ...]) -> str:
         "read_file": "read",
         "write_file": "write",
         "run_shell": "shell",
+        "remote_exec": "remote shell",
         "undo_last": "undo",
         "vault_search": "search vault",
         "vault_get": "read vault note",
