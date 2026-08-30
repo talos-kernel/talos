@@ -209,6 +209,9 @@ def test_distill_reports_what_the_protocol_proves(tmp_path: Path) -> None:
     reports = [text for _chat, text in sent if "Lern-Note" in text]
     assert reports == ["✅ 1 Lern-Note destilliert: 1 neu, 0 erweitert — lern-test"]
     assert (tmp_path / "vault" / "gotchas" / "lern-test.md").exists()
+    # Der Lernschritt selbst ist protokolliert — auch seine Kosten sind belegbar.
+    arten = [r.get("type") for r in conductor.log.recent(50)]
+    assert "distill.started" in arten and "distill.done" in arten
 
 
 def test_distill_default_is_off_without_wiring(tmp_path: Path) -> None:

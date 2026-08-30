@@ -907,10 +907,18 @@ class Conductor:
             return self._ask(zug, None)
 
         try:
+            self.log.append(Event(d_run_id, "conductor", "distill.started", {}))
             run_agent(propose, self.executor, update.principal, d_run_id)
             bilanz = distill.counted(self.log.by_run(d_run_id))
         except Exception:
             return
+        # Auch die Null-Bilanz gehoert ins Protokoll: ein Destill-Lauf, der nichts
+        # schreibt, erzeugt sonst kein einziges Ereignis — ein unsichtbarer,
+        # Token-kostender Modellzug ist genau das, was dieses Log verhindern soll.
+        self.log.append(
+            Event(d_run_id, "conductor", "distill.done",
+                  {"notizen": bilanz[0], "neu": bilanz[1]})
+        )
         zeile = distill.report_line(bilanz)
         if zeile:
             self._reply(update, d_run_id, zeile)
