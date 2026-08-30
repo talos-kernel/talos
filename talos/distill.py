@@ -1,8 +1,8 @@
 """Destillation — nach der Arbeit zaehlt, was gelernt wurde.
 
 Der Anlass ist derselbe wie bei `outcome.py` und `lessons.py`: ein Agent, der nach
-jeder Aufgabe NICHTS festhaelt, macht denselben Fehler nächste Woche wieder. Jerry
-(Hermes) destilliert nach jeder Aufgabe Lern-Notes und meldet die Bilanz; dieses
+jeder Aufgabe NICHTS festhaelt, macht denselben Fehler nächste Woche wieder. Ein
+Lern-Agent destilliert nach jeder Aufgabe Notizen und meldet die Bilanz; dieses
 Modul ist dieselbe Schleife in der Talos-Form, und die Form unterscheidet sich an
 genau drei Stellen — sie sind der Inhalt dieser Datei:
 
@@ -34,7 +34,7 @@ keine Destillation aus (der Conductor-Hook haengt am Ursprungs-run_id, und
 `had_tool_work` wird ueber die Eintraege des Ursprungslaufs entschieden).
 
 Sprache: Kommentare deutsch; der Prompt und die Chat-Meldung folgen dem Haus —
-Meldung an den Betreiber deutsch (Jerrys Bilanzzeile ist der Massstab).
+die einzeilige Bilanz an den Betreiber ist der Massstab.
 """
 from __future__ import annotations
 

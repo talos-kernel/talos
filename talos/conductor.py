@@ -865,7 +865,7 @@ class Conductor:
         return sent
 
     def _maybe_distill(self, update: Inbound, run_id: str, text: str, result) -> None:
-        """Der Lernschritt nach zugestellter Antwort — Jerrys Destillation, Talos-Form.
+        """Der Lernschritt nach zugestellter Antwort — die Destillations-Schleife.
 
         Trigger deterministisch (nur Laeufe mit echtem Werkzeugeinsatz), Auswahl des
         Lernwuerdigen durch das Modell, Bilanz aus dem Event-Log des Destill-Laufs
