@@ -526,6 +526,9 @@ def run(once: bool = False, ask: str = "", chat: bool = False) -> None:
         # („niemand sitzt davor"), und zwei Decken waeren zwei Wahrheiten darueber.
         unattended=unattended,
         recall=long_memory,
+        # Lernschritt nach der Antwort (distill.py): an per Vorgabe, AUS ist eine
+        # bewusste Betreiber-Entscheidung (TALOS_DISTILL=0), kein vergessener Parameter.
+        distill=os.environ.get("TALOS_DISTILL", "1") != "0",
         intelligence=intelligence,
         transcript=transcript_store,
         questions=questions,

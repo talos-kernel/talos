@@ -206,6 +206,11 @@ class Conductor:
     # Modell selbst etwas merken koennte. Sonst waere ein einziger erfolgreicher
     # Einfluesterungsversuch in jedem kuenftigen Lauf wieder dabei.
     recall: object | None = None
+    # Lernschritt NACH zugestellter Antwort (`distill.py`): deterministischer
+    # Trigger (nur Laeufe mit echtem Werkzeugeinsatz), Auswahl durch das Modell,
+    # Bilanz aus dem Event-Log. Vorgabe AUS — ein vergessener Parameter darf nur
+    # weniger koennen; `__main__` schaltet ueber TALOS_DISTILL (Vorgabe an).
+    distill: bool = False
     # Entity knowledge, derived working state and deterministic final-answer review.
     # It is quality control, never an authority source: the layer can request one retry
     # or qualify an answer, but every resulting tool call still passes the same kernel.
@@ -856,7 +861,59 @@ class Conductor:
                     )
                 except Exception:
                     pass
+            self._maybe_distill(update, run_id, text, result)
         return sent
+
+    def _maybe_distill(self, update: Inbound, run_id: str, text: str, result) -> None:
+        """Der Lernschritt nach zugestellter Antwort — Jerrys Destillation, Talos-Form.
+
+        Trigger deterministisch (nur Laeufe mit echtem Werkzeugeinsatz), Auswahl des
+        Lernwuerdigen durch das Modell, Bilanz aus dem Event-Log des Destill-Laufs
+        (Executor-Evidenz, nie Modellprosa — die outcome.py-Doktrin). Der Destill-Lauf
+        ist ein gewoehnlicher Agent-Loop: jeder Werkzeugwunsch passiert denselben
+        Executor mit demselben Principal — kein eigener Erlaubnisweg, keine Ausnahme.
+
+        Fail-open durchgehend: Destillation ist Komfort, kein Gate. Ihr Ausfall kostet
+        die Meldung, nie die Antwort. Keine Rekursion: der Hook haengt am Ursprungslauf,
+        der Destill-Lauf selbst loest keinen weiteren aus.
+        """
+        if not self.distill:
+            return
+        from . import distill
+
+        try:
+            entries = self.log.by_run(run_id)
+        except Exception:
+            return
+        if not distill.had_tool_work(entries):
+            return
+        prompt = distill.build_prompt(text, result.text, entries)
+        d_run_id = f"{run_id}-distill"
+        budget = {"used": 0}
+
+        def propose(history: list[str]) -> str:
+            # Das Werkzeug-Budget ist die harte Bremse des Lernschritts: nach
+            # TOOL_BUDGET Zuegen wird nur noch Prosa akzeptiert — ein Destill-Lauf,
+            # der sich verlaeuft, kostet sonst einen vollen Agent-Loop.
+            budget["used"] += 1
+            zug = prompt
+            if budget["used"] > distill.TOOL_BUDGET:
+                zug += "\n[Tool budget reached — answer in prose now, no TOOL_CALL line.]"
+            joined = "\n".join(history[-6:])
+            zug = f"{zug}\n\n[Tool results so far]\n{joined}" if joined else zug
+            # ⚠️ propose muss den REASONER rufen — der Loop erwartet Modelltext, nicht
+            # den Prompt. Ein Prompt, der als „Antwort" zurueckkommt, traegt seine
+            # eigenen TOOL_CALL-Beispielzeilen und endet als Prosa ohne jede Wirkung.
+            return self._ask(zug, None)
+
+        try:
+            run_agent(propose, self.executor, update.principal, d_run_id)
+            bilanz = distill.counted(self.log.by_run(d_run_id))
+        except Exception:
+            return
+        zeile = distill.report_line(bilanz)
+        if zeile:
+            self._reply(update, d_run_id, zeile)
 
     def _learned(self) -> str:
         """Was diese Installation aus ihrem eigenen Protokoll gelernt hat.

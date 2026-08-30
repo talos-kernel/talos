@@ -473,19 +473,25 @@ def make_vault_write_runner(
         if len(data) > MAX_NOTE_BYTES:
             raise ValueError(f"Vault-Notiz zu groß (maximal {MAX_NOTE_BYTES} Bytes)")
         validate_frontmatter(content)
+        # Der Marker ist Evidenz, keine Kosmetik: die Destill-Bilanz (`distill.py`)
+        # zaehlt neu/aktualisiert aus diesem Text — und der stammt vom Runner, der
+        # die Datei vorher gesehen hat, nicht aus einer Modellbehauptung. Ein
+        # Existenzblick ist hier kein Wettlauf: er faellt keine Entscheidung, er
+        # beschriftet sie nur.
+        marker = "aktualisiert" if path.exists() else "neu"
         _atomic_write(path, data)
 
         try:
             proc = _run_qmd([str(qmd_bin), "update"], timeout=QMD_UPDATE_TIMEOUT_S)
         except RuntimeError as error:
-            return f"{len(data)} Bytes atomar nach {path} geschrieben. Warnung: {error}"
+            return f"{len(data)} Bytes atomar nach {path} geschrieben ({marker}). Warnung: {error}"
         if proc.returncode != 0:
             detail = _bounded(redact_secrets((proc.stderr or proc.stdout or "unbekannt").strip()), 500)
             return (
-                f"{len(data)} Bytes atomar nach {path} geschrieben. "
+                f"{len(data)} Bytes atomar nach {path} geschrieben ({marker}). "
                 f"Warnung: qmd update fehlgeschlagen (rc={proc.returncode}): {detail}"
             )
-        return f"{len(data)} Bytes atomar nach {path} geschrieben; qmd-Index aktualisiert."
+        return f"{len(data)} Bytes atomar nach {path} geschrieben ({marker}); qmd-Index aktualisiert."
 
     return vault_write_note
 
