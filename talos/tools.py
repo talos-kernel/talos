@@ -286,15 +286,18 @@ def default_manifest() -> ToolManifest:
         # heisst: der Betreiber loescht, danach darf neu geschrieben werden.
         .with_tool(ToolSpec("skill_write", Effect.WRITE, reversible=False))
         # Ein Kommando auf einer ANDEREN Maschine (ssh auf einen Alias aus der
-        # Betreiber-Allowlist TALOS_REMOTE_HOSTS). EXEC mit sandbox_required —
-        # der lokale Client laeuft eingesperrt (Netz an, ~/.ssh lesbar: die zwei
-        # dokumentierten Abweichungen aus remoteexec.py). Aber die Wirkung
-        # entsteht jenseits der Sandbox, darum antwortet der Kernel hier
-        # ausnahmslos NEEDS_HUMAN; der SHELL_NEEDS_HUMAN=0-Komfort gilt nicht.
-        # Erleichterung nur als stehende Regel auf exakt (host, command).
+        # Betreiber-Allowlist TALOS_REMOTE_HOSTS). EXEC — aber bewusst OHNE
+        # sandbox_required: das Flag deklariert „die Wirkung entsteht hinter
+        # einer Confinement-Wand" (autonomy.attended_routine), und genau das ist
+        # hier falsch. Die Einsperrung gilt nur dem lokalen ssh-Clienten (Netz
+        # an, ~/.ssh lesbar — die zwei dokumentierten Abweichungen in
+        # remoteexec.py); was das Kommando fern anrichtet, begrenzt sie nicht.
+        # Darum: requires_env (Allowlist ist Betreiberkonfiguration), Kernel
+        # ausnahmslos NEEDS_HUMAN, keine Attended-Auto-Freigabe (EXEC mit
+        # requires_env ohne Confinement ist per Bauart keine Routine), stehende
+        # Regeln nur auf exakt (host, command).
         .with_tool(ToolSpec("remote_exec", Effect.EXEC, reversible=False,
-                            requires_env=frozenset({"TALOS_REMOTE_HOSTS"}),
-                            sandbox_required=True))
+                            requires_env=frozenset({"TALOS_REMOTE_HOSTS"})))
         # Fragen wirkt nicht: kein Byte bewegt sich, kein Kommando läuft. READ hält es
         # deshalb ohne eigene Freigabe-Runde bei ALLOW — eine Rückfrage, die selbst
         # freigabepflichtig wäre, müsste den Betreiber um Erlaubnis bitten, ihn fragen

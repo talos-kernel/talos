@@ -62,8 +62,22 @@ def test_manifest_declares_the_trust_form() -> None:
     assert spec.effect is Effect.EXEC
     assert spec.reversible is False
     assert spec.requires_env == frozenset({"TALOS_REMOTE_HOSTS"})
-    assert spec.sandbox_required is True
+    # Bewusst KEIN sandbox_required: das Flag deklariert „Wirkung hinter einer
+    # Confinement-Wand" — hier sperrt die Sandbox nur den lokalen Clienten ein.
+    # Mit dem Flag fiele das Werkzeug in die Routineklasse der Attended-
+    # Auto-Freigabe (gemessen am ersten Live-E2E: auto-approved statt gefragt).
+    assert spec.sandbox_required is False
     assert tools.RUNNERS["remote_exec"] is remoteexec.remote_exec
+
+
+def test_no_attended_autoapproval() -> None:
+    """EXEC mit requires_env ohne Confinement ist per Bauart keine Routine —
+    die Attended-Auto-Freigabe darf hier nie greifen (Doktrin autonomy.py)."""
+    from talos.autonomy import attended_routine
+
+    kernel = _kernel()
+    spec = tools.default_manifest().get("remote_exec")
+    assert attended_routine(_req(host="mac", command="uptime"), spec, kernel) is False
 
 
 def test_allowlist_parsing() -> None:

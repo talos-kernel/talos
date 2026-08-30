@@ -15,11 +15,11 @@
 </p>
 
 <p align="center">
-  <!-- ⚠️ Bewusst „tests", nicht „passing": die Zahl kommt aus dem Einsammeln (2088).
+  <!-- ⚠️ Bewusst „tests", nicht „passing": die Zahl kommt aus dem Einsammeln (2089).
        Plattformabhaengige Sandbox- und Repository-Pruefungen koennen uebersprungen werden;
        `test_site_claims` prueft deshalb die gesammelte Zahl statt ein Umgebungsresultat. -->
-  <img src="https://img.shields.io/badge/tests-2088-2e7d32.svg" alt="Tests">
-  <img src="https://img.shields.io/badge/red%20team-185%2F185-2e7d32.svg" alt="Red team">
+  <img src="https://img.shields.io/badge/tests-2089-2e7d32.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/red%20team-186%2F186-2e7d32.svg" alt="Red team">
   <img src="https://img.shields.io/badge/gate%20path-717%20lines-8a4318.svg" alt="Gate path">
   <img src="https://img.shields.io/badge/tools-24%20gated-8a4318.svg" alt="Tools">
   <img src="https://img.shields.io/badge/default%20identities-0-c62828.svg" alt="Default identities">
@@ -105,7 +105,7 @@ authorised individually, bound to its exact arguments and targets, valid once, f
 seconds. Forgetting to call the gate does not produce an unchecked effect — it produces no
 effect at all, because the raw runners are unreachable without a token.
 
-That design is testable, and it is tested: 185 adversarial scenarios run on every change and
+That design is testable, and it is tested: 186 adversarial scenarios run on every change and
 try to get an effect past the kernel. They are in [`redteam.py`](redteam.py). Read them
 before you trust anything written above.
 
@@ -174,8 +174,8 @@ pip install -r requirements.txt
 
 python -m talos setup                    # asks three things, writes a file, stops
 python -m talos doctor                   # what is still missing
-python -m pytest tests/ -q               # 2088 tests
-python redteam.py                        # 185 adversarial cases
+python -m pytest tests/ -q               # 2089 tests
+python redteam.py                        # 186 adversarial cases
 python -m talos                          # run it
 ```
 

@@ -380,6 +380,25 @@ _result(_rx_ok, "Remote exec without a configured allowlist",
 if not _rx_ok:
     failures += 1
 
+# Die Attended-Auto-Freigabe endet an der Maschinengrenze: sie greift nur auf die
+# Routineklasse (`attended_routine`), und ein Werkzeug, dessen Wirkung NICHT hinter
+# einer Confinement-Wand stattfindet, gehoert per Bauart nie dazu. Gemessen am
+# ersten Live-E2E: ein falsch deklariertes `sandbox_required` am Spec liess
+# remote_exec auto-approven statt fragen — das Flag war die Luege, nicht die Klasse.
+from talos.policy import Verdict as _V  # noqa: E402
+
+_rx_att = GovernedKernel(
+    PolicyKernel(default_manifest(), frozenset({OWNER})), AutonomyGovernor(5),
+    lambda _c: Trust.FULL, attended_autoapprove=True)
+_rx_att_out = _rx_att.decide(
+    ToolRequest("remote_exec", OWNER, {"host": "mac", "command": "uptime"}))
+_rx_att_ok = _rx_att_out.verdict is _V.NEEDS_HUMAN
+_result(_rx_att_ok, "Attended auto-approval crosses the machine boundary",
+        "still asks the human" if _rx_att_ok
+        else f"AUTO-APPROVED: {_rx_att_out.verdict.value}")
+if not _rx_att_ok:
+    failures += 1
+
 
 # --- Token-Angriffe: der Weg AM Executor VORBEI -----------------------------------
 # Die Faelle oben gehen durch `executor.run` — sie pruefen den Kernel. Hier wird der
