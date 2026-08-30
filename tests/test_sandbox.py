@@ -632,3 +632,25 @@ def test_the_installations_own_interpreter_comes_first_on_the_path() -> None:
     if not venv_bin.is_dir():
         pytest.skip("keine .venv neben der Installation — hier nichts zu binden")
     assert env["PATH"].split(os.pathsep)[0] == str(venv_bin)
+
+
+def test_network_sandbox_binds_the_ca_bundle() -> None:
+    """Netz ohne CA-Bundle ist halbes Netz — gemessen am ersten git-E2E:
+    der https-Clone scheiterte mit „server certificate verification failed",
+    weil /etc/ssl unter der /etc-Maske lag."""
+    import os
+    from talos.sandbox import BubblewrapSandbox, SandboxExecSandbox
+
+    if os.path.isdir("/etc/ssl"):
+        argv = BubblewrapSandbox().argv("true", workspace=Path("/tmp/ws"), allow_network=True)
+        assert "--ro-bind" in list(argv) and "/etc/ssl" in list(argv)
+    profil = SandboxExecSandbox().profile(Path("/tmp/ws"), allow_network=True)
+    assert '(allow file-read* (subpath "/etc/ssl")' in profil
+
+
+def test_offline_sandbox_keeps_the_ca_bundle_masked() -> None:
+    """Ohne Netz braucht nichts Zertifikate — die Maske bleibt ganz."""
+    from talos.sandbox import SandboxExecSandbox
+
+    profil = SandboxExecSandbox().profile(Path("/tmp/ws"), allow_network=False)
+    assert '(allow file-read* (subpath "/etc/ssl")' not in profil

@@ -360,6 +360,14 @@ class BubblewrapSandbox:
                 quelle = f"/etc/{name}"
                 if os.path.exists(quelle):
                     args += ["--ro-bind", os.path.realpath(quelle), quelle]
+            # Netz ohne CA-Bundle ist halbes Netz: TLS-Clients (git https, curl,
+            # pip) verifizieren gegen /etc/ssl bzw. /etc/pki — beides liegt unter
+            # der /etc-Maske. Gemessen am ersten git-E2E: der Clone scheiterte mit
+            # „server certificate verification failed", obwohl DNS und Verbindung
+            # standen. Read-only, wie alles hier.
+            for verz in ("/etc/ssl", "/etc/pki"):
+                if os.path.isdir(verz):
+                    args += ["--ro-bind", verz, verz]
         args += ["--bind", workspace_path, workspace_path, "--chdir", workspace_path]
         args += ["--", SHELL_BIN, "-c", command]
         return tuple(args)
@@ -416,6 +424,12 @@ class SandboxExecSandbox:
         if self._masked:
             subpaths = " ".join(f"(subpath {_sb_string(p)})" for p in self._masked)
             lines.append(f"(deny file-read* {subpaths})")
+        if allow_network:
+            # TLS braucht das CA-Bundle: /etc liegt unter der Maske, und ein
+            # git-https-Clone scheiterte genau daran (gemessen am ersten E2E).
+            # Seatbelt wertet spaetere Regeln zuerst aus — dieses Allow steht
+            # darum NACH dem Deny.
+            lines.append('(allow file-read* (subpath "/etc/ssl") (subpath "/etc/pki"))')
         lines += [
             f"(allow file-write* (subpath {_sb_string(str(workspace))}))",
             '(allow file-write-data (literal "/dev/null") (literal "/dev/zero")'
