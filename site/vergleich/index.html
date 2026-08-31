@@ -299,9 +299,9 @@ html.js .rv.in{opacity:1;transform:none}
     <div class="spec-row">
       <div class="spec"><b>27</b>tools here, every one gated</div>
       <div class="spec"><b>100+</b>skills there — counted honestly</div>
-      <div class="spec"><b>2168</b>unit tests</div>
+      <div class="spec"><b>2208</b>unit tests</div>
       <div class="spec"><b>206/206</b>adversarial cases</div>
-      <div class="spec"><b>782</b>gate lines</div>
+      <div class="spec"><b>889</b>gate lines</div>
       <div class="spec"><b>0</b>inbound ports</div>
       <div class="spec"><b>0</b>default identities</div>
     </div>
@@ -579,7 +579,8 @@ html.js .rv.in{opacity:1;transform:none}
 
   var HARDLINE = [
     [/\brm\s+(-\S*\s+)*-\S*[rf][^\n]*\s["']?\/(\s|["']|$|\*)/, "recursive delete of the root filesystem"],
-    [/\brm\s+(-\S*\s+)*-\S*[rf][^\n]*(\/home|\/root|\/etc|\/usr|\/var|\/bin|\/sbin|\/boot|\/lib)\b/, "recursive delete of a system directory"],
+    [/\brm\s+(-\S*\s+)*-\S*[rf][^\n]*(\/root|\/etc|\/usr|\/var|\/bin|\/sbin|\/boot|\/lib)\b/, "recursive delete of a system directory"],
+    [/\brm\s+(-\S*\s+)*-\S*[rf][^\n]*["']?\/home(\/[^\s/"';&|]+)?(\/\*?|\/)?["']?(\s|$)/, "recursive delete of a home directory"],
     [/\brm\s+(-\S*\s+)*-\S*[rf][^\n]*(~|\$\{?HOME\}?)(\/\*)?(\s|$)/, "recursive delete of the home directory"],
     [/\bmkfs(\.[a-z0-9]+)?\b/, "formatting a filesystem (mkfs)"],
     [/\bdd\b[^\n]*\bof=\/dev\/(sd|nvme|hd|mmcblk|vd|xvd)/, "dd onto a raw block device"],

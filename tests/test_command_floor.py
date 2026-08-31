@@ -26,6 +26,42 @@ def test_hardline_blocks_catastrophic(cmd: str) -> None:
     assert is_hard is True
 
 
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        "rm -rf /home",
+        "rm -rf /home/",
+        "rm -rf /home/*",
+        "rm -rf /home/ada",
+        "rm -rf /home/ada/",
+        "rm -rf /home/ada/*",
+        'rm -rf "/home/ada"',
+        "sudo rm -rf /home/ada",
+        "rm -rf /home/ada /tmp/x",
+    ],
+)
+def test_hardline_blocks_home_roots(cmd: str) -> None:
+    # /home selbst und User-Home-Wurzeln bleiben katastrophal — unbypassbar.
+    is_hard, desc = command_floor.detect_hardline(cmd)
+    assert is_hard is True
+    assert "home" in desc
+
+
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        "rm -rf /home/ada/.cache/build",
+        "rm -rf /home/ada/projects/x",
+        'rm -rf "/home/ada/.cache/build"',
+    ],
+)
+def test_deep_home_paths_are_dangerous_not_hardline(cmd: str) -> None:
+    # Tiefe Pfade UNTER einem Home sind keine Systemverzeichnisse: nicht die
+    # Totalsperre, sondern die Freigabe-Ebene (dangerous -> NEEDS_HUMAN).
+    assert command_floor.detect_hardline(cmd) == (False, None)
+    assert command_floor.detect_dangerous(cmd)[0] is True
+
+
 @pytest.mark.parametrize("cmd", ["ls -la", "echo hallo", "cat README.md", "grep -r foo ."])
 def test_safe_commands_pass_both_layers(cmd: str) -> None:
     assert command_floor.detect_hardline(cmd) == (False, None)

@@ -12,9 +12,9 @@ preferences live in `USER.md`. All three are operator-owned prompt state and rel
 
 | | |
 |---|---|
-| Gate path | `policy.py`, **782 lines** — has to stay readable in one sitting |
+| Gate path | `policy.py`, **889 lines** — has to stay readable in one sitting |
 | Tools | **27**, every one gated |
-| Suites | **2168** tests · **206** adversarial · 44 end-to-end |
+| Suites | **2208** tests · **206** adversarial · 44 end-to-end |
 | Home | <https://talos-agent.ch> · docs at `/docs/` |
 | Repository | `talos-kernel/talos` is the public source tree |
 
@@ -198,7 +198,7 @@ In practice:
 ```bash
 python3 -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt
 
-python -m pytest tests/ -q   # 2168 tests, ~30s
+python -m pytest tests/ -q   # 2208 tests, ~30s
 python redteam.py            # 206 adversarial cases — mandatory for any kernel change
 python e2e.py                # 44 cases against a real model (costs tokens and time)
 python -m talos --once       # single cycle, for diagnosis
@@ -268,7 +268,7 @@ python -m talos anchor       # pin the chain head — exit 1 if the log shrank (
 
 - Comments and docstrings explain **why**, especially where a rule looks counterintuitive.
   Those are the ones that get argued away six months later.
-- Small modules. The gate path (`policy.py`, 782 lines) must stay readable in one sitting.
+- Small modules. The gate path (`policy.py`, 889 lines) must stay readable in one sitting.
 - Glyphs come from `talos/ux.py` only, one meaning each, **never inside an answer's prose**.
 - Telegram edit interval stays ≥ 1.2 s; the API tolerates roughly one edit per second
   per chat.

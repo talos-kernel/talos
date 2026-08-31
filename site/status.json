@@ -1,9 +1,9 @@
 {
   "version": "0.16.0-alpha",
-  "tests": 2168,
+  "tests": 2208,
   "redteam_faelle": 206,
-  "kernel_zeilen": 782,
+  "kernel_zeilen": 889,
   "werkzeuge": 27,
-  "sha": "cdf51625c4",
-  "gebaut_am": "2026-08-31T07:20:00Z"
+  "sha": "466fad7309",
+  "gebaut_am": "2026-08-31T19:35:00Z"
 }

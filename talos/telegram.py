@@ -21,6 +21,7 @@ import requests
 from .agent_loop import AgentProgress, ProgressStage
 from .channel import Button, CallbackQuery, Inbound, Principal, StructuredMessage, Trust
 from .identity import agent_name
+from .tgmarkup import to_telegram_html
 from .ux import GEOMETRIC, Style, style_for
 
 _BASE = "https://api.telegram.org/bot{token}/{method}"
@@ -977,9 +978,10 @@ class TelegramReply:
             return False
         try:
             # Jetzt EINMAL formatiert: der Text ist vollstaendig, ein Codeblock kann
-            # nicht mehr halb offen sein (siehe `_write`).
+            # nicht mehr halb offen sein (siehe `_write`). Konvertiert wird nach
+            # Telegram-HTML (tgmarkup) — legacy-Markdown zeigte `**fett**` roh.
             self._client.edit_message_text(
-                self._chat_id, message_id, final, parse_mode="Markdown"
+                self._chat_id, message_id, to_telegram_html(final), parse_mode="HTML"
             )
         except Exception:
             return self._adopt_fallback(message_id, final, shown)
@@ -1131,15 +1133,16 @@ class TelegramChannel:
         return [to_inbound(update) for update in updates]
 
     def send(self, conversation: str, text: str) -> None:
-        # Markdown wird nicht umgeschrieben: insbesondere Codeblöcke bleiben exakt erhalten.
-        # Lehnt Telegram das Markdown eines Teils ab (z. B. ungerade Unterstriche in
-        # `read_file` — legacy-Markdown kennt keine Flucht), geht dieser Teil ohne
-        # parse_mode raus: die Antwort ist wichtiger als ihr Satz, und ein Bericht
-        # ueber einen Fehlschlag darf nie selbst an der Zustellung scheitern.
+        # Antworten kommen als Markdown und gehen als Telegram-HTML raus (tgmarkup):
+        # `**fett**` wird Satz statt Rohtext, und snake_case-Namen wie `read_file`
+        # sind unter HTML nur Text — keine 400-Falle mehr. Codeblöcke bleiben exakt
+        # erhalten (der Konverter escaped nur, er ruehrt den Inhalt nicht an).
+        # Lehnt Telegram einen Teil trotzdem ab, geht er ohne parse_mode raus:
+        # die Antwort ist wichtiger als ihr Satz.
         chat = chat_id_of(conversation)
         for teil in split_for_telegram(text):
             try:
-                self._client.send_message(chat, teil, parse_mode="Markdown")
+                self._client.send_message(chat, to_telegram_html(teil), parse_mode="HTML")
             except Exception:
                 self._client.send_message(chat, teil)
 

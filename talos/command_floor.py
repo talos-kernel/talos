@@ -26,8 +26,14 @@ _RM = _CMDPOS + r"rm\s+(?:-\S*\s+)*"
 
 HARDLINE_PATTERNS: tuple[tuple[str, str], ...] = (
     (_RM + r"""["']?/(?:\s|["']|$|\*)""", "recursive delete of the root filesystem"),
-    (_RM + r"""["']?(?:/home|/root|/etc|/usr|/var|/bin|/sbin|/boot|/lib)(?:/\*)?\b""",
+    # /home ist zweigeteilt: die Wurzel und User-Homes (erste Ebene) sind
+    # katastrophal — TIEFERE Pfade (/home/<user>/.cache/...) sind keine
+    # Systemverzeichnisse und gehoeren auf die Freigabe-Ebene (dangerous),
+    # sonst blockiert die Totalsperre gewoehnlichen Cache-Cleanup.
+    (_RM + r"""["']?(?:/root|/etc|/usr|/var|/bin|/sbin|/boot|/lib)(?:/\*)?\b""",
      "recursive delete of a system directory"),
+    (_RM + r"""["']?/home(?:/[^\s/"';|&]+)?(?:/\*?|/)?["']?(?:\s|$)""",
+     "recursive delete of a home directory"),
     (_RM + r"""["']?(?:~|\$\{?HOME\}?)(?:/\*)?["']?(?:\s|$)""", "recursive delete of the home directory"),
     (r"\bmkfs(\.[a-z0-9]+)?\b", "formatting a filesystem (mkfs)"),
     (r"\bdd\b[^\n]*\bof=/dev/(?:sd|nvme|hd|mmcblk|vd|xvd)[a-z0-9]*", "dd onto a raw block device"),

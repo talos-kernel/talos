@@ -167,7 +167,7 @@ def test_prose_grows_visibly_and_the_last_version_is_exactly_the_answer() -> Non
     assert reply.adopt("Ja, das passt.") is True
     assert client.messages == 1              # und keine zweite daneben
     assert client.edited[-1][2] == "Ja, das passt."
-    assert client.edited[-1][3]["parse_mode"] == "Markdown"
+    assert client.edited[-1][3]["parse_mode"] == "HTML"
 
 
 def test_growth_is_raw_and_only_the_final_version_is_formatted() -> None:
@@ -181,7 +181,7 @@ def test_growth_is_raw_and_only_the_final_version_is_formatted() -> None:
     assert "parse_mode" not in client.edited[0][3]
 
     reply.adopt("Hier:\n```py\nx = 1\n```")
-    assert client.edited[-1][3]["parse_mode"] == "Markdown"
+    assert client.edited[-1][3]["parse_mode"] == "HTML"
 
 
 def test_edits_keep_the_minimum_interval_instead_of_flooding() -> None:
@@ -331,7 +331,7 @@ def test_answer_grows_in_place_and_is_never_sent_a_second_time(tmp_path) -> None
     assert sent == []                                   # keine zweite Nachricht
     assert client.messages == 1
     assert client.edited[-1][2] == "Der Kessel ist kalt."
-    assert client.edited[-1][3]["parse_mode"] == "Markdown"
+    assert client.edited[-1][3]["parse_mode"] == "HTML"
 
 
 def test_tool_turn_stays_silent_and_only_the_prose_turn_shows(tmp_path) -> None:

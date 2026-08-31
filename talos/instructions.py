@@ -16,6 +16,17 @@ USER_PATH = INSTALL_DIR / "USER.md"
 MAX_SOURCE_CHARS = 8_000
 MAX_INSTRUCTION_CONTEXT_CHARS = 16_000
 
+# Antwortformat: der Kanal rendert Telegram-HTML aus Markdown (tgmarkup) — ohne
+# diese Zeilen schreibt das Modell Fliesstext, mit ihnen nutzt es die Form, die
+# der Kanal kann. Bewusst knapp gehalten: Stilrichtung, kein Korsett.
+ANSWER_FORMAT = (
+    "\n\nAntwortformat: Gliedere laengere Antworten mit **fetten** Zwischentiteln, "
+    "`inline code` fuer Pfade, Befehle und Dateinamen, ```-Codebloecken fuer "
+    "mehrzeilige Befehle oder Ausgaben und > fuer Zitate. Setze sparsame, treffende "
+    "Emojis als Abschnittsmarken (✅ erledigt, ❌ fehlgeschlagen, ⚠️ Warnung, "
+    "🛠 Werkzeug, 📊 Zahlen). Kurze Antworten bleiben schlicht."
+)
+
 _cache: dict[str, tuple[bytes, str]] = {}
 
 
@@ -110,4 +121,5 @@ def assemble_system_prompt(
         + plan_protocol
         + skills
         + final_protocol
+        + ANSWER_FORMAT
     )

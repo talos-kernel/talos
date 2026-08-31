@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 import re
+import shlex
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -270,6 +271,102 @@ def remote_hosts(environ: Mapping[str, str] | None = None) -> tuple[str, ...]:
     raw = (environ if environ is not None else os.environ).get(REMOTE_HOSTS_ENV, "")
     hosts = [part.strip() for part in raw.split(",") if part.strip()]
     return tuple(dict.fromkeys(hosts))
+
+
+DELETABLE_ROOTS_ENV = "TALOS_DELETABLE_ROOTS"
+
+
+def deletable_roots(environ: Mapping[str, str] | None = None) -> tuple[str, ...]:
+    """Wurzeln, unter denen rekursives Löschen ohne Einzelfreigabe läuft — Betreiberkonfiguration.
+
+    Gleiches Muster wie `remote_hosts`: gelesen wird die Umgebung, nie ein
+    Modellargument — die Allowlist ist der einzige Ort, der sagt, welche
+    Aufräum-Zonen existieren. Ungültige Einträge (relativ, System-/Secret-/
+    Persistenz-Floor, /home selbst, Home-Wurzeln) fallen still heraus: ein
+    falscher Eintrag verschärft die Lage nur (NEEDS_HUMAN), er öffnet sie nie.
+    Ein leerer Wert heisst „jede rekursive Löschung fragt" — der Default.
+    """
+    raw = (environ if environ is not None else os.environ).get(DELETABLE_ROOTS_ENV, "")
+    roots: list[str] = []
+    for part in raw.split(","):
+        part = part.strip()
+        # Nur absolute Pfade (~/$HOME eingeschlossen) — Relatives wird VOR dem
+        # Expandieren verworfen, sonst macht abspath aus jedem Tippfehler eine
+        # Wurzel unter dem Arbeitsverzeichnis.
+        if not part.startswith(("/", "~", "$HOME", "${HOME}")):
+            continue
+        root = os.path.abspath(os.path.normpath(_expand(part)))
+        if not root.startswith(os.sep):
+            continue
+        if _hits(root, SYSTEM_PREFIXES) or _is_secret(root) or _hits(root, PERSISTENCE_PREFIXES):
+            continue
+        # /home selbst und User-Home-Wurzeln bleiben Hardline-Gebiet
+        # (command_floor) — die Allowlist darf die Totalsperre nicht aufweichen.
+        if re.fullmatch(r"/home(?:/[^/]+)?", root) or root == str(HOME):
+            continue
+        roots.append(root)
+    return tuple(dict.fromkeys(roots))
+
+
+# Schlichtes `rm -rf <absoluter/pfad>...`: genau EIN Kommando — keine Ketten,
+# Pipes, Substitutionen oder Umleitungen. Nur diese Form darf die Betreiber-
+# Allowlist freischalten; ein Shell-String laesst sich beliebig rekonstruieren,
+# also bekommt alles Komplexere weiterhin die Einzelfreigabe.
+_RM_SAFE_FLAGS = frozenset("rfRvd")
+_RM_TARGET = re.compile(r"/[^\s'\"`;|&<>()$\\]+")
+
+
+def _simple_rm_targets(command: str) -> tuple[str, ...] | None:
+    """Die Ziele eines schlichten rekursiven rm — oder None bei allem anderen."""
+    try:
+        tokens = shlex.split(command, posix=True)
+    except ValueError:
+        return None
+    if len(tokens) < 3 or tokens[0] != "rm":
+        return None
+    recursive = False
+    options_done = False
+    targets: list[str] = []
+    for token in tokens[1:]:
+        if not options_done and token == "--":
+            options_done = True
+            continue
+        if not options_done and token.startswith("-"):
+            flags = token.lstrip("-")
+            if not flags or any(flag not in _RM_SAFE_FLAGS for flag in flags):
+                return None
+            recursive = recursive or "r" in flags or "R" in flags
+            continue
+        options_done = True
+        if not _RM_TARGET.fullmatch(token):
+            return None
+        targets.append(token)
+    if not recursive or not targets:
+        return None
+    return tuple(targets)
+
+
+def _under_roots(target: str, roots: tuple[str, ...]) -> bool:
+    """Liegt das Ziel unter einer Betreiber-Wurzel — lexikalisch UND aufgelöst?
+
+    Dasselbe Muster wie `_hits`, in der Schärfe einer Freigabe: der aufgelöste
+    Pfad (Symlink-Kette) muss in der AUFGELÖSTEN Wurzel landen — ein Link im
+    Ziel, der aus der Zone zeigt (`rm -rf zone/link/x` mit link -> /etc),
+    kippt die Freigabe. Zugleich darf ein Plattform-Link UEBER der Wurzel
+    (macOS: /home -> /System/Volumes/Data/home) sie nicht brechen, deshalb
+    wird die Wurzel selbst ebenfalls aufgelöst verglichen.
+    """
+    lexical = os.path.abspath(os.path.normpath(_expand(target)))
+    real = os.path.realpath(lexical)
+
+    def under(candidate: str, root: str) -> bool:
+        return candidate == root or candidate.startswith(root + os.sep)
+
+    for root in roots:
+        root_lexical = os.path.abspath(os.path.normpath(root))
+        if under(lexical, root_lexical) and under(real, os.path.realpath(root_lexical)):
+            return True
+    return False
 
 
 def skill_write_path(name: object) -> str:
@@ -681,6 +778,16 @@ class PolicyKernel:
                 return Decision(Verdict.DENY, f"hardline: {hard_desc}")
             is_danger, danger_desc = command_floor.detect_dangerous(str(command))
             if is_danger:
+                # Betreiber-Allowlist: ein SCHLICHTES `rm -rf` komplett unter
+                # konfigurierten Wurzeln (TALOS_DELETABLE_ROOTS) braucht keine
+                # Einzelfreigabe — der Betreiber hat die Zone längst freigegeben.
+                # Alles andere (Ketten, Substitution, Ziele ausserhalb) faellt
+                # in die Einzelfreigabe zurück.
+                rm_targets = _simple_rm_targets(str(command))
+                if rm_targets and all(
+                    _under_roots(target, deletable_roots()) for target in rm_targets
+                ):
+                    return Decision(Verdict.ALLOW, "recursive delete under operator root")
                 return Decision(Verdict.NEEDS_HUMAN, f"risky: {danger_desc}")
             # Pfad-Floor und command_floor sind Backstops, keine Grenze: ein Shell-String
             # laesst sich beliebig rekonstruieren (P=/etc; cat $P/passwd, eval, base64).

@@ -233,9 +233,9 @@ html.js .rv.in{opacity:1; transform:none}
     <div class="spec-row">
       <div class="spec"><b>206</b>adversarial cases</div>
       <div class="spec"><b class="red">25</b>attack surfaces</div>
-      <div class="spec"><b>782</b>kernel lines</div>
+      <div class="spec"><b>889</b>kernel lines</div>
       <div class="spec"><b>27</b>gated tools</div>
-      <div class="spec"><b>2168</b>unit tests</div>
+      <div class="spec"><b>2208</b>unit tests</div>
       <div class="spec"><b class="red">0</b>passes sold as safety</div>
     </div>
   </div>
@@ -255,7 +255,7 @@ html.js .rv.in{opacity:1; transform:none}
     tell a real instruction from a well-written trap. Most frameworks answer that with
     a system prompt — a polite request to the model, written in the same channel the
     attack arrives in. That is not a boundary. That is a wish.</p>
-    <p>Talos answers with a kernel: ~782 lines of Python that return
+    <p>Talos answers with a kernel: ~889 lines of Python that return
     <code>allow</code>, <code>needs-human</code> or <code>deny</code> for every tool
     call, below the model, unreachable from its output. But a kernel is a claim like
     any other, so before every release I try to break it. The red team suite is not
