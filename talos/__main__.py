@@ -265,7 +265,7 @@ def run(once: bool = False, ask: str = "", chat: bool = False) -> None:
     )
     model_picker = ModelPicker(model_registry, reasoner, can_select=reasoner.can_select)
     kernel = PolicyKernel(
-        manifest=tools.default_manifest(),
+        manifest=tools.default_manifest(agy_backend=config.agy_backend),
         allowed_identities=config.allowed_principals,
         vault_dir=config.vault_dir,
         shell_needs_human=config.shell_needs_human,
@@ -410,6 +410,14 @@ def run(once: bool = False, ask: str = "", chat: bool = False) -> None:
             ),
             "delegate_status": tools.make_delegate_status_runner(
                 socket_path=config.claude_worker_socket),
+            # Der agy-Runner: gleiche Bauart wie delegate_code, aber hinter
+            # einem zweiten Gate — ohne TALOS_AGY_BACKEND=1 existiert das
+            # Werkzeug weder im Manifest noch hier.
+            **({
+                "delegate_agy": tools.make_delegate_agy_runner(
+                    socket_path=config.claude_worker_socket,
+                    work_root=claude_work_root()),
+            } if config.agy_backend else {}),
             # Der DAG-Runner: gleiche Bauart wie delegate_code. Die Konversation
             # kommt aus dem Thread-Kontext (spaet gebunden), nie aus den
             # Werkzeug-Argumenten; den Graphen dreht der Ticker weiter unten.

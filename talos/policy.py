@@ -364,6 +364,9 @@ TARGET_EXTRACTORS = {
     # Status lesen fasst nichts an — aber der Eintrag muss stehen: ein
     # Werkzeug ohne Extractor ist per Bauart DENY (siehe `decide`, Schritt 0.5).
     "delegate_status": lambda args: (),
+    # agy-Backend desselben Workers: der Frame waehlt den Motor, das Ziel
+    # waehlt weiterhin nur der Kernel — dieselbe Wurzel wie `delegate_code`.
+    "delegate_agy": lambda args: (claude_work_root(),),
     # Zurückrollen wirkt auf die ORIGINALPFADE — genau die sind das Ziel und werden
     # gegatet. Ein Undo auf ~/.bashrc fragt den Betreiber also wie ein Schreiben dorthin.
     "undo_last": lambda args: tuple(

@@ -81,7 +81,8 @@ def _anfrage(socket_path: str, obj: dict, *, timeout_s: float,
 def submit_job(socket_path: str, job_id: str, prompt: str, workspace: str, *,
                timeout_s: float = 30.0, exchange: Exchange | None = None,
                browser_mcp: bool = False,
-               mcp_servers: Sequence[str] = ()) -> dict:
+               mcp_servers: Sequence[str] = (),
+               backend: str = "claude") -> dict:
     """Meldet einen Job an. Die Antwort ist der Worker-Frame (accepted/busy/…).
 
     `browser_mcp=True` fordert chrome-devtools-mcp IM Job an — das Flag steht
@@ -91,7 +92,11 @@ def submit_job(socket_path: str, job_id: str, prompt: str, workspace: str, *,
     NAMEN aus der operator-owned Registry (`data/mcp-servers.json`) — der
     Frame traegt niemals command/args, denn die ausfuehrbare Wahrheit gehoert
     dem Worker, nicht der Leitung. Auch diese Liste steht nur im Frame, wenn
-    sie nicht leer ist.
+    sie nicht leer ist. `backend` waehlt den Motor des Workers ("agy" fuer das
+    Antigravity-Backend) — wie die MCP-Felder steht es nur im Frame, wenn es
+    gemeint ist: der Vorgabe-Frame bleibt Byte fuer Byte der alte, und ein
+    alter Worker antwortet auf einen agy-Frame mit einem benannten Fehler
+    statt mit einem stillen claude-Job.
     """
     frame = {"op": "submit", "job_id": job_id, "prompt": prompt,
              "workspace": workspace}
@@ -99,6 +104,8 @@ def submit_job(socket_path: str, job_id: str, prompt: str, workspace: str, *,
         frame["browser_mcp"] = True
     if mcp_servers:
         frame["mcp_servers"] = list(mcp_servers)
+    if backend != "claude":
+        frame["backend"] = backend
     return _anfrage(socket_path, frame, timeout_s=timeout_s, exchange=exchange)
 
 

@@ -196,6 +196,12 @@ class TalosConfig:
     claude_worker_bin: str = "claude"
     claude_worker_max_parallel: int = 2
     claude_worker_job_timeout_s: int = 900
+    # Agent-seitiges Gate fuer das agy-Backend des Claude-Workers
+    # (TALOS_AGY_BACKEND=1, Vorgabe AUS): ohne es existiert `delegate_agy`
+    # weder im Manifest noch als verdrahteter Runner — dasselbe
+    # Zwei-Gate-Muster wie bei den MCP-Servern (Worker-Gate:
+    # TALOS_CLAUDE_WORKER_AGY_BIN / TALOS_CLAUDE_WORKER_AGY_HOME).
+    agy_backend: bool = False
     # Browser-Automatisierung (chrome-devtools-mcp) INNERHALB der Worker-Sandbox,
     # nie als natives Werkzeug — Vorgabe AUS, wie der Worker selbst: ein Chrome
     # mit Netz im Job erweitert die Angriffsflaeche der Sandbox, also ist es ein
@@ -433,6 +439,7 @@ def load_config(*, require_channel: bool = True) -> TalosConfig:
         claude_worker_job_timeout_s=int(
             _value("TALOS_CLAUDE_WORKER_JOB_TIMEOUT") or "900"
         ),
+        agy_backend=_value("TALOS_AGY_BACKEND") == "1",
         browser_mcp_enabled=_value("TALOS_BROWSER_MCP_ENABLED") == "1",
         # Ungueltige Namen fallen heraus statt die Liste unbrauchbar zu machen
         # — sie wuerden gegen die Registry ohnehin nie matchen (fail-closed).

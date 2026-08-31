@@ -84,6 +84,7 @@ In der Unit (oder Umgebung) des **Agenten**:
 Environment=TALOS_CLAUDE_WORKER_ENABLED=1
 Environment=TALOS_CLAUDE_WORKER_SOCKET=/run/talos/claude.sock
 Environment=TALOS_CLAUDE_WORKER_ROOT=/var/lib/talos/claude-jobs
+# Optional, zweites Backend (siehe unten): Environment=TALOS_AGY_BACKEND=1
 ```
 
 ⚠️ Diese drei Schlüssel gehören in die **Prozess-Umgebung** des Agenten (die
@@ -168,6 +169,61 @@ Im Agenten fordert das Modell Server über `delegate_code {"prompt": "…",
 `mcp: ["chrome-devtools"]`. Pro angefragtem Server bekommt `--allowedTools`
 genau ein `mcp__<name>`-Präfix — nie mehr als angefragt wurde.
 
+## Zweites Backend: agy (Antigravity CLI)
+
+Derselbe Daemon, derselbe Socket, dieselbe Confine-Form — aber der Job muss
+nicht `claude` sein. Der Submit-Frame trägt optional ein `"backend"`: fehlt
+es oder steht `"claude"`, gilt alles oben Bit für Bit; `"agy"` waehlt die
+Antigravity-CLI (`agy -p --output-format stream-json
+--dangerously-skip-permissions --print-timeout <timeout>s`, gemessen an
+Binary 1.1.22). Jeder andere Wert ist `invalid_request` — benannt, und es
+startet kein Job. MCP und Browser bleiben dem claude-Backend vorbehalten:
+ein agy-Frame mit `mcp_servers`/`browser_mcp` ist `invalid_request`.
+
+Zwei eigene Gates, wie überall hier — beide müssen ja sagen:
+
+- **Worker** (`/etc/talos/claude-worker.env`):
+  `TALOS_CLAUDE_WORKER_AGY_BIN=/usr/local/bin/agy` (absolut, existierend)
+  und `TALOS_CLAUDE_WORKER_AGY_HOME=/var/lib/talos/agy-home` (dediziertes
+  agy-HOME mit dem OAuth-Login). Fehlt eines oder zeigt es ins Leere, gibt
+  es das Backend nicht: ein agy-Frame wird mit `unavailable` beantwortet,
+  kein Job startet.
+- **Agent** (`Environment=` der Agent-Unit): `TALOS_AGY_BACKEND=1` — ohne
+  es existiert `delegate_agy` nicht im Manifest (dieselbe Zwei-Gate-Form
+  wie `TALOS_MCP_SERVERS`); `delegate_status` gilt für beide Backends und
+  nennt das `backend` des Jobs in der Antwort (Vorgabe `"claude"`).
+
+Installation und Login (einmalig, als Worker-User — agy startet dabei den
+Google-OAuth-Flow und legt Token und State unter
+`$HOME/.gemini/antigravity-cli/` ab):
+
+```bash
+sudo install -d -m 0700 -o talos-claude -g talos-claude /var/lib/talos/agy-home
+sudo -u talos-claude HOME=/var/lib/talos/agy-home agy
+```
+
+Die Credential-Form unterscheidet sich ehrlich vom claude-Backend: agy
+kennt keinen Env-Token wie `CLAUDE_CODE_OAUTH_TOKEN` — die Token-**Datei**
+muss mit. Der Worker kopiert darum pro Job `antigravity-oauth-token` aus
+dem Worker-agy-HOME nach `<job-workspace>/.home/.gemini/antigravity-cli/`
+(Mode 0600), bevor das Kind startet; das Worker-agy-HOME selbst taucht
+weder in der Job-Env noch in argv auf. Fehlt der Token, ist die Antwort
+`unavailable` — benannt, kein Spawn.
+
+Und der Returncode luegt: der gemessene Auth-Fehler kommt als
+`{"event":"result","result":{"status":"ERROR","error":"authentication
+failed or timed out", …}}` **mit RC 0**. Darum zaehlt der Strom, nicht der
+Exit-Code: ein `result`-Event mit nicht-leerem `error` oder einem Status
+ausserhalb der OK-Menge ({"OK","DONE","SUCCESS"}, gross-/kleinschreibungs-
+tolerant gelesen) macht den Job `failed`, egal was der Prozess noch
+behauptet. agy kennzeichnet seine Events mit `event` statt `type` und
+verschachtelt das Abschluss-Event — die Summary kommt aus
+`.result.response`. Welche tool-Events agy im Erfolgsfall wirklich sendet,
+zeigt erst der Live-E2E: der Parser liest claude- UND plausibel
+agy-foermige Events, Dateipfade gelten nur innerhalb des Workspaces
+(verworfen, nie umgeschrieben — wie bisher), und wo nichts passt, ist
+`files` eben leer: Belege duerfen fehlen, sie werden nie erfunden.
+
 ## Fail-closed-Verhalten
 
 - Socket unerreichbar oder kaputt → benannter `unavailable`-Fehler im
@@ -175,6 +231,10 @@ genau ein `mcp__<name>`-Präfix — nie mehr als angefragt wurde.
   Agent-Prozess selbst startete.
 - `TALOS_CLAUDE_WORKER_ENABLED` unset/`0` → die Werkzeuge stehen nicht im
   Manifest; eine Delegation scheitert am Kernel, nicht erst am Socket.
+- `TALOS_AGY_BACKEND` unset/`0` → `delegate_agy` steht nicht im Manifest;
+  und selbst mit agent-seitigem Gate gilt das Worker-Gate
+  (`TALOS_CLAUDE_WORKER_AGY_BIN`/`_AGY_HOME` samt Token): ohne es ist die
+  Antwort `unavailable` — benannt, kein Spawn.
 - `requires_env` unerfüllt (kein Socket konfiguriert) → kein Grant, der Runner
   läuft nie (Red-Team-Fall).
 - Unconfined ist verweigert: die Job-Backend-Auswahl filtert das
@@ -203,6 +263,19 @@ genau ein `mcp__<name>`-Präfix — nie mehr als angefragt wurde.
   braucht ein beschreibbares HOME für State (`~/.claude`, `~/.claude.json`),
   und der Workspace ist der einzige beschreibbare Ort — gemessen am zweiten
   Live-E2E, als Claudes Bash am read-only Dateisystem starb.
+- **Beim agy-Backend betritt die Token-DATEI den Wegwerf-Workspace** — der
+  eine dokumentierte Unterschied der Credential-Form: agy kennt keinen
+  Env-Token, also kopiert der Worker `antigravity-oauth-token` ins Job-HOME
+  (0600). Das Exfiltrations-Risiko ist zum claude-Backend gleichwertig — der
+  Job hat ohnehin Netz, und wer den Job kontrolliert, kann die API mit der
+  eigenen Credential des Jobs ohnehin rufen —, aber die Kopie ist
+  flüchtig: sie stirbt mit dem Workspace. Zwei ehrliche Kanten bleiben: der
+  Token im agy-HOME ist ein OAuth-**Refresh**-Token — rotiert Google ihn
+  (Passwort-Reset, Widerruf, Inaktivität), schlagen alle agy-Jobs mit dem
+  dokumentierten Auth-Fehler fehl, bis der Betreiber den Login erneuert; und
+  waehrend ein Job laeuft, liegt die Credential als lesbare Datei IM
+  beschreibbaren Bereich des Jobs — gegen den Job selbst ist das kein
+  Schutz (er darf sie haben), gegen alles andere traegt weiter die Sandbox.
 - **Job-Workspaces sind Wegwerf-Verzeichnisse.** Kontinuität (was wurde
   delegiert, was kam zurück) lebt im Event-Log des Agenten, nicht im Worker:
   ein neu gestarteter Worker weiss nichts, und das ist Absicht.

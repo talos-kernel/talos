@@ -268,6 +268,11 @@ CASES: list[tuple[str, ToolRequest, Status]] = [
         Status.DENIED,
     ),
     (
+        "Delegate agy without worker configured",
+        ToolRequest("delegate_agy", OWNER, {"prompt": "rewrite the repo"}),
+        Status.DENIED,
+    ),
+    (
         "delegate_status without worker configured",
         ToolRequest("delegate_status", OWNER, {"job_id": "x"}),
         Status.DENIED,
@@ -3009,6 +3014,147 @@ _cw_ok = ("nicht freigeschaltet" in _cw_out and "shell-aufmachen" in _cw_out
           and _cw_desk2.busy() == 0)
 _result(_cw_ok, "delegate_dag submits an MCP server outside the agent-side grant",
         "refused by name before any frame" if _cw_ok else f"SUBMITTED: {_cw_out}")
+if not _cw_ok:
+    failures += 1
+
+# --- agy-Backend: zweiter Motor, dieselbe Mauer ----------------------------
+# 11) Ein unbekannter Backend-Name ist `invalid_request` — benannt, und es
+#     startet kein Job (kein stiller Fallback auf das claude-Backend).
+_cw_gestartet: list = []
+
+
+def _cw_agy_spy(argv, cwd, env, limits):
+    _cw_gestartet.append((list(argv), dict(env)))
+    raise AssertionError("kein Job haette starten duerfen")
+
+
+_cw_jobs_ohne_agy = _cw._Jobs(worker_home=tempfile.mkdtemp(prefix="talos-cw-nagy-"))
+_cw_antwort = _cw.handle_frame(
+    json.dumps({"op": "submit", "job_id": "rt-b1", "prompt": "p",
+                "workspace": tempfile.mkdtemp(prefix="talos-cw-agyw-"),
+                "backend": "kronos"}).encode(),
+    _cw_jobs_ohne_agy, spawn=_cw_agy_spy,
+    limits=_cw_sandbox.SandboxLimits(timeout_s=30))
+_cw_ok = (_cw_antwort["ok"] is False
+          and _cw_antwort["kind"] == "invalid_request"
+          and "kronos" in _cw_antwort["message"] and not _cw_gestartet)
+_result(_cw_ok, "An unknown worker backend rides along into a job",
+        "named invalid_request, no spawn" if _cw_ok else f"GOT THROUGH: {_cw_antwort}")
+if not _cw_ok:
+    failures += 1
+
+# 12) Ein agy-Frame gegen einen Worker ohne agy-Gate (kein
+#     TALOS_CLAUDE_WORKER_AGY_BIN/_AGY_HOME) ist `unavailable` — benannt,
+#     kein Spawn.
+_cw_antwort = _cw.handle_frame(
+    json.dumps({"op": "submit", "job_id": "rt-b2", "prompt": "p",
+                "workspace": tempfile.mkdtemp(prefix="talos-cw-agyw-"),
+                "backend": "agy"}).encode(),
+    _cw_jobs_ohne_agy, spawn=_cw_agy_spy,
+    limits=_cw_sandbox.SandboxLimits(timeout_s=30))
+_cw_ok = (_cw_antwort["ok"] is False
+          and _cw_antwort["kind"] == "unavailable"
+          and "not configured" in _cw_antwort["message"] and not _cw_gestartet)
+_result(_cw_ok, "The agy backend runs without the worker-side gate",
+        "named unavailable, no spawn" if _cw_ok else f"GOT THROUGH: {_cw_antwort}")
+if not _cw_ok:
+    failures += 1
+
+# Ein konfiguriertes agy-Gate fuer die naechsten Faelle: HOME mit Token,
+# Binary als Datei — dieselbe Form, die der Dienst prueft.
+_cw_agy_home = Path(tempfile.mkdtemp(prefix="talos-cw-agyhome-"))
+_cw_tokendir = _cw_agy_home / ".gemini" / "antigravity-cli"
+_cw_tokendir.mkdir(parents=True)
+(_cw_tokendir / "antigravity-oauth-token").write_text("rt-agy-token", encoding="utf-8")
+_cw_agy_bin = Path(tempfile.mkdtemp(prefix="talos-cw-agybin-")) / "agy"
+_cw_agy_bin.write_text("#!/bin/sh\n", encoding="utf-8")
+_cw_jobs_agy = _cw._Jobs(
+    worker_home=tempfile.mkdtemp(prefix="talos-cw-agywh-"),
+    agy=_cw.AgyBackend(bin=str(_cw_agy_bin), home=str(_cw_agy_home)))
+
+# 13) MCP/Browser ist dem claude-Backend vorbehalten: ein agy-Frame mit
+#     mcp_servers ist `invalid_request` — benannt, kein Spawn.
+_cw_antwort = _cw.handle_frame(
+    json.dumps({"op": "submit", "job_id": "rt-b3", "prompt": "p",
+                "workspace": tempfile.mkdtemp(prefix="talos-cw-agyw-"),
+                "backend": "agy", "mcp_servers": ["filesystem"]}).encode(),
+    _cw_jobs_agy, spawn=_cw_agy_spy,
+    limits=_cw_sandbox.SandboxLimits(timeout_s=30))
+_cw_ok = (_cw_antwort["ok"] is False
+          and _cw_antwort["kind"] == "invalid_request"
+          and "claude backend" in _cw_antwort["message"] and not _cw_gestartet)
+_result(_cw_ok, "An agy frame carries MCP servers into the job",
+        "named invalid_request (claude backend only), no spawn"
+        if _cw_ok else f"GOT THROUGH: {_cw_antwort}")
+if not _cw_ok:
+    failures += 1
+
+
+class _CwAgyHandle:
+    """Ein erfolgreicher agy-Lauf als Konserve: OK-Result, RC 0."""
+
+    def events(self):
+        yield {"event": "result",
+               "result": {"status": "OK", "response": "ok", "error": ""}}
+        return 0
+
+
+import time as _time  # noqa: E402
+
+
+# 14/15) Ein echter agy-Joblauf (Spawn-Recorder): das Worker-agy-HOME darf
+#     weder in der Job-Env noch in argv auftauchen, und der Token liegt
+#     danach NUR als Kopie im wegwerfbaren Job-HOME.
+_cw_gesehen: dict = {}
+
+
+def _cw_agy_rec(argv, cwd, env, limits):
+    _cw_gesehen["argv"], _cw_gesehen["env"] = list(argv), dict(env)
+    return _CwAgyHandle()
+
+
+_cw_ws = Path(tempfile.mkdtemp(prefix="talos-cw-agyws-")) / "job-rt"
+_cw_antwort = _cw.handle_frame(
+    json.dumps({"op": "submit", "job_id": "rt-b4", "prompt": "p",
+                "workspace": str(_cw_ws), "backend": "agy"}).encode(),
+    _cw_jobs_agy, spawn=_cw_agy_rec,
+    limits=_cw_sandbox.SandboxLimits(timeout_s=30))
+_cw_ende = _time.monotonic() + 5
+_cw_stand: dict = {}
+while _time.monotonic() < _cw_ende:
+    _cw_stand = _cw.handle_frame(
+        json.dumps({"op": "status", "job_id": "rt-b4"}).encode(), _cw_jobs_agy)
+    if _cw_stand.get("state") in ("done", "failed"):
+        break
+    _time.sleep(0.05)
+_cw_ok = (_cw_stand.get("state") == "done"
+          and str(_cw_agy_home) not in json.dumps(_cw_gesehen.get("env", {}))
+          and str(_cw_agy_home) not in json.dumps(_cw_gesehen.get("argv", []))
+          and "CLAUDE_CODE_OAUTH_TOKEN" not in _cw_gesehen.get("env", {}))
+_result(_cw_ok, "The worker's agy home leaks into a job's env or argv",
+        "source path invisible to the child" if _cw_ok
+        else f"LEAKED: {_cw_gesehen} ({_cw_stand})")
+if not _cw_ok:
+    failures += 1
+
+_cw_kopie = _cw_ws / ".home" / ".gemini" / "antigravity-cli" / "antigravity-oauth-token"
+_cw_ok = (_cw_kopie.is_file()
+          and _cw_kopie.read_text(encoding="utf-8") == "rt-agy-token"
+          and _cw_kopie.resolve().is_relative_to(_cw_ws.resolve())
+          and "rt-agy-token" not in json.dumps(_cw_gesehen.get("argv", []))
+          and "rt-agy-token" not in json.dumps(_cw_gesehen.get("env", {})))
+_result(_cw_ok, "The agy token travels anywhere but the disposable job home",
+        "copy only inside the job workspace (0600)" if _cw_ok else "ESCAPED")
+if not _cw_ok:
+    failures += 1
+
+# 16) Agent-Gate: ohne TALOS_AGY_BACKEND=1 existiert `delegate_agy` nicht im
+#     Manifest — der claude-Weg bleibt davon unberuehrt.
+_cw_namen = {s.name for s in default_manifest(agy_backend=False).tools}
+_cw_ok = "delegate_agy" not in _cw_namen and "delegate_code" in _cw_namen
+_result(_cw_ok, "delegate_agy exists without the agent-side gate",
+        "absent from the manifest without TALOS_AGY_BACKEND=1"
+        if _cw_ok else f"PRESENT: {sorted(_cw_namen)}")
 if not _cw_ok:
     failures += 1
 

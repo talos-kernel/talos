@@ -44,8 +44,12 @@ LockPersonality=yes
 # ProtectSystem=strict macht das ganze Dateisystem read-only; die Job-Workspaces
 # und das dedizierte HOME muessen schreibbar bleiben. Pfade an die eigene
 # Installation anpassen (TALOS_CLAUDE_WORKER_ROOT / TALOS_CLAUDE_WORKER_HOME in
-# /etc/talos/claude-worker.env).
+# /etc/talos/claude-worker.env). Wer das agy-Backend faehrt, ergaenzt sein
+# agy-HOME (TALOS_CLAUDE_WORKER_AGY_HOME) — der Worker kopiert daraus pro Job
+# den OAuth-Token in den Wegwerf-Workspace; das Verzeichnis selbst muss er
+# nur lesen, aber agy erneuert den Token beim Login darin.
 ReadWritePaths=/var/lib/talos/claude-jobs /var/lib/talos/claude-home
+# agy-Backend (optional): ReadWritePaths=… /var/lib/talos/agy-home
 
 [Install]
 WantedBy=multi-user.target

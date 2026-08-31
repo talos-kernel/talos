@@ -6,6 +6,46 @@ they make possible that was not possible before — or, more often, what they ta
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions are alpha: the kernel's rules are stable, the surface around them is not.
 
+## [0.16.0-alpha] — 2026-08-31
+
+### Added
+
+- **A second backend for the confined delegate worker: Google's Antigravity
+  CLI (`agy`) — and the 27th tool, `delegate_agy`.** One daemon, one socket:
+  the submit frame gains an optional `"backend"` field (absent or `"claude"`
+  is byte-for-byte the old behaviour; anything unknown is a named
+  `invalid_request`, no spawn). agy jobs run the measured invocation
+  (`agy -p --output-format stream-json --dangerously-skip-permissions
+  --print-timeout <deadline>s`) under the same sandbox backends, the same env
+  allowlist, the same kernel-derived disposable workspace and the same
+  process-group deadline; `unconfined` stays filtered out. Two gates, as
+  everywhere: the worker needs `TALOS_CLAUDE_WORKER_AGY_BIN` +
+  `TALOS_CLAUDE_WORKER_AGY_HOME` (missing either → named `unavailable`, no
+  spawn), the agent needs `TALOS_AGY_BACKEND=1` (without it `delegate_agy`
+  is not even in the manifest — the MCP two-gate pattern). MCP/browser stay
+  claude-backend only: an agy frame carrying them is `invalid_request`.
+- **The agy credential model, honestly different.** agy knows no env token,
+  so the token *file* has to travel: the worker copies
+  `antigravity-oauth-token` from the worker's agy home into the disposable
+  job home (mode 0600) before spawn, and the source path appears in neither
+  the job env nor argv. A missing token is `unavailable`, named. The
+  exfiltration risk is equivalent to the claude backend — the job has
+  network either way — and the copy dies with the workspace.
+- **The stream outranks the exit code.** agy's auth failure arrives as a
+  `result` event with `status: "ERROR"` **and RC 0** — measured. A `result`
+  event carrying a non-empty `error` or a status outside the tolerated OK
+  set now fails the job regardless of the return code. agy events are read
+  tolerantly (`event` vs `type`, summary from `.result.response`, file
+  evidence from both event shapes, workspace-jailed as before); where
+  nothing matches, `files` stays empty — evidence may be absent, never
+  fabricated. `delegate_status` answers both backends and names the job's
+  `backend` (default `"claude"`).
+
+### Changed
+
+- Test count: 2166 (was 2148). Adversarial cases: 206 (was 199). Tools: 27
+  (was 26). Gate path: 782 lines (was 779).
+
 ## [0.15.1-alpha] — 2026-08-28
 
 ### Changed

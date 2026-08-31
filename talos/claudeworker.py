@@ -47,9 +47,27 @@ lehnt er benannt ab — kein Job startet. Definiert die Registry
 genau diesen einen Namen auf die Env-Synthese (`BrowserMcp`) zurueck, damit
 Bestandsinstallationen ohne Registry-Datei unveraendert weiterlaufen.
 
+Der Submit-Frame traegt optional ein `"backend"`: fehlt es oder steht
+`"claude"`, gilt der bisherige Weg Bit fuer Bit; `"agy"` waehlt das
+Antigravity-Backend (`agy -p --output-format stream-json`) — gleiche
+Sandbox, gleiches Env, gleiche Workspace-Ableitung, gleiche Deadline. agy
+laeuft nur, wenn der Dienst es freigeschaltet hat
+(`TALOS_CLAUDE_WORKER_AGY_BIN` + `TALOS_CLAUDE_WORKER_AGY_HOME`, Vorgabe:
+kein agy) — ein Frame gegen ein nicht konfiguriertes Backend wird mit
+`unavailable` benannt abgelehnt, kein Job startet. MCP/Browser bleibt dem
+claude-Backend vorbehalten: ein agy-Frame mit `browser_mcp`/`mcp_servers`
+ist `invalid_request`. Der agy-OAuth-Token wird pro Job aus dem
+Worker-agy-HOME in das wegwerfbare Job-HOME kopiert (0600) — agy kennt
+keinen Env-Token wie Claude, die Token-DATEI muss also mit, aber sie geht
+nie weiter als bis in den Job-Workspace, und der Quellpfad taucht weder in
+Env noch argv auf. Sein Ergebnis-Event meldet Fehler auch bei RC 0 (der
+Auth-Fehler ist genau so einer) — darum zaehlt der Strom, nicht der
+Returncode: ein `result` mit Fehler oder Nicht-OK-Status ist `failed`.
+
 Bei "done" zusaetzlich: "summary" (aus dem `result`-Event des Streams),
 "files" (Pfade relativ zum Arbeitsbereich, aus `tool_use`-Events — Beweis
-kommt aus dem Stream, nie aus Prosa) und "returncode".
+kommt aus dem Stream, nie aus Prosa) und "returncode". Jede Status-Antwort
+traegt das "backend" des Jobs (Vorgabe "claude").
 
 Kontinuitaet lebt im Event-Log von Talos, nicht hier: die Job-Tabelle ist
 fluechtig, und ein neu gestarteter Worker weiss von nichts — das ist Absicht.
@@ -87,6 +105,7 @@ __all__ = [
     "MAX_SUMMARY_CHARS",
     "MCP_CONFIG_FILE",
     "SOCKET_ENV_VAR",
+    "AgyBackend",
     "BrowserMcp",
     "browser_mcp_config",
     "handle_frame",
@@ -96,6 +115,7 @@ __all__ = [
     "make_spawn",
     "parse_stream_event",
     "serve",
+    "stream_failure",
 ]
 
 DEFAULT_SOCKET = "/run/talos/claude.sock"
@@ -146,6 +166,60 @@ MCP_CONFIG_FILE = ".talos-mcp.json"
 # Wie viele MCP-Server ein einzelner Frame anfordern darf — Deckel gegen ein
 # Kind, das die Allowlist flutet.
 MAX_MCP_SERVERS = 8
+
+# Das agy-Backend (Antigravity CLI). Der Token-Pfad ist relativ zum agy-HOME:
+# der Worker kopiert die Datei pro Job daraus in das wegwerfbare Job-HOME —
+# agy kennt keinen Env-Token wie Claude (`CLAUDE_CODE_OAUTH_TOKEN`), die
+# Token-DATEI muss also mit in den Workspace. Sie geht nie weiter: der
+# Quellpfad taucht weder in der Job-Env noch in argv auf.
+AGY_TOKEN_REL = Path(".gemini") / "antigravity-cli" / "antigravity-oauth-token"
+# Stati, die ein agy-`result`-Event als Erfolg durchgehen laesst — tolerant
+# gelesen (Grossschreibung egal); alles andere oder ein nicht-leeres
+# `error`-Feld ist ein Misserfolg, und zwar auch bei RC 0 (gemessen am
+# Auth-Fehler: `status: "ERROR"`, RC 0 — der Returncode luegt, der Strom nicht).
+AGY_OK_STATI = frozenset({"OK", "DONE", "SUCCESS"})
+
+
+@dataclass(frozen=True)
+class AgyBackend:
+    """Worker-seitiges agy-Gate. `bin` ist die gepinnte Binary (absolut,
+    existierend), `home` das dedizierte agy-HOME mit dem OAuth-Login des
+    Betreibers. Beides oder nichts: fehlt eines der beiden
+    (`TALOS_CLAUDE_WORKER_AGY_BIN` / `TALOS_CLAUDE_WORKER_AGY_HOME`), gibt es
+    das Backend nicht, und ein agy-Frame wird mit `unavailable` beantwortet
+    statt gegen eine halbe Konfiguration zu starten."""
+    bin: str
+    home: str
+
+
+def _agy_gate(bin_roh: str, home_roh: str) -> AgyBackend | None:
+    """Env-Werte → das Gate, oder None. Prueft Form und Existenz, nicht mehr:
+    ob der Login darin noch gilt, weiss erst der Job selbst."""
+    if not bin_roh or not home_roh:
+        return None
+    binary = Path(bin_roh)
+    home = Path(home_roh)
+    if not binary.is_absolute() or not binary.is_file():
+        return None
+    if not home.is_absolute() or not home.is_dir():
+        return None
+    return AgyBackend(bin=str(binary), home=str(home))
+
+
+def _stage_agy_token(agy_home: str, workspace: Path) -> None:
+    """Kopiert den agy-OAuth-Token aus dem Worker-agy-HOME in das Job-HOME
+    (Mode 0600). agy liest ihn aus `$HOME/.gemini/antigravity-cli/` — und das
+    HOME des Jobs liegt IM Workspace, der einzige beschreibbare Ort. Der
+    Unterschied zum claude-Backend ist ehrlich: dort betritt die Token-DATEI
+    die Sandbox nie (der Wert reist in der Env), hier muss sie hinein, weil
+    agy keinen Env-Token kennt. Das Exfiltrations-Risiko ist dasselbe — der
+    Job hat ohnehin Netz —, aber die Kopie stirbt mit dem Wegwerf-Workspace,
+    und der Quellpfad bleibt unsichtbar fuer das Kind."""
+    quelle = Path(agy_home) / AGY_TOKEN_REL
+    ziel = workspace / ".home" / AGY_TOKEN_REL
+    ziel.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(quelle, ziel)
+    os.chmod(ziel, 0o600)
 
 
 @dataclass(frozen=True)
@@ -257,17 +331,31 @@ def parse_stream_event(line: dict, workspace: Path) -> tuple[str | None, str | N
     `tool_use`-Inputs, deren aufgeloester Pfad innerhalb des Arbeitsbereichs
     bleibt. Beweis kommt aus dem Stream, nie aus Prosa — ein behaupteter Pfad
     ausserhalb des Käfigs faellt weg, er wird nicht umgeschrieben.
+
+    Tolerant gegenueber beiden Backends: claude kennzeichnet Events mit
+    `type`, agy mit `event`, und agy verschachtelt sein Abschluss-Event
+    (`result` ist ein Objekt, die Summary steht in `response`). Welche
+    tool-Events agy im Erfolgsfall wirklich sendet, zeigt erst der Live-E2E
+    — darum werden claude- UND plausibel agy-foermige Events gelesen, und wo
+    nichts passt, bleibt die Datei-Liste eben leer: Belege duerfen fehlen,
+    sie werden nie erfunden.
     """
     if not isinstance(line, dict):
         return (None, None)
-    typ = line.get("type")
+    typ = line.get("type") or line.get("event")
     if typ == "result":
         result = line.get("result")
         if isinstance(result, str) and result:
             return (result[:MAX_SUMMARY_CHARS], None)
+        if isinstance(result, dict):
+            antwort = result.get("response")
+            if isinstance(antwort, str) and antwort:
+                return (antwort[:MAX_SUMMARY_CHARS], None)
         return (None, None)
-    if typ == "tool_use":
+    if typ in ("tool_use", "tool_call"):
         eingabe = line.get("input")
+        if not isinstance(eingabe, dict):
+            eingabe = line.get("args")
         if not isinstance(eingabe, dict):
             return (None, None)
         roh = eingabe.get("file_path") or eingabe.get("path")
@@ -283,6 +371,32 @@ def parse_stream_event(line: dict, workspace: Path) -> tuple[str | None, str | N
             return (None, None)
         return (None, relativ.as_posix())
     return (None, None)
+
+
+def stream_failure(line: dict) -> str | None:
+    """Fehlertext aus einem agy-`result`-Event — oder None.
+
+    Der Returncode luegt: der gemessene Auth-Fehler kommt als
+    `{"event": "result", "result": {"status": "ERROR", …}}` mit RC 0. Darum
+    ist ein `result` mit nicht-leerem `error` oder einem Status ausserhalb
+    der OK-Menge ein Misserfolg, egal was der Exit-Code behauptet.
+    Claude-Result-Events (Text statt Objekt) liefern hier bewusst None —
+    ihr Misserfolg bleibt der RC wie bisher.
+    """
+    if not isinstance(line, dict):
+        return None
+    if (line.get("type") or line.get("event")) != "result":
+        return None
+    result = line.get("result")
+    if not isinstance(result, dict):
+        return None
+    fehler = result.get("error")
+    if isinstance(fehler, str) and fehler.strip():
+        return fehler.strip()[-MAX_ERROR_CHARS:]
+    status = str(result.get("status") or "").strip()
+    if status and status.upper() not in AGY_OK_STATI:
+        return f"stream reports status {status}"[:MAX_ERROR_CHARS]
+    return None
 
 
 def _job_argv(prompt: str, *, mcp_config: Path | None = None,
@@ -308,8 +422,33 @@ def _job_argv(prompt: str, *, mcp_config: Path | None = None,
     return argv
 
 
+def _agy_argv(prompt: str, timeout_s: int) -> list[str]:
+    """Die agy-Argumente NACH dem Binary — dasselbe Grundgeruest wie beim
+    claude-Backend (`-p`, stream-json), gemessen an der Binary 1.1.22.
+
+    Zwei ehrliche Unterschiede: `--dangerously-skip-permissions` ist hier
+    Pflicht, wo es beim claude-Backend bewusst fehlt — agy kann im
+    Print-Modus nicht rueckfragen, ohne den Schalter hinge jeder Job am
+    Berechtigungs-Prompt. Die Konfinement-Grenze aendert das nicht: sie
+    traegt die Sandbox (gleiches Backend, gleicher Workspace, gleiche
+    Deadline), nicht das Berechtigungssystem des Kindes. Und
+    `--print-timeout` spiegelt die Job-Deadline in das Kind, damit es selbst
+    aufhoert, bevor die Wanduhr die Prozessgruppe toetet."""
+    return [
+        "-p", prompt,
+        "--output-format", "stream-json",
+        "--dangerously-skip-permissions",
+        "--print-timeout", f"{timeout_s}s",
+    ]
+
+
 class _Busy(Exception):
     """Das Parallel-Limit ist erreicht — der dritte Job wartet nicht, er faellt um."""
+
+
+class _Unavailable(Exception):
+    """Das angeforderte Backend ist auf diesem Worker nicht fahrbar — ein
+    benannter `unavailable`-Fehler, und es startet kein Job."""
 
 
 class _Job:
@@ -317,11 +456,19 @@ class _Job:
     damit `status` nie einen halb geschriebenen Zustand liest."""
 
     def __init__(self, job_id: str, prompt: str, workspace: str, *,
+                 backend: str = "claude", agy_home: str = "",
                  mcp_eintraege: dict[str, dict] | None = None,
                  legacy_browser: bool = False) -> None:
         self.job_id = job_id
         self.prompt = prompt
         self.workspace = workspace
+        # Welcher Motor den Job faehrt ("claude" | "agy") — der Frame waehlt
+        # das Backend, nie das Ziel; die Status-Antwort sagt es ehrlich mit.
+        self.backend = backend
+        # Nur fuer agy-Jobs: das Worker-agy-HOME, AUS dem der Token kommt.
+        # Der Pfad gehoert der Worker-Konfiguration und taucht weder in der
+        # Job-Env noch in argv auf.
+        self.agy_home = agy_home
         # Vom WORKER aufgeloeste MCP-Konfigurationseintraege (Name →
         # {"command": …, "args": […]}) — der Frame lieferte nur Namen.
         self.mcp_eintraege = mcp_eintraege or {}
@@ -359,7 +506,8 @@ class _Jobs:
     def __init__(self, *, max_parallel: int = MAX_PARALLEL, worker_home: str = "",
                  browser: BrowserMcp | None = None,
                  mcp_registry: McpServerRegistry | None = None,
-                 mcp_enabled: frozenset[str] = frozenset()) -> None:
+                 mcp_enabled: frozenset[str] = frozenset(),
+                 agy: AgyBackend | None = None) -> None:
         self._max_parallel = max_parallel
         self._worker_home = worker_home
         self._browser = browser if browser is not None else BrowserMcp()
@@ -369,6 +517,10 @@ class _Jobs:
         self._mcp_registry = (mcp_registry if mcp_registry is not None
                               else McpServerRegistry())
         self._mcp_enabled = frozenset(mcp_enabled)
+        # Das agy-Gate: None heisst, dieser Worker kennt das Backend nicht —
+        # ein agy-Frame wird dann benannt abgelehnt, nicht gegen eine halbe
+        # Konfiguration gefahren.
+        self._agy = agy
         self._schloss = threading.Lock()
         self._jobs: dict[str, _Job] = {}
 
@@ -401,7 +553,9 @@ class _Jobs:
     def submit(self, job_id: str, prompt: str, workspace: str, *,
                spawn: Spawn, limits: SandboxLimits,
                browser_mcp: bool = False,
-               mcp_servers: Sequence[str] = ()) -> str:
+               mcp_servers: Sequence[str] = (),
+               backend: str = "claude",
+               agy_spawn: Spawn | None = None) -> str:
         with self._schloss:
             if job_id in self._jobs:
                 raise ValueError(f"job_id {job_id!r} is already known")
@@ -409,7 +563,30 @@ class _Jobs:
                          if j.state in ("accepted", "running"))
             if aktive >= self._max_parallel:
                 raise _Busy
-            if browser_mcp and not self._browser.enabled:
+            agy_home = ""
+            lauf_spawn = spawn
+            if backend == "agy":
+                # Beide Gates stehen, oder es gibt keinen Job: das Backend
+                # selbst (Binary + agy-HOME) und der Login darin. Der
+                # Fehler heisst `unavailable` — es fehlt Infrastruktur,
+                # nicht ein gueltiger Frame.
+                if self._agy is None:
+                    raise _Unavailable(
+                        "agy backend is not configured on this worker "
+                        "(TALOS_CLAUDE_WORKER_AGY_BIN / "
+                        "TALOS_CLAUDE_WORKER_AGY_HOME)")
+                if browser_mcp or mcp_servers:
+                    raise ValueError(
+                        "mcp servers are only available on the claude backend")
+                if not (Path(self._agy.home) / AGY_TOKEN_REL).is_file():
+                    raise _Unavailable(
+                        "agy oauth token is missing — log in as the worker "
+                        "user first (agy under the configured agy home)")
+                agy_home = self._agy.home
+                # Der agy-Spawn traegt die agy-Binary; Tests injizieren nur
+                # einen Spawn — der gilt dann fuer beide Backends.
+                lauf_spawn = agy_spawn if agy_spawn is not None else spawn
+            elif browser_mcp and not self._browser.enabled:
                 raise ValueError("browser mcp is not enabled on this worker")
             # `browser_mcp: true` mappt auf ["chrome-devtools"] — der alte
             # Client und der neue sprechen denselben Mechanismus an.
@@ -419,13 +596,14 @@ class _Jobs:
             legacy_browser = False
             if namen:
                 eintraege, legacy_browser = self._loese_mcp(namen)
-            job = _Job(job_id, prompt, workspace, mcp_eintraege=eintraege,
+            job = _Job(job_id, prompt, workspace, backend=backend,
+                       agy_home=agy_home, mcp_eintraege=eintraege,
                        legacy_browser=legacy_browser)
             self._jobs[job_id] = job
         deadline = time.monotonic() + limits.timeout_s
         thread = threading.Thread(
             target=_run_job,
-            args=(job, self._worker_home, spawn, limits, deadline),
+            args=(job, self._worker_home, lauf_spawn, limits, deadline),
             daemon=True,
         )
         thread.start()
@@ -437,7 +615,8 @@ class _Jobs:
         if job is None:
             raise KeyError(job_id)
         with job.schloss:
-            antwort: dict[str, Any] = {"ok": True, "state": job.state}
+            antwort: dict[str, Any] = {"ok": True, "state": job.state,
+                                       "backend": job.backend}
             if job.state == "done":
                 antwort["summary"] = job.summary
                 antwort["files"] = list(job.files)
@@ -471,6 +650,10 @@ def _run_job(job: _Job, worker_home: str, spawn: Spawn,
     try:
         workspace.mkdir(parents=True, exist_ok=True)
         (workspace / ".home").mkdir(exist_ok=True)
+        if job.backend == "agy":
+            # Die agy-Credential NUR als Kopie im wegwerfbaren Job-HOME —
+            # der Quellpfad bleibt fuer das Kind unsichtbar (nie Env, nie argv).
+            _stage_agy_token(job.agy_home, workspace)
         if job.mcp_eintraege:
             # Der WORKER schreibt die MCP-Konfiguration, bevor das Kind startet:
             # das Kind findet sie fertig vor und kann ihren Inhalt nie waehlen.
@@ -483,10 +666,16 @@ def _run_job(job: _Job, worker_home: str, spawn: Spawn,
         job.beenden("failed", fehler=f"workspace not creatable: {ungueltig}")
         return
     job.beenden("running", returncode=-1)
-    argv = _job_argv(job.prompt, mcp_config=mcp_pfad,
-                     mcp_servers=tuple(job.mcp_eintraege))
-    env = job_env(worker_home, workspace,
-                  oauth_token=_lies_oauth_token(worker_home))
+    if job.backend == "agy":
+        argv = _agy_argv(job.prompt, limits.timeout_s)
+        # Kein Claude-OAuth in der Env eines agy-Jobs: dessen Credential liegt
+        # als Kopie im Job-HOME; die andere gehoert hier nicht hinein.
+        env = job_env(worker_home, workspace)
+    else:
+        argv = _job_argv(job.prompt, mcp_config=mcp_pfad,
+                         mcp_servers=tuple(job.mcp_eintraege))
+        env = job_env(worker_home, workspace,
+                      oauth_token=_lies_oauth_token(worker_home))
     try:
         handle = spawn(argv, workspace, env, limits)
     except Exception as ungueltig:
@@ -519,6 +708,19 @@ def _run_job(job: _Job, worker_home: str, spawn: Spawn,
                 continue  # Herzschlag — nur die Uhr lief weiter
             summary, datei = parse_stream_event(event, workspace)
             job.merke(summary, datei)
+            strom_fehler = stream_failure(event)
+            if strom_fehler is not None:
+                # Der Strom meldet den Misserfolg (agy: auch bei RC 0 — der
+                # Auth-Fall) — das Kind wird beendet, der Job ist `failed`,
+                # egal welchen Exit-Code es noch behaupten wuerde.
+                toeten = getattr(handle, "kill", None)
+                if callable(toeten):
+                    try:
+                        toeten()
+                    except Exception:
+                        pass
+                job.beenden("failed", fehler=strom_fehler)
+                return
     except Exception as ungueltig:
         job.beenden("failed", fehler=f"job loop failed: {ungueltig}")
 
@@ -670,12 +872,26 @@ def handle_frame(raw: bytes, jobs: _Jobs, *, spawn: Spawn | None = None,
                     or not all(isinstance(n, str) and SERVER_NAME.fullmatch(n)
                                for n in mcp_roh)):
                 return _invalid("mcp_servers must be a list of server names")
+            backend = frame.get("backend", "claude")
+            if not isinstance(backend, str) or backend not in ("claude", "agy"):
+                return _invalid(f"unknown backend {backend!r}")
+            if backend == "agy" and (browser_mcp or mcp_roh):
+                return _invalid(
+                    "mcp servers are only available on the claude backend")
+            agy_hersteller: Spawn | None = None
+            if backend == "agy" and spawn is None and jobs._agy is not None:
+                # Der Produktions-Spawn fuer agy traegt die agy-Binary aus dem
+                # Worker-Gate — kein Frame der Leitung waehlt sie.
+                agy_hersteller = make_spawn(jobs._agy.bin)
             try:
                 jobs.submit(job_id, prompt, workspace,
                             spawn=hersteller, limits=grenzen,
-                            browser_mcp=browser_mcp, mcp_servers=mcp_roh)
+                            browser_mcp=browser_mcp, mcp_servers=mcp_roh,
+                            backend=backend, agy_spawn=agy_hersteller)
             except _Busy:
                 return _fehler(KIND_BUSY, "parallel job limit reached")
+            except _Unavailable as fehlend:
+                return _fehler(KIND_UNAVAILABLE, str(fehlend))
             except ValueError as ungueltig:
                 return _invalid(str(ungueltig))
             return {"ok": True, "state": "accepted"}
@@ -802,9 +1018,15 @@ def serve(socket_path: str = DEFAULT_SOCKET, env_path: str = DEFAULT_ENV, *,
     mcp_registry_pfad = cfg("TALOS_CLAUDE_WORKER_MCP_REGISTRY")
     mcp_registry = (McpServerRegistry.from_path(Path(mcp_registry_pfad))
                     if mcp_registry_pfad else McpServerRegistry())
+    # Das agy-Gate des Dienstes: Vorgabe KEIN agy. Es ist ein eigenes Schloss
+    # neben dem agent-seitigen — der Worker vertraut keinem Frame, und ein
+    # Versehen auf Agent-Seite oeffnet hier nichts. Fehlt Binary oder agy-HOME
+    # (oder zeigt eines ins Leere), gibt es das Backend nicht.
+    agy = _agy_gate(cfg("TALOS_CLAUDE_WORKER_AGY_BIN"),
+                    cfg("TALOS_CLAUDE_WORKER_AGY_HOME"))
     jobs = _Jobs(max_parallel=max_parallel, worker_home=worker_home,
                  browser=browser, mcp_registry=mcp_registry,
-                 mcp_enabled=mcp_enabled)
+                 mcp_enabled=mcp_enabled, agy=agy)
     limits = SandboxLimits(timeout_s=timeout_s)
     hersteller = spawn if spawn is not None else make_spawn(claude_bin)
 

@@ -15,13 +15,13 @@
 </p>
 
 <p align="center">
-  <!-- ⚠️ Bewusst „tests", nicht „passing": die Zahl kommt aus dem Einsammeln (2148).
+  <!-- ⚠️ Bewusst „tests", nicht „passing": die Zahl kommt aus dem Einsammeln (2166).
        Plattformabhaengige Sandbox- und Repository-Pruefungen koennen uebersprungen werden;
        `test_site_claims` prueft deshalb die gesammelte Zahl statt ein Umgebungsresultat. -->
-  <img src="https://img.shields.io/badge/tests-2148-2e7d32.svg" alt="Tests">
-  <img src="https://img.shields.io/badge/red%20team-199%2F199-2e7d32.svg" alt="Red team">
-  <img src="https://img.shields.io/badge/gate%20path-779%20lines-8a4318.svg" alt="Gate path">
-  <img src="https://img.shields.io/badge/tools-26%20gated-8a4318.svg" alt="Tools">
+  <img src="https://img.shields.io/badge/tests-2166-2e7d32.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/red%20team-206%2F206-2e7d32.svg" alt="Red team">
+  <img src="https://img.shields.io/badge/gate%20path-782%20lines-8a4318.svg" alt="Gate path">
+  <img src="https://img.shields.io/badge/tools-27%20gated-8a4318.svg" alt="Tools">
   <img src="https://img.shields.io/badge/default%20identities-0-c62828.svg" alt="Default identities">
   <img src="https://img.shields.io/badge/python-3.11%2B-1565c0.svg" alt="Python">
   <img src="https://img.shields.io/badge/licence-MIT-616161.svg" alt="MIT">
@@ -105,7 +105,7 @@ authorised individually, bound to its exact arguments and targets, valid once, f
 seconds. Forgetting to call the gate does not produce an unchecked effect — it produces no
 effect at all, because the raw runners are unreachable without a token.
 
-That design is testable, and it is tested: 199 adversarial scenarios run on every change and
+That design is testable, and it is tested: 206 adversarial scenarios run on every change and
 try to get an effect past the kernel. They are in [`redteam.py`](redteam.py). Read them
 before you trust anything written above.
 
@@ -174,8 +174,8 @@ pip install -r requirements.txt
 
 python -m talos setup                    # asks three things, writes a file, stops
 python -m talos doctor                   # what is still missing
-python -m pytest tests/ -q               # 2148 tests
-python redteam.py                        # 199 adversarial cases
+python -m pytest tests/ -q               # 2166 tests
+python redteam.py                        # 206 adversarial cases
 python -m talos                          # run it
 ```
 
@@ -590,6 +590,7 @@ tool that skips the kernel — a tool without a target extractor is `DENY` by co
 | `session_search` | what was said in earlier turns |
 | `delegate` | a sub-run that can only read |
 | `delegate_code` / `delegate_dag` / `delegate_status` | a bounded coding job — or a small acyclic graph of them — for a confined Claude worker: opt-in, off by default, writes only into a kernel-derived disposable workspace |
+| `delegate_agy` | the same confined worker's second backend (the agy CLI): same trust form and workspace, behind its own opt-in gates on agent and worker, no MCP |
 | `agent_consult` | bounded advice from a second, operator-configured agent — data, never permission |
 | `ask_operator` | the one way it can ask you something on purpose |
 | `skill_write` | a new skill, written exactly once — and never without a human's yes |
@@ -654,7 +655,7 @@ executing anything. It is the fastest way to understand the kernel.
 
 ## Architecture
 
-Small modules on purpose. The gate path (`policy.py`, 779 lines) has to be readable in one
+Small modules on purpose. The gate path (`policy.py`, 782 lines) has to be readable in one
 sitting — a gate you cannot read is not a gate.
 
 | Module | Role |

@@ -122,6 +122,11 @@ KEYS: tuple[Key, ...] = (
         "dedicated HOME for Claude jobs holding only the Claude OAuth state"),
     Key("TALOS_CLAUDE_WORKER_BIN", POLICY,
         "pinned claude binary path for worker jobs", default="claude"),
+    Key("TALOS_AGY_BACKEND", POLICY,
+        "agent-side gate for the worker's agy backend — without it "
+        "delegate_agy is not even in the manifest; the worker has its own "
+        "gate (TALOS_CLAUDE_WORKER_AGY_BIN / _AGY_HOME), both must say yes",
+        default="0", validate=_bool01),
     Key("TALOS_BROWSER_MCP_ENABLED", POLICY,
         "lets delegate_code jobs request an in-sandbox browser "
         "(chrome-devtools-mcp) — a Chrome with network inside the job widens "
