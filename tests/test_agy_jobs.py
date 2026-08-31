@@ -370,3 +370,57 @@ def test_stream_failure_tolerant_reading():
     # Fehlschlag bleibt der Returncode wie bisher.
     assert claudeworker.stream_failure({"type": "result", "result": "done"}) is None
     assert claudeworker.stream_failure({"event": "assistant"}) is None
+
+
+def test_production_path_builds_the_spawn_per_backend(tmp_path, monkeypatch):
+    """Der Produktionsweg injiziert KEINEN Spawn: handle_frame muss ihn pro
+    Backend selbst bauen — die agy-Argv darf nie an der claude-Binary landen
+    (gemessener Live-E2E-Befund: claude antwortete "unknown option
+    '--print-timeout'", weil serve() genau einen Spawn vorgebaut hatte)."""
+    jobs = _agy_jobs(tmp_path)
+    agy = jobs._agy
+    claude_marker = str(tmp_path / "claude")
+    monkeypatch.setenv("TALOS_CLAUDE_WORKER_BIN", claude_marker)
+    lief_ueber: list[str] = []
+
+    def fake_make_spawn(binary, **_kwargs):
+        def spawn(_argv, _cwd, _env, _limits):
+            lief_ueber.append(binary)
+            return FakeHandle(_agy_ok_stream(tmp_path / "x"))
+        return spawn
+
+    monkeypatch.setattr(claudeworker, "make_spawn", fake_make_spawn)
+    r1 = _frame_submit(jobs, "prod-agy", tmp_path / "job-p1", None, backend="agy")
+    assert r1 == {"ok": True, "state": "accepted"}
+    assert _warte_auf(jobs, "prod-agy", {"done"})["state"] == "done"
+    r2 = _frame_submit(jobs, "prod-claude", tmp_path / "job-p2", None)
+    assert r2 == {"ok": True, "state": "accepted"}
+    _warte_auf(jobs, "prod-claude", {"done", "failed"})
+    assert lief_ueber[0] == agy.bin            # agy-Job -> agy-Binary
+    assert lief_ueber[1] == claude_marker      # claude-Job -> claude-Binary
+
+
+def test_agy_real_tool_shape_yields_file_evidence(tmp_path):
+    """Die am Live-Lauf gemessene agy-Form: `step_update` mit
+    `step_type: "tool"`, Pfad in `tool_info.parameters.TargetFile`
+    (Grossschreibung genau so). Innen -> Beleg, aussen -> verworfen,
+    Nicht-Pfad-Werte (Kommandos) -> kein Beleg."""
+    ws = tmp_path / "ws"
+    inside = {"event": "step_update", "step_update": {
+        "step_type": "tool", "tool_name": "write_to_file",
+        "tool_info": {"name": "write_to_file",
+                      "parameters": {"TargetFile": str(ws / "agy-e2e.txt")}}}}
+    assert claudeworker.parse_stream_event(inside, ws) == (None, "agy-e2e.txt")
+    outside = {"event": "step_update", "step_update": {
+        "step_type": "tool", "tool_name": "write_to_file",
+        "tool_info": {"name": "write_to_file",
+                      "parameters": {"TargetFile": "/etc/passwd"}}}}
+    assert claudeworker.parse_stream_event(outside, ws) == (None, None)
+    kommando = {"event": "step_update", "step_update": {
+        "step_type": "tool", "tool_name": "run_command",
+        "tool_info": {"name": "run_command",
+                      "parameters": {"CommandLine": "rm -rf /"}}}}
+    assert claudeworker.parse_stream_event(kommando, ws) == (None, None)
+    kein_tool = {"event": "step_update", "step_update": {
+        "step_type": "agent_response", "text_delta": "text"}}
+    assert claudeworker.parse_stream_event(kein_tool, ws) == (None, None)

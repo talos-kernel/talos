@@ -334,11 +334,12 @@ def parse_stream_event(line: dict, workspace: Path) -> tuple[str | None, str | N
 
     Tolerant gegenueber beiden Backends: claude kennzeichnet Events mit
     `type`, agy mit `event`, und agy verschachtelt sein Abschluss-Event
-    (`result` ist ein Objekt, die Summary steht in `response`). Welche
-    tool-Events agy im Erfolgsfall wirklich sendet, zeigt erst der Live-E2E
-    — darum werden claude- UND plausibel agy-foermige Events gelesen, und wo
-    nichts passt, bleibt die Datei-Liste eben leer: Belege duerfen fehlen,
-    sie werden nie erfunden.
+    (`result` ist ein Objekt, die Summary steht in `response`). agys
+    Werkzeug-Schritte kommen als `step_update` mit `step_type: "tool"`;
+    der Pfad steht in `tool_info.parameters` (gemessen am Live-Lauf:
+    `write_to_file` mit `TargetFile`, Grossschreibung genau so). Jeder
+    absolute Pfad-Wert darin ist ein Kandidat — was ausserhalb des
+    Arbeitsbereichs zeigt, faellt weg, es wird nicht umgeschrieben.
     """
     if not isinstance(line, dict):
         return (None, None)
@@ -351,6 +352,26 @@ def parse_stream_event(line: dict, workspace: Path) -> tuple[str | None, str | N
             antwort = result.get("response")
             if isinstance(antwort, str) and antwort:
                 return (antwort[:MAX_SUMMARY_CHARS], None)
+        return (None, None)
+    if typ == "step_update":
+        schritt = line.get("step_update")
+        if not isinstance(schritt, dict) or schritt.get("step_type") != "tool":
+            return (None, None)
+        info = schritt.get("tool_info")
+        if not isinstance(info, dict):
+            return (None, None)
+        parameter = info.get("parameters")
+        if not isinstance(parameter, dict):
+            return (None, None)
+        basis = Path(workspace).resolve()
+        for wert in parameter.values():
+            if not isinstance(wert, str) or not wert.startswith("/"):
+                continue  # nur absolute Pfade sind Kandidaten — kein Raten
+            try:
+                relativ = Path(wert).resolve().relative_to(basis)
+            except (OSError, ValueError):
+                continue  # ausserhalb des Käfigs: verworfen, nicht umgeschrieben
+            return (None, relativ.as_posix())
         return (None, None)
     if typ in ("tool_use", "tool_call"):
         eingabe = line.get("input")
@@ -1028,7 +1049,12 @@ def serve(socket_path: str = DEFAULT_SOCKET, env_path: str = DEFAULT_ENV, *,
                  browser=browser, mcp_registry=mcp_registry,
                  mcp_enabled=mcp_enabled, agy=agy)
     limits = SandboxLimits(timeout_s=timeout_s)
-    hersteller = spawn if spawn is not None else make_spawn(claude_bin)
+    # Kein Default-Spawn hier: handle_frame baut ihn selbst — und zwar pro
+    # Backend (claude wie agy). Wer hier einen einzigen vorgefertigten Spawn
+    # durchreicht, schickt die agy-Argv an die claude-Binary (gemessen am
+    # ersten agy-Live-E2E: "unknown option '--print-timeout'"). Ein injizierter
+    # Spawn gilt bewusst fuer beide Backends (Testpfad).
+    hersteller = spawn
 
     pfad = Path(socket_path)
     if pfad.exists():

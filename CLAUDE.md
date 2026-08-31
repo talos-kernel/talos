@@ -14,7 +14,7 @@ preferences live in `USER.md`. All three are operator-owned prompt state and rel
 |---|---|
 | Gate path | `policy.py`, **782 lines** — has to stay readable in one sitting |
 | Tools | **27**, every one gated |
-| Suites | **2166** tests · **206** adversarial · 44 end-to-end |
+| Suites | **2168** tests · **206** adversarial · 44 end-to-end |
 | Home | <https://talos-agent.ch> · docs at `/docs/` |
 | Repository | `talos-kernel/talos` is the public source tree |
 
@@ -198,7 +198,7 @@ In practice:
 ```bash
 python3 -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt
 
-python -m pytest tests/ -q   # 2166 tests, ~30s
+python -m pytest tests/ -q   # 2168 tests, ~30s
 python redteam.py            # 206 adversarial cases — mandatory for any kernel change
 python e2e.py                # 44 cases against a real model (costs tokens and time)
 python -m talos --once       # single cycle, for diagnosis
