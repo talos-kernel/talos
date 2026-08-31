@@ -40,3 +40,7 @@ dist/
 # die nicht in den Baum gehoeren, aus dem sync-public.sh das oeffentliche Repo fuellt.
 scripts/*.local
 backups/
+
+# Der Vault ist die private Wissensbasis der Instanz (Betreiber-Namen, Pfade,
+# Erkenntnisse) — er gehoert nie in einen Sync-Pfad, auch nicht den privaten.
+vault/

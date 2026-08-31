@@ -390,20 +390,31 @@ def test_a_grandchild_writes_its_marker_when_nobody_cancels(tmp_path: Path) -> N
 @requires_sandbox
 def test_cancel_kills_the_grandchild_too(tmp_path: Path) -> None:
     marker = resolved(tmp_path) / "grandchild.txt"
+    started = resolved(tmp_path) / "started.txt"
     runner = shell(tmp_path, limits=SandboxLimits(timeout_s=30))
     outcome: dict[str, sandbox.SandboxResult] = {}
 
     def run() -> None:
-        outcome["result"] = runner.run(f"bash -c 'sleep 2; echo alive > {marker}' & wait")
+        outcome["result"] = runner.run(
+            f"bash -c 'echo go > {started}; sleep 3; echo alive > {marker}' & wait"
+        )
 
     thread = threading.Thread(target=run)
     thread.start()
+    # Erst abbrechen, wenn der Lauf WIRKLICH laeuft. Ohne den Handschlag landet das
+    # cancel() auf einem ausgelasteten Runner VOR dem Start des Kommandos — der Lauf
+    # schreibt seinen Marker trotzdem, und der Test kippt, ohne etwas getestet zu
+    # haben (auf dem geteilten macOS-CI-Runner gemessen).
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline and not started.exists():
+        time.sleep(0.02)
+    assert started.exists(), "der Lauf kam nie in Gang — kein Abbruch mitten drin moeglich"
     deadline = time.monotonic() + 10
     while time.monotonic() < deadline and not runner.cancel():
         time.sleep(0.02)
     thread.join(timeout=20)
 
-    time.sleep(2.5)  # ueber die Schlafzeit des Enkels hinaus
+    time.sleep(3.5)  # ueber die Schlafzeit des Enkels hinaus
     assert outcome["result"].cancelled is True
     assert not marker.exists()
 
