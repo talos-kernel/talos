@@ -282,6 +282,11 @@ def resolve_fallback(log: EventLog, registry, wanted: ModelSelection) -> ModelSe
     # Katalog nicht mehr die Wahrheit ueber die verfuegbaren Namen ist.
     from .credentials import base_url_var
 
+    # Dieselbe Stelle, dasselbe Argument: hier trifft die Modell-Konfiguration des
+    # Betreibers zum ersten Mal auf den Katalog, mit dem der Agent wirklich laeuft —
+    # und auf das Log. TALOS_MODEL_OVERRIDES gehoert zu dieser Konfiguration.
+    _reconcile_model_overrides(log, registry, wanted)
+
     if wanted.model and os.environ.get(base_url_var(wanted.provider), "").strip():
         return wanted
     try:
@@ -312,6 +317,39 @@ def resolve_fallback(log: EventLog, registry, wanted: ModelSelection) -> ModelSe
             "reason": "configured default is not in this catalog",
         }))
         return ersatz
+
+
+def _reconcile_model_overrides(log: EventLog, registry, wanted: ModelSelection) -> None:
+    """Haelt die installierten Overrides (`modelinfo`) an den echten Katalog und belegt,
+    was herausfaellt.
+
+    Bekannt ist, was dieser Katalog listet, plus das konfigurierte Modell: das laesst
+    `resolve_fallback` auch ausserhalb des Katalogs zu (eigene Adresse, lokaler
+    Server), und dann ist es das laufende Modell — sein Override darf nicht als
+    „unbekannt" verschwinden. Jeder Befund, auch die aus dem Parsen, wird hier ins
+    Event-Log geschrieben: `load_config` hat kein Log, und ein Override, der nie
+    trifft, hinterliesse sonst keine Spur. Ein Override fuegt dem Katalog NIE etwas
+    hinzu — `registry` wird gelesen, nicht veraendert.
+    """
+    from . import modelinfo
+
+    installiert = modelinfo.active()
+    if not installiert.entries and not installiert.dropped:
+        return
+    bekannt = {model for anbieter in _providers_of(registry) for model in anbieter.models}
+    if wanted.model:
+        bekannt.add(wanted.model)
+    bereinigt = modelinfo.reconcile(installiert, bekannt)
+    for grund in bereinigt.dropped:
+        log.append(Event("boot", "provider", "model.override_dropped", {"reason": grund}))
+    modelinfo.install(bereinigt)
+
+
+def _providers_of(registry) -> tuple:
+    """`providers` ist je nach Registry eine Methode ODER eine Eigenschaft (siehe
+    `_first_known`). Nachgesehen, nicht geraten."""
+    anbieterliste = registry.providers
+    return tuple(anbieterliste() if callable(anbieterliste) else anbieterliste)
 
 
 def _first_known(registry) -> ModelSelection | None:

@@ -461,6 +461,12 @@ TARGET_EXTRACTORS = {
     # Status lesen fasst nichts an — aber der Eintrag muss stehen: ein
     # Werkzeug ohne Extractor ist per Bauart DENY (siehe `decide`, Schritt 0.5).
     "delegate_status": lambda args: (),
+    # Kurskorrektur an einen laufenden Hintergrundauftrag: kein Ziel. `task_id` ist
+    # KEIN Pfad, sondern ein Schluessel im Hintergrund-Schreibtisch — ein Scheinziel im
+    # Dateisystem-Floor waere schlechter als keins. Jeder Werkzeugwunsch, den der
+    # gelenkte Lauf daraus macht, kommt einzeln hier vorbei, unter DESSEN Decke. Ob der
+    # Auftrag existiert und wem er gehoert, prueft der Schreibtisch — nach dem Kernel.
+    "delegate_steer": lambda args: (),
     # agy-Backend desselben Workers: der Frame waehlt den Motor, das Ziel
     # waehlt weiterhin nur der Kernel — dieselbe Wurzel wie `delegate_code`.
     "delegate_agy": lambda args: (claude_work_root(),),

@@ -55,6 +55,9 @@ Sender = Callable[[str, str], None]
 TrustLookup = Callable[[str], Trust]
 ActivityBegin = Callable[[str], Activity | None]
 StructuredSender = Callable[[str, StructuredMessage], None]
+# (run_id, status, reply) -> zustellen? Sieht die fertige Antwort VOR der Zustellung.
+# Der Zeitplan-Ticker haengt hier sein Gedaechtnis ein (`continuity.py`).
+ReplyHook = Callable[[str, str, str], bool]
 
 
 class ReplyStream(Protocol):
@@ -285,8 +288,18 @@ class Conductor:
         number = raw.rstrip(").").strip()
         return number.isdigit() and 1 <= int(number) <= len(ticket.entry.options)
 
-    def handle(self, update: Inbound) -> bool:
-        """Verarbeitet eine Nachricht. False, wenn sie übersprungen wurde (Dublette/fremd)."""
+    def handle(self, update: Inbound, *, before_reply: ReplyHook | None = None) -> bool:
+        """Verarbeitet eine Nachricht. False, wenn sie übersprungen wurde (Dublette/fremd).
+
+        `before_reply` sieht die fertige Antwort eines Agent-Laufs VOR der Zustellung
+        — mit `run_id`, Status und Text — und sagt, ob sie in den Chat soll. Es ist die
+        einzige Stelle, an der alle drei zusammen vorliegen: das Event-Log traegt
+        bewusst keinen Antworttext (eine Antwort kann Netzinhalt in ein append-only
+        Log tragen), und das Archiv ist optional und pro Konversation. Der Hook kann
+        nur ZURUECKHALTEN, nie etwas erlauben; ein Hook, der fliegt, stellt zu.
+        Kommandos, Freigaben und Rueckfragen laufen an ihm vorbei — sie sind keine
+        Antworten eines Laufs.
+        """
         run_id = new_run_id()
         fresh = self.log.append(
             Event(
@@ -432,7 +445,9 @@ class Conductor:
             return self._reply(update, run_id, "No approval is pending (it may have expired). Nothing ran.")
 
         with self.execution_lock:
-            erledigt = self._run_task(update, run_id, text, steerable=True)
+            erledigt = self._run_task(
+                update, run_id, text, steerable=True, before_reply=before_reply
+            )
         # Nach dem Lauf und ausserhalb des Schlosses: der Review liest und sendet, er
         # fuehrt nichts aus. Ihn drinnen zu halten hiesse, jeden anderen Lauf hinter
         # einem Bericht warten zu lassen.
@@ -729,11 +744,30 @@ class Conductor:
         # Antwort schon als Antwort auf seine letzte Frage gelesen.
         leading_note: str = "",
         plan: PlanRun | None = None,
-        # ⚠️ Voreingestellt NICHT lenkbar. Ein Hintergrundlauf laeuft unter `unattended`
-        # — dort sitzt niemand davor, und eine Korrektur mitten hinein waere genau der
-        # Fall, den die Decke ausschliesst. Nur die Wege, die ein Mensch gerade getippt
-        # hat, setzen das auf True.
+        # ⚠️ Voreingestellt NICHT lenkbar ueber das Vordergrund-Postfach. Das gehoert
+        # dem einen Lauf, vor dem gerade jemand sitzt; eine Chat-Nachricht waehrend
+        # eines Hintergrundlaufs meint fast immer den Vordergrund und darf nicht
+        # nebenbei in den falschen Lauf rutschen. Nur die Wege, die ein Mensch gerade
+        # getippt hat, setzen das auf True.
         steerable: bool = False,
+        # Ein Hintergrundlauf bekommt Korrekturen nur AUSDRUECKLICH adressiert
+        # (`delegate_steer` -> `background.SteerInbox`), nie aus dem Chat abgefangen.
+        # Es haengt an derselben Naht in `run_agent` wie die getippte Korrektur — es
+        # gibt bewusst keine zweite; nur das Postfach ist ein anderes. Voreingestellt
+        # AUS: nur `_start_background` verdrahtet es, weil nur dort ein Schreibtisch-
+        # Eintrag existiert, unter dem sich Anweisungen ablegen lassen.
+        steering: object | None = None,
+        # Not-Halt (/stopall): `should_stop` endet den Lauf an der naechsten
+        # Schrittgrenze (der laufende Modellaufruf bleibt unantastbar),
+        # `discard_reply` verwirft die fertige Antwort statt sie zuzustellen.
+        # Beides ist voreingestellt AUS — nur der Hintergrundpfad verdrahtet es,
+        # weil nur dort eine Abmeldung zwischen Tippen und Bericht liegen kann.
+        should_stop: Callable[[], bool] | None = None,
+        discard_reply: Callable[[], bool] | None = None,
+        # Zeitplan-Gedaechtnis: sieht (run_id, status, reply) VOR der Zustellung und
+        # darf sie zurueckhalten — etwa denselben Fehler zum zweiten Mal. Wie
+        # `discard_reply` nur in DENY-Richtung; None = zustellen wie bisher.
+        before_reply: ReplyHook | None = None,
     ) -> bool:
         text = update.text if text is None else text
         past = (
@@ -760,8 +794,9 @@ class Conductor:
                     initial_history=initial_history,
                     steps_used=steps_used,
                     plan=plan,
-                    redirect=self.redirect if steerable else None,
+                    redirect=self.redirect if steerable else steering,
                     final_check=self._final_check(text, run_id),
+                    should_stop=should_stop,
                 )
         except Exception as error:
             # Der Lauf ist tot — eine Frage, auf die er noch wartete, auch.
@@ -809,6 +844,12 @@ class Conductor:
                     "met": result.plan.met,
                 })
             )
+        # Voreinstellung fuer den Verwerfungs-Fall (/stopall) und den zurueckgehaltenen
+        # Bericht (Zeitplan-Gedaechtnis): nur der Zustell-Zweig unten setzt sie, der
+        # Parkplatz-Zweig kennt sie nicht — aber die Aktivitaets-Abrechnung danach
+        # fragt sie immer.
+        verworfen = False
+        zurueckgehalten = False
         if result.status is AgentStatus.NEEDS_HUMAN and result.pending is not None:
             # Der Freigabe-Dialog ist eine eigene Nachricht mit Buttons; was bis dahin
             # gewachsen ist, wird eingefroren statt ueberschrieben.
@@ -835,12 +876,37 @@ class Conductor:
             reply = _append_note(reply, trailing_note)
             if leading_note:
                 reply = f"{leading_note}\n\n{reply}"
-            sent = self._deliver(
-                update, run_id, reply, stream, approval_reply=approval_reply, media=media
+            verworfen = discard_reply is not None and discard_reply()
+            zurueckgehalten = (
+                not verworfen and before_reply is not None
+                and not self._reply_wanted(before_reply, run_id, result.status.value, reply)
             )
+            if verworfen:
+                # /stopall hat diesen Lauf unterwegs abgemeldet: sein Bericht geht
+                # nicht mehr raus — er kaeme einer Unterhaltung quer, die laengst
+                # weiter ist. Das Ereignis bleibt im Log belegbar, die Nachricht nicht.
+                self.log.append(Event(run_id, "conductor", "conductor.reply_discarded", {}))
+                sent = False
+            elif zurueckgehalten:
+                # Der Aufrufer (das Zeitplan-Gedaechtnis) hat die Antwort gesehen und
+                # haelt sie zurueck — derselbe Fehler wie beim Vorlauf. Belegbar bleibt
+                # alles: der Lauf steht im Log, die Entscheidung auch. Nur die Nachricht
+                # bleibt aus; gemerkt wird sie deshalb auch nicht (siehe unten).
+                self.log.append(Event(run_id, "conductor", "conductor.reply_suppressed", {}))
+                sent = False
+            else:
+                sent = self._deliver(
+                    update, run_id, reply, stream, approval_reply=approval_reply, media=media
+                )
         if activity is not None:
             if sent:
                 activity.succeed(self._usage_footer())
+            elif verworfen:
+                # Kein Fehler: die Zustellung war gewollt unterblieben, der Lauf selbst
+                # ist ordentlich zu Ende gegangen.
+                activity.succeed("discarded via /stopall")
+            elif zurueckgehalten:
+                activity.succeed("reply withheld — see the event log")
             else:
                 activity.fail("could not deliver the answer")
         # Erst merken, wenn die Antwort auch draussen ist. Ein Verlauf mit einer Antwort,
@@ -957,6 +1023,14 @@ class Conductor:
            teilen, schreiben einander hinein.
         3. **Eigener `run_id`.** Der Bericht laesst sich damit spaeter ueber
            `talos why` einem Lauf zuordnen, ohne ihn vom Vordergrund zu trennen.
+        4. **Lenkbar nur ausdruecklich adressiert.** `delegate_steer` legt eine
+           Kurskorrektur auf dem Schreibtisch ab; der Lauf liest sie an seiner
+           naechsten Schrittgrenze — an derselben Naht wie die getippte Korrektur im
+           Vordergrund, nur aus seinem eigenen Postfach. Wer lenken darf, entscheidet
+           die Herkunft, die HIER aufgezeichnet wird (Person und Unterhaltung des
+           Tippenden). Jede eingelegte Anweisung hinterlaesst `background.steered`
+           unter dem run_id dieses Laufs — die Richtungsaenderung ist damit im
+           Protokoll belegbar, nicht nur in der Antwort sichtbar.
         """
         from . import background as bg
 
@@ -966,7 +1040,10 @@ class Conductor:
             return self._reply(update, run_id,
                                "Background tasks are not available in this build "
                                "(no unattended ceiling wired).")
-        task = self.background.accept(prompt, run_id=run_id)
+        task = self.background.accept(
+            prompt, run_id=run_id,
+            principal=str(update.principal), conversation=update.conversation,
+        )
         if task is None:
             return self._reply(update, run_id, bg.FULL.format(n=self.background.busy()))
 
@@ -975,12 +1052,30 @@ class Conductor:
 
         def lauf() -> None:
             eigene = new_run_id()
+            # Der Beleg gehoert zum GELENKTEN Lauf: wer `talos why <eigene>` liest, soll
+            # sehen, wann welche Anweisung in die Historie kam — nicht nur, dass im
+            # Vordergrund irgendwann ein delegate_steer freigegeben wurde.
+            postfach = self.background.inbox(
+                task.task_id,
+                taken=lambda steer: self.log.append(Event(
+                    eigene, "background", "background.steered",
+                    {"task_id": task.task_id, "origin": steer.origin,
+                     "chars": len(steer.text), "text": steer.text},
+                )),
+            )
             try:
                 with self.unattended.active():
                     self._run_task(
                         replace(update, text=prompt), eigene,
                         text=prompt, past_override=(),
                         leading_note=bg.header(task),
+                        steering=postfach,
+                        # /stopall: an der Schrittgrenze keinen neuen Schritt mehr
+                        # beginnen und den fertigen Bericht verwerfen, wenn der
+                        # Auftrag unterwegs abgemeldet wurde. Der laufende
+                        # Modellaufruf selbst bleibt unantastbar.
+                        should_stop=lambda: self.background.was_cancelled(task.task_id),
+                        discard_reply=lambda: self.background.was_cancelled(task.task_id),
                     )
             except Exception as fehler:
                 self.log.append(Event(eigene, "background", "background.error",
@@ -997,6 +1092,21 @@ class Conductor:
         threading.Thread(target=lauf, daemon=True,
                          name=f"talos-bg-{task.number}").start()
         return self._reply(update, run_id, bg.receipt(task))
+
+    def _reply_wanted(self, hook: ReplyHook, run_id: str, status: str, reply: str) -> bool:
+        """Fragt den Aufrufer, ob die fertige Antwort in den Chat soll.
+
+        Fail-open in Richtung Zustellung: ein Hook, der fliegt, verschluckt keine
+        Antwort — er kostet nur seine eigene Wirkung, und der Fehler steht im Log.
+        Der Hook bekommt den `run_id`, damit er den Befund aus dem Protokoll liest
+        und nicht aus dem Text (die outcome.py-Doktrin).
+        """
+        try:
+            return bool(hook(run_id, status, reply))
+        except Exception as error:
+            self.log.append(Event(run_id, "conductor", "error",
+                                  {"stage": "before_reply", "error": str(error)}))
+            return True
 
     def _what_failed(self, run_id: str) -> str:
         """Die Tatsache neben die Erzaehlung — aus dem Protokoll dieses Laufs.

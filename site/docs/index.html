@@ -246,9 +246,9 @@ html.js .rv.in{opacity:1; transform:none}
     <p class="lede">That one decision shapes the rest of this manual. It is why the
     command list is short, and why a few obvious conveniences are missing on purpose.</p>
     <div class="spec-row">
-      <div class="spec"><b>2208</b>unit tests</div>
-      <div class="spec"><b>206/206</b>adversarial</div>
-      <div class="spec"><b>889</b>gate lines</div>
+      <div class="spec"><b>2321</b>unit tests</div>
+      <div class="spec"><b>208/208</b>adversarial</div>
+      <div class="spec"><b>895</b>gate lines</div>
       <div class="spec"><b>27</b>gated tools</div>
       <div class="spec"><b>30s</b>token life</div>
       <div class="spec"><b>0</b>default identities</div>
@@ -515,6 +515,7 @@ You:                  and add the offsite copy</pre>
       <tr><td>/log</td><td class="d">The recent events, in the chat.</td></tr>
       <tr><td>/revoke &lt;n&gt;</td><td class="d">Drop a standing approval, by its number from /allowed.</td></tr>
       <tr><td>/stop</td><td class="d">End the running task, including any open question. A parked approval outlives it until its TTL (5 min).</td></tr>
+      <tr><td>/stopall</td><td class="d">Stop everything stoppable: thought, queue, background tasks, pending approvals — discarded, never approved. Timed runs stay.</td></tr>
       </tbody>
     </table></div>
     <p>Every verdict the kernel can return:</p>

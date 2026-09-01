@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Callable
 
+from .background import SteerInbox
 from .channel import Principal
 from .executor import Executor, Status
 from .plan import BUDGET_REASON, PlanRun, parse_plan
@@ -56,6 +57,9 @@ _FOREIGN_CALL = re.compile(
 )
 # Eine Fremdnotation ist kurz. Alles darueber ist Prosa, die zufaellig so anfaengt.
 MAX_FOREIGN_CHARS = 300
+# Text eines per /stopall abgemeldeten Laufs. Fester Satz statt Modellprosa: der
+# Lauf endet an der Schrittgrenze, ohne dass noch ein Zug dafuer braende.
+STOPPED_NOTE = "[Stopped by the operator before the next step.]"
 # Zwei Nachfassversuche. Danach wird die Antwort ausgeliefert wie sie ist — eine
 # Endlosschleife waere schlimmer als eine schiefe Antwort, und der Zaehler des Laufs
 # laeuft ohnehin mit.
@@ -222,8 +226,17 @@ def run_agent(
     initial_history: tuple[str, ...] = (),
     steps_used: int = 0,
     plan: PlanRun | None = None,
-    redirect: Redirect | None = None,
+    # Das Postfach fuer Korrekturen an DIESEN Lauf: im Vordergrund `redirect.Redirect`
+    # (getippt), im Hintergrund `background.SteerInbox` (ueber `delegate_steer`
+    # adressiert). Beide liefern `take()` mit Eintraegen, die `as_turn()` koennen, und
+    # werden an derselben Schrittgrenze gelesen — es gibt bewusst keine zweite Naht.
+    redirect: Redirect | SteerInbox | None = None,
     final_check: FinalCheck | None = None,
+    # Not-Halt (/stopall): eine abstimmende Abfrage an der Schrittgrenze. Der
+    # laufende Modellaufruf selbst ist ein blockierender Subprozess und bleibt
+    # unantastbar — aber der NAECHSTE Schritt beginnt nicht mehr. None = nichts
+    # Neues, genau wie bisher.
+    should_stop: Callable[[], bool] | None = None,
 ) -> AgentResult:
     history = list(initial_history)
     active = plan
@@ -250,6 +263,19 @@ def run_agent(
                 steps=step - 1,
                 history=tuple(history),
                 plan=stopped,
+            )
+        # Der Not-Halt wird an derselben Schrittgrenze geprueft wie die Korrektur:
+        # der laufende Modellaufruf bleibt unantastbar, aber ein abgemeldeter Lauf
+        # (/stopall) beginnt keinen neuen Schritt mehr. Die Antwort ist eine
+        # Kernelsatz-Schablone, kein Modelltext — und wo der Aufrufer sie nicht
+        # mehr zustellt (verworfener Hintergrund-Bericht), erreicht sie niemanden.
+        if should_stop is not None and should_stop():
+            return AgentResult(
+                AgentStatus.ANSWERED,
+                STOPPED_NOTE,
+                steps=step - 1,
+                history=tuple(history),
+                plan=active,
             )
         # Eine Korrektur des Betreibers wird HIER eingelegt — zwischen zwei Schritten,
         # bevor der naechste Zug aus der Historie gebildet wird. In einen laufenden

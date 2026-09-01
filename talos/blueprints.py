@@ -8,7 +8,8 @@ Automatisierungs-Definition aus einer JSON-Datei, deren Zeitangabe menschenlesba
 
 JSON, nicht YAML: `requirements.txt` traegt keinen YAML-Parser, und das ist eine
 Zusicherung an den, der das hier installiert. Ein Blueprint ist ein flaches Objekt
-(`name`, `description`, `when`, `prompt`) — dafuer reicht die Standardbibliothek.
+(`name`, `description`, `when`, `prompt`; optional `continuity`, `monitor`, `probe` —
+siehe `continuity.py`) — dafuer reicht die Standardbibliothek.
 
 Drei Regeln halten die Schicht ehrlich:
 
@@ -37,7 +38,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from .schedule import MAX_INTERVAL_S, MIN_INTERVAL_S, ScheduleStore, Task
+from .schedule import MAX_INTERVAL_S, MIN_INTERVAL_S, ScheduleStore, Task, validate_probe
 
 MAX_NAME_CHARS = 40
 _NAME = re.compile(r"^[a-z0-9][a-z0-9-]*$")
@@ -134,9 +135,25 @@ class Blueprint:
     description: str
     when: str
     prompt: str
+    # Gedaechtnis und Sonde (`continuity.py`). Betreiber-Schalter wie `prompt`: sie
+    # werden an `ScheduleStore.add` durchgereicht und erteilen dort nichts — die Sonde
+    # ist ein `run_shell` unter derselben Decke wie der Lauf.
+    continuity: bool = False
+    monitor: bool = False
+    probe: str = ""
 
     def schedule_fields(self) -> dict:
-        return parse_when(self.when)
+        """Felder fuer `ScheduleStore.add` — die Schalter nur, wenn sie gesetzt sind.
+
+        Ein Blueprint ohne Schalter erzeugt exakt den Eintrag, den er vorher erzeugte;
+        das haelt die Zusicherung „ein Blueprint IST ein /every" nachpruefbar.
+        """
+        felder = parse_when(self.when)
+        if self.continuity:
+            felder["continuity"] = True
+        if self.monitor:
+            felder.update(monitor=True, probe=self.probe)
+        return felder
 
 
 @dataclass(frozen=True)
@@ -177,12 +194,35 @@ def _load_one(path: Path) -> Blueprint:
         parse_when(when)  # die Zeitangabe IST der Punkt — der Grund gehoert zur Datei
     except BlueprintError as fehler:
         raise BlueprintError(f"{path.name}: {fehler}") from None
+    continuity = _flag_field(roh, "continuity", path)
+    monitor = _flag_field(roh, "monitor", path)
+    probe = roh.get("probe", "")
+    if not isinstance(probe, str):
+        raise BlueprintError(f"{path.name}: 'probe' must be a string — one shell command")
+    try:
+        # Dieselbe Pruefung wie im Store, nur frueher: der Betreiber soll den Grund beim
+        # Schreiben der Datei sehen, nicht erst beim Installieren.
+        probe = validate_probe(probe, monitor=monitor)
+    except ValueError as fehler:
+        raise BlueprintError(f"{path.name}: {fehler}") from None
     return Blueprint(
         name=name,
         description=str(roh.get("description") or "").strip(),
         when=when,
         prompt=prompt,
+        continuity=continuity,
+        monitor=monitor,
+        probe=probe,
     )
+
+
+def _flag_field(roh: dict, key: str, path: Path) -> bool:
+    """Nur JSON-`true`/`false`. Ein "yes" oder eine 1 ist ein Tippfehler, den der
+    Betreiber sehen soll — nicht ein Schalter, der zufaellig an oder aus ist."""
+    value = roh.get(key, False)
+    if not isinstance(value, bool):
+        raise BlueprintError(f"{path.name}: '{key}' must be true or false")
+    return value
 
 
 def load(directory: Path) -> Catalog:

@@ -50,22 +50,55 @@ MIN_INTERVAL_S = 60
 MAX_INTERVAL_S = 7 * 24 * 3600
 MAX_TASKS = 20
 MAX_PROMPT_CHARS = 500
+# Eine Sonde ist ein Sensor, kein Skript: eine Zeile, kurz genug, dass `/schedules`
+# und das Protokoll sie ganz zeigen. Was mehr braucht, gehoert in den Auftrag selbst.
+MAX_PROBE_CHARS = 300
+# Was ein Lauf seinem Nachfolger hinterlaesst. Gedeckelt, weil das Ergebnis als Daten
+# in den naechsten Prompt wandert — ein ungedeckeltes Gedaechtnis waere ein Prompt,
+# der mit jedem Lauf waechst.
+MAX_RESULT_CHARS = 2000
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS schedules (
-    id           TEXT PRIMARY KEY,
-    conversation TEXT NOT NULL,
-    principal    TEXT NOT NULL,
-    prompt       TEXT NOT NULL,
-    interval_s   INTEGER NOT NULL,
-    cron         TEXT NOT NULL DEFAULT '',
-    once         INTEGER NOT NULL DEFAULT 0,
-    next_run     REAL NOT NULL,
-    created      REAL NOT NULL,
-    last_run     REAL
+    id               TEXT PRIMARY KEY,
+    conversation     TEXT NOT NULL,
+    principal        TEXT NOT NULL,
+    prompt           TEXT NOT NULL,
+    interval_s       INTEGER NOT NULL,
+    cron             TEXT NOT NULL DEFAULT '',
+    once             INTEGER NOT NULL DEFAULT 0,
+    next_run         REAL NOT NULL,
+    created          REAL NOT NULL,
+    last_run         REAL,
+    continuity       INTEGER NOT NULL DEFAULT 0,
+    monitor          INTEGER NOT NULL DEFAULT 0,
+    probe            TEXT NOT NULL DEFAULT '',
+    last_fingerprint TEXT NOT NULL DEFAULT '',
+    last_result      TEXT NOT NULL DEFAULT '',
+    last_error_key   TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_schedules_next ON schedules(next_run);
 """
+
+# Spalten, die eine BESTEHENDE Datei nachtraeglich bekommt — additiv, mit Vorgabe
+# „aus". Reihenfolge = Reihenfolge der Einfuehrung; nie eine Zeile entfernen.
+_MIGRATIONS = (
+    ("cron", "TEXT NOT NULL DEFAULT ''"),
+    ("once", "INTEGER NOT NULL DEFAULT 0"),
+    ("continuity", "INTEGER NOT NULL DEFAULT 0"),
+    ("monitor", "INTEGER NOT NULL DEFAULT 0"),
+    ("probe", "TEXT NOT NULL DEFAULT ''"),
+    ("last_fingerprint", "TEXT NOT NULL DEFAULT ''"),
+    ("last_result", "TEXT NOT NULL DEFAULT ''"),
+    ("last_error_key", "TEXT NOT NULL DEFAULT ''"),
+)
+
+# EINE Spaltenliste fuer jede Leseabfrage: `_task_from_row` zaehlt Positionen, und zwei
+# abweichende SELECTs waeren zwei Gelegenheiten, ein Feld in die falsche Spalte zu lesen.
+_COLUMNS = (
+    "id, conversation, principal, prompt, interval_s, next_run, created, last_run,"
+    " cron, once, continuity, monitor, probe, last_fingerprint, last_result, last_error_key"
+)
 
 UNATTENDED_REASON = (
     "unattended run — anything that needs your approval is reported, never performed"
@@ -90,6 +123,19 @@ class Task:
     # Einmalig: nach dem Lauf wird der Auftrag geloescht statt neu terminiert. Ein
     # „erinnere mich morgen um 9" darf nicht zum taeglichen Wecker werden.
     once: bool = False
+    # Gedaechtnis: das Ergebnis des Vorlaufs geht als DATEN in den naechsten Prompt, und
+    # ein Lauf, der im selben Fehler endet wie sein Vorgaenger, wird nur protokolliert.
+    continuity: bool = False
+    # Monitor: vor dem Modellzug liest eine Sonde (`probe`, ein Shell-Kommando) den
+    # Zustand; ist er unveraendert, faellt der Modellzug aus. Die Sonde ist ein
+    # gewoehnlicher `run_shell` des Auftrag-Principals — sie bekommt nichts, was ein
+    # Zeitplan-Lauf nicht auch bekaeme (siehe `continuity.py`).
+    monitor: bool = False
+    probe: str = ""
+    # Lauf-Zustand, vom Ticker geschrieben, nie vom Betreiber. Leer = noch kein Lauf.
+    last_fingerprint: str = ""
+    last_result: str = ""
+    last_error_key: str = ""
 
     def describe(self) -> str:
         if self.cron:
@@ -99,7 +145,45 @@ class Task:
         else:
             minutes = self.interval_s // 60
             wann = f"every {minutes} min" if minutes < 60 else f"every {minutes // 60} h"
-        return f"{self.id}  {wann}  — {self.prompt}"
+        schalter = [name for name, an in (("continuity", self.continuity),
+                                          ("monitor", self.monitor)) if an]
+        zusatz = f"  [{', '.join(schalter)}]" if schalter else ""
+        return f"{self.id}  {wann}  — {self.prompt}{zusatz}"
+
+
+def _flag(value: object) -> bool:
+    """Nur eine echte 1 schaltet ein. NULL, Text, 2, „banana" — alles heisst AUS.
+
+    Bewusst strenger als `bool()`: diese Schalter geben dem Lauf etwas dazu (ein
+    Gedaechtnis, eine Sonde). Ein kaputter Wert darf eine Funktion nur abschalten,
+    nie eine anschalten, die der Betreiber nicht angelegt hat. `once` bleibt bei
+    `bool()`, weil dort die sichere Richtung die andere ist: ein Einmal-Auftrag, der
+    wegen Muell in der Spalte zum Dauerwecker wuerde, ist das schlimmere Ergebnis.
+    """
+    return value is True or (type(value) is int and value == 1)
+
+
+def _text(value: object) -> str:
+    return value if isinstance(value, str) else ""
+
+
+def _task_from_row(r: tuple) -> Task:
+    probe = _text(r[12])
+    return Task(
+        id=r[0], conversation=r[1], principal=r[2], prompt=r[3], interval_s=int(r[4]),
+        next_run=float(r[5]), created=float(r[6]),
+        last_run=float(r[7]) if r[7] is not None else None,
+        cron=str(r[8]) if r[8] else "",
+        once=bool(r[9]),
+        continuity=_flag(r[10]),
+        # Ein Monitor ohne Sonde hat nichts zu lesen — also ist er keiner, egal was
+        # die Spalte sagt. Sonst liefe der Auftrag gegen einen leeren Befehl.
+        monitor=_flag(r[11]) and bool(probe),
+        probe=probe,
+        last_fingerprint=_text(r[13]),
+        last_result=_text(r[14]),
+        last_error_key=_text(r[15]),
+    )
 
 
 class UnattendedCeiling:
@@ -173,15 +257,7 @@ class ScheduleStore:
             conn = sqlite3.connect(str(path), check_same_thread=False)
             conn.execute("PRAGMA journal_mode=WAL")
             conn.executescript(_SCHEMA)
-            # Eine BESTEHENDE Datei bekommt durch `CREATE TABLE IF NOT EXISTS` keine
-            # neuen Spalten. Ohne diese Zeilen startet ein Update gegen eine aeltere
-            # Datenbank und faellt beim ersten Anlegen um — auf einer laufenden Instanz,
-            # deren Zeitplaene bis dahin funktioniert haben.
-            vorhanden = {row[1] for row in conn.execute("PRAGMA table_info(schedules)")}
-            for spalte, typ in (("cron", "TEXT NOT NULL DEFAULT ''"),
-                                ("once", "INTEGER NOT NULL DEFAULT 0")):
-                if spalte not in vorhanden:
-                    conn.execute(f"ALTER TABLE schedules ADD COLUMN {spalte} {typ}")
+            _migrate(conn)
             conn.commit()
             self._conn = conn
         except (sqlite3.Error, OSError, ValueError) as error:
@@ -195,17 +271,23 @@ class ScheduleStore:
     def add(
         self, *, conversation: str, principal: str, prompt: str, interval_s: int = 0,
         cron: str = "", once: bool = False, now: float | None = None,
+        continuity: bool = False, monitor: bool = False, probe: str = "",
     ) -> Task | None:
         """Legt einen Auftrag an. `None` = abgelehnt (Grenzen, kein Speicher).
 
         Drei Wege, ein Ergebnis: Intervall, Cron-Ausdruck oder Einmal-Termin muenden
         alle in ein `next_run`. `due()` kennt die Unterscheidung deshalb gar nicht —
         sie faellt beim Anlegen und beim Nachterminieren, sonst nirgends.
+
+        `continuity`, `monitor` und `probe` sind Schalter des Betreibers (Blueprint),
+        nie des Modells. Sie erteilen nichts: die Sonde ist ein `run_shell` wie jeder
+        andere, das Gedaechtnis ist Text, der als Daten in den Prompt geht.
         """
         text = " ".join(str(prompt).split())[:MAX_PROMPT_CHARS]
         seconds = int(interval_s)
         if not text or self._conn is None:
             return None
+        sonde = validate_probe(probe, monitor=bool(monitor))
         started = time.time() if now is None else float(now)
         if cron:
             from .cron import parse as _cron_parse
@@ -240,13 +322,17 @@ class ScheduleStore:
                     created=started,
                     cron=str(cron),
                     once=bool(once),
+                    continuity=bool(continuity),
+                    monitor=bool(monitor),
+                    probe=sonde,
                 )
                 self._conn.execute(
                     "INSERT INTO schedules (id, conversation, principal, prompt, interval_s,"
-                    " cron, once, next_run, created, last_run)"
-                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)",
+                    " cron, once, next_run, created, last_run, continuity, monitor, probe)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)",
                     (task.id, task.conversation, task.principal, task.prompt,
-                     task.interval_s, task.cron, int(task.once), task.next_run, task.created),
+                     task.interval_s, task.cron, int(task.once), task.next_run, task.created,
+                     int(task.continuity), int(task.monitor), task.probe),
                 )
                 self._conn.commit()
                 return task
@@ -258,17 +344,47 @@ class ScheduleStore:
         """Faellige Auftraege. Der Aufrufer quittiert mit `mark_run`."""
         moment = time.time() if now is None else float(now)
         return self._rows(
-            "SELECT id, conversation, principal, prompt, interval_s, next_run, created,"
-            " last_run, cron, once FROM schedules WHERE next_run <= ? ORDER BY next_run",
+            f"SELECT {_COLUMNS} FROM schedules WHERE next_run <= ? ORDER BY next_run",
             (moment,),
         )
 
     def list_for(self, conversation: str) -> tuple[Task, ...]:
         return self._rows(
-            "SELECT id, conversation, principal, prompt, interval_s, next_run, created,"
-            " last_run, cron, once FROM schedules WHERE conversation = ? ORDER BY created",
+            f"SELECT {_COLUMNS} FROM schedules WHERE conversation = ? ORDER BY created",
             (str(conversation),),
         )
+
+    def record_probe(self, task_id: str, fingerprint: str) -> None:
+        """Merkt den Abdruck einer ERFOLGREICH gelesenen Sonde.
+
+        Nur der Ticker ruft das, und nur nach einer Lesung, die der Kernel durchgelassen
+        und die Shell zu Ende gebracht hat. Ein Fehlversuch ist kein Messwert und
+        ueberschreibt den letzten guten Abdruck nicht — sonst hiesse „Sonde kaputt"
+        beim naechsten Mal „unveraendert".
+        """
+        self._update("UPDATE schedules SET last_fingerprint = ? WHERE id = ?",
+                     (str(fingerprint), str(task_id)))
+
+    def record_result(self, task_id: str, *, result: str, error_key: str) -> None:
+        """Merkt, wie der Lauf ausging: seinen Text (gedeckelt) und seinen Fehlerschluessel.
+
+        Der Deckel liegt HIER und nicht beim Aufrufer, weil der Text als Daten in den
+        naechsten Prompt wandert — die Grenze gehoert an die Stelle, die schreibt.
+        """
+        self._update(
+            "UPDATE schedules SET last_result = ?, last_error_key = ? WHERE id = ?",
+            (str(result)[:MAX_RESULT_CHARS], str(error_key), str(task_id)),
+        )
+
+    def _update(self, sql: str, params: tuple) -> None:
+        with self._lock:
+            if self._conn is None:
+                return
+            try:
+                self._conn.execute(sql, params)
+                self._conn.commit()
+            except sqlite3.Error:
+                self._conn.rollback()
 
     def mark_run(self, task_id: str, *, now: float | None = None) -> None:
         """Setzt den naechsten Termin — VOR der Ausfuehrung aufzurufen.
@@ -361,10 +477,46 @@ class ScheduleStore:
                 rows = self._conn.execute(sql, params).fetchall()
             except sqlite3.Error:
                 return ()
-        return tuple(
-            Task(r[0], r[1], r[2], r[3], int(r[4]), float(r[5]), float(r[6]),
-                 float(r[7]) if r[7] is not None else None,
-                 str(r[8]) if len(r) > 8 and r[8] else "",
-                 bool(r[9]) if len(r) > 9 else False)
-            for r in rows
-        )
+        return tuple(_task_from_row(r) for r in rows)
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Bringt eine BESTEHENDE Datei auf den Stand von `_SCHEMA` — additiv und tolerant.
+
+    `CREATE TABLE IF NOT EXISTS` ergaenzt keine Spalten. Ohne diese Funktion startet ein
+    Update gegen eine aeltere Datenbank und faellt beim ersten Anlegen um — auf einer
+    laufenden Instanz, deren Zeitplaene bis dahin funktioniert haben.
+
+    Tolerant heisst: schlaegt ein `ALTER` fehl (ein zweiter Prozess war schneller), zaehlt
+    nur, ob die Spalte danach da ist. Fehlt sie wirklich, fliegt der Fehler weiter und der
+    Speicher gilt als nicht verfuegbar — „keine Zeitplaene" ist ehrlicher als Zeitplaene
+    gegen ein Schema, das die Leseabfrage nicht versteht.
+    """
+    vorhanden = {row[1] for row in conn.execute("PRAGMA table_info(schedules)")}
+    for spalte, typ in _MIGRATIONS:
+        if spalte in vorhanden:
+            continue
+        try:
+            conn.execute(f"ALTER TABLE schedules ADD COLUMN {spalte} {typ}")
+        except sqlite3.OperationalError:
+            jetzt = {row[1] for row in conn.execute("PRAGMA table_info(schedules)")}
+            if spalte not in jetzt:
+                raise
+
+
+def validate_probe(probe: object, *, monitor: bool) -> str:
+    """Die Sonde beim Anlegen pruefen — Tippfehler sollen den Betreiber sofort erreichen.
+
+    Monitor und Sonde gehoeren zusammen: ein Monitor ohne Sonde haette nichts zu
+    vergleichen, eine Sonde ohne Monitor liefe nie. Beides ist ein Irrtum, kein
+    Zustand. Eine Zeile und gedeckelt, weil eine Sonde ein Sensor ist, kein Skript —
+    und weil `/schedules` und das Protokoll sie ganz zeigen sollen.
+    """
+    text = str(probe or "").strip()
+    if bool(text) != monitor:
+        raise ValueError("monitor and probe belong together — set both or neither")
+    if "\n" in text or "\r" in text:
+        raise ValueError("a probe is one line — put anything longer into the task itself")
+    if len(text) > MAX_PROBE_CHARS:
+        raise ValueError(f"a probe is at most {MAX_PROBE_CHARS} characters")
+    return text

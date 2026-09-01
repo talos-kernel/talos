@@ -167,6 +167,45 @@ def check_model(provider: str, model: str, *, claude_bin: str, hermes_bin: str,
     return tuple(zeilen)
 
 
+def check_model_overrides(overrides, *, known: frozenset[str] | None) -> tuple[Check, ...]:
+    """Die Betreiber-Overrides (`TALOS_MODEL_OVERRIDES`): was gilt, was herausfiel.
+
+    Nie kritisch — ein Override, der nicht trifft, kostet einen Preis in `/usage`,
+    keinen Start. Aber sichtbar: der Befund aus dem Laden (falsches Feld) und der aus
+    dem Abgleich (Modell, das kein Katalog listet) stehen hier, jeder einzeln.
+    `known=None` heisst: der Katalog war nicht ladbar, die Namen bleiben ungeprueft —
+    und das steht dann dabei, statt als „alles gut" durchzugehen.
+    """
+    from . import modelinfo
+
+    if not overrides.entries and not overrides.dropped:
+        return ()
+    bereinigt = modelinfo.reconcile(overrides, known) if known is not None else overrides
+    zeilen: list[Check] = []
+    if bereinigt.entries:
+        namen = ", ".join(sorted(bereinigt.entries))
+        nachsatz = "" if known is not None else " (names not checked — catalog not loadable)"
+        zeilen.append(Check(
+            "model", "overrides", OK,
+            f"{len(bereinigt.entries)} model(s) corrected via {modelinfo.ENV_VAR}: {namen}{nachsatz}",
+        ))
+    zeilen += [Check("model", "override dropped", WARN, grund) for grund in bereinigt.dropped]
+    return tuple(zeilen)
+
+
+def _known_models(overrides) -> frozenset[str] | None:
+    """Der Massstab fuer die Override-Namen — nur geholt, wenn es etwas zu pruefen gibt,
+    weil er den Anbieter-Katalog laedt. Nicht ladbar heisst `None`, nie „leer"."""
+    if not overrides.entries:
+        return frozenset()
+    from . import models
+
+    try:
+        return models.known_model_ids()
+    except Exception:
+        return None
+
+
 def check_channels(*, bot_token: str, mail_host: str, mail_user: str,
                    mail_password: str, mail_authserv_id: str = "") -> tuple[Check, ...]:
     """Nur *ob* gesetzt, nie was. Der Token wird hier absichtlich nicht geprueft —
@@ -307,6 +346,9 @@ def collect(config, *, online: bool = False, get=None) -> tuple[Check, ...]:
             claude_bin=config.claude_bin, hermes_bin=config.hermes_bin,
             credentials=config.api_credentials,
         )
+        befunde += check_model_overrides(
+            config.model_overrides, known=_known_models(config.model_overrides),
+        )
         befunde += check_channels(
             bot_token=config.bot_token, mail_host=config.mail_host,
             mail_user=config.mail_user, mail_password=config.mail_password,
@@ -392,6 +434,7 @@ __all__ = [
     "check_config",
     "check_identity",
     "check_model",
+    "check_model_overrides",
     "check_python",
     "check_sandbox",
     "check_state",

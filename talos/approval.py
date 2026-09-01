@@ -176,6 +176,34 @@ class ApprovalStore:
         with self._lock:
             self._pending = {k: v for k, v in self._pending.items() if k != conversation}
 
+    def pending_count(self) -> int:
+        """Offene Freigaben ueber ALLE Chats — fuer `/status` und `/stopall`.
+
+        Zaehlt nur, was auch wirklich noch entscheidbar ist: Abgelaufenes wird
+        wie bei `get()` verworfen, nicht mitgezaehlt. Eine Zahl, die Totes
+        mitzaehlt, wuerde im Status eine offene Frage behaupten, die laengst
+        keine mehr ist.
+        """
+        with self._lock:
+            jetzt = self._clock()
+            self._pending = {
+                k: v for k, v in self._pending.items() if jetzt < v.expires_at
+            }
+            return len(self._pending)
+
+    def discard_all(self) -> int:
+        """Verwirft ALLE offenen Freigaben und sagt, wie viele es waren (`/stopall`).
+
+        ⚠️ Verwerfen ist die DENY-Richtung: die geparkte Handlung laeuft nie —
+        wer sie will, muss sie neu anstossen und erneut freigeben. Das Gegenteil
+        (ein Not-Halt, der freigaebe) existiert bewusst nicht: eine unbeantwortete
+        Frage darf durch einen Stopp-Knopf nicht in eine Erlaubnis kippen.
+        """
+        with self._lock:
+            anzahl = len(self._pending)
+            self._pending = {}
+            return anzahl
+
     def target_unchanged(self, rec: Pending) -> bool:
         """Exec-Zeit-Neubindung: kein Ziel hat sich seit dem Fragen geändert."""
         return fingerprint(rec.targets) == rec.ask_fingerprint

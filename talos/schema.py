@@ -96,6 +96,22 @@ def _mcp_server_list(value: str) -> str:
     return ",".join(namen)
 
 
+def _model_overrides(value: str) -> str:
+    """Ein JSON-Objekt auf einer Zeile, Schluessel = Modell-ID (`modelinfo.parse`).
+
+    Nur die FORM ist hier ein Fehler. Ein unbekanntes Feld oder ein unbekannter
+    Modellname faellt beim Laden mit Warnung heraus — das ist eine Auskunft, kein
+    Grund, den Schreibbefehl abzulehnen. Die Meldung nennt nie den Wert.
+    """
+    from .modelinfo import parse
+
+    text = _one_line(value)
+    # `config set` stellt den Schluesselnamen selbst voran — die Meldung nennt deshalb
+    # „the value", sonst stuende der Name zweimal in einer Zeile.
+    parse(text, variable="the value")
+    return text
+
+
 KEYS: tuple[Key, ...] = (
     # --- Politik: die drei, mit denen man den Kernel umstellt statt ihn zu ueberreden.
     Key("TALOS_ALLOWED_PRINCIPALS", POLICY,
@@ -176,6 +192,17 @@ KEYS: tuple[Key, ...] = (
         "comma-separated provider/model chain tried in order when a run fails with a "
         "classified error (e.g. ollama/qwen3:27b,nvidia-nim/meta/llama-3.3-70b-instruct) "
         "— the persisted model choice is never touched", validate=_one_line),
+    # SETTING wie TALOS_MODEL, und aus demselben Grund: das Kriterium oben — kann die
+    # Aenderung Befehlsgeber zulassen, einen Filter lockern, Daten umleiten oder
+    # Zugangsdaten ersetzen? Eine Zahl UEBER ein Modell kann nichts davon. Die
+    # Feldliste ist geschlossen (`catalog.MODEL_INFO_FIELDS`) und fuehrt weder Anbieter
+    # noch Adresse noch Schluessel; ein Override, der das koennte, waere Politik.
+    Key("TALOS_MODEL_OVERRIDES", SETTING,
+        "one JSON object on one line, keyed by model id, correcting what the catalog "
+        "does not know about a model: context_window (tokens), input_price and "
+        "output_price (USD per million tokens), vision and reasoning (true/false) — "
+        "never a provider, url or key; unknown ids and fields are dropped with a "
+        "warning, broken JSON stops the start", validate=_model_overrides),
     Key("TALOS_OWNER_LABEL", SETTING, "how the agent addresses its operator",
         validate=_one_line),
     Key("TELEGRAM_BOT_USERNAME", SETTING, "shown in the greeting; purely cosmetic",

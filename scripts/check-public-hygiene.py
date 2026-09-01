@@ -26,6 +26,7 @@ ALLOWED_ENDPOINT_FIXTURE_HOSTS = {
     "tests/test_credentials.py": frozenset({"localhost"}),
     "tests/test_fallback.py": frozenset({"localhost"}),
     "tests/test_first_run.py": frozenset({"localhost"}),
+    "tests/test_model_overrides.py": frozenset({"localhost"}),
     "tests/test_web.py": frozenset({
         "127.0.0.1", "127.9.9.9", "169.254.169.254", "::1", "localhost",
     }),

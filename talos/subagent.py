@@ -49,6 +49,19 @@ ANSWER_CUT = " […delegated answer truncated]"
 
 READ_ONLY_REASON = "delegated run — reading only, by construction"
 
+# Werkzeuge, die ein Untergebener NICHT bekommt, obwohl sie `Effect.READ` sind: Steuern
+# ist das eine Lesen, das keines ist. `delegate_steer` bewegt einen ANDEREN Lauf — einen
+# Hintergrundlauf unter der unbeaufsichtigten Decke, der schreiben darf, wo der Kernel
+# ALLOW sagt. Ein Untergebener, der ihn lenken koennte, haette ueber den Umweg genau die
+# Leine, die ihm hier genommen wird: er entsteht aus Modelltext und muss WENIGER koennen
+# als sein Auftraggeber, nicht ueber Bande gleich viel. READ bleibt die ehrliche
+# Einordnung des Werkzeugs (nach aussen wirkt es nicht, die Decke des Ziels bleibt);
+# diese Liste sagt nur, WER es rufen darf. Namentlich, weil das Manifest keinen Begriff
+# fuer „lenkt einen anderen Lauf" hat — und ein neues Feld fuer ein Werkzeug waere mehr
+# Kernel als Nutzen.
+NOT_FOR_DELEGATES = frozenset({"delegate_steer"})
+STEER_REASON = "delegated run — steering another run is not reading"
+
 
 class ReadOnlyCeiling:
     """Die vierte Decke: waehrend eines delegierten Laufs ist alles ausser Lesen `DENY`.
@@ -91,6 +104,8 @@ class ReadOnlyCeiling:
         """Verschaerft — und kann per Konstruktion nichts erlauben."""
         if not self.is_delegated():
             return decision
+        if spec is not None and spec.name in NOT_FOR_DELEGATES:
+            return stricter(decision, Decision(Verdict.DENY, STEER_REASON))
         if spec is not None and spec.effect is Effect.READ and decision.verdict is not Verdict.NEEDS_HUMAN:
             return decision
         return stricter(decision, Decision(Verdict.DENY, READ_ONLY_REASON))
@@ -119,7 +134,9 @@ __all__ = [
     "DELEGATE_MAX_STEPS",
     "MAX_PARALLEL",
     "MAX_QUESTION_CHARS",
+    "NOT_FOR_DELEGATES",
     "READ_ONLY_REASON",
+    "STEER_REASON",
     "ReadOnlyCeiling",
     "bound_answer",
 ]

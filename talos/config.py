@@ -16,6 +16,7 @@ from .credentials import (
     from_lookup,
     parse_worker_socket,
 )
+from . import modelinfo
 from .mcpservers import SERVER_NAME
 from .wabroker import DEFAULT_CLI_DIR as DEFAULT_WA_BROKER_CLI_DIR
 from .wabroker import DEFAULT_QUEUE_PATH as DEFAULT_WA_BROKER_QUEUE
@@ -174,6 +175,11 @@ class TalosConfig:
     # `provider/model`. Leer heisst: kein Fallback, ein Fehler ist ein Fehler.
     # Sie gilt pro Lauf und ruehrt die persistierte Modellwahl nie an.
     model_fallbacks: str = ""
+    # Betreiber-Korrekturen an den Eckdaten einzelner Modelle (TALOS_MODEL_OVERRIDES,
+    # `modelinfo.py`): Kontextfenster, Preise, Faehigkeiten. Dieselbe Ebene wie
+    # TALOS_MODEL — eine Entscheidung ueber das Modell, nie ueber den Weg dorthin.
+    # Kaputtes JSON ist ein Startfehler; Unbekanntes faellt mit Spur heraus.
+    model_overrides: modelinfo.Overrides = field(default_factory=lambda: modelinfo.EMPTY)
     # Der Socket des Modell-Workers (TALOS_MODEL_WORKER=socket://…). Leer heisst:
     # Direktweg — Vorgabe. Gesetzt heisst: der Agent haelt KEINE Provider-Schluessel
     # mehr; `api_credentials` ist dann absichtlich leer, und das ist der Soll-Zustand.
@@ -411,6 +417,9 @@ def load_config(*, require_channel: bool = True) -> TalosConfig:
             or secrets.get("TALOS_MODEL", DEFAULT_MODEL)
         ),
         model_fallbacks=_value("TALOS_MODEL_FALLBACKS"),
+        # Wirft mit dem Variablennamen, nie mit dem Wert — ein Startabbruch, weil still
+        # ignorierte Betreiber-Konfiguration die schlimmere Variante ist.
+        model_overrides=modelinfo.parse(_value(modelinfo.ENV_VAR)),
         # ⚠️ Bewusst NUR das Prozess-Env, nicht die Env-Dateien: `ApiReasoner` liest
         # dieselbe Variable beim Bauen aus `os.environ` (die Naht gehoert dem
         # Reasoner, nicht diesem Modul). Zwei Quellen hiesse: in `talos.env`
@@ -470,4 +479,21 @@ def load_config(*, require_channel: bool = True) -> TalosConfig:
     # Ladevorgang in run() braeche sonst den Kanal.
     if secrets.get("TALOS_AGENT_CONSULT_TOKEN"):
         os.environ.pop("TALOS_AGENT_CONSULT_TOKEN", None)
+    # Die Modell-Eckdaten des Betreibers werden EINMAL hier festgeschrieben und danach
+    # nur gelesen (Zaehler, Kommandozentrale, `talos models`). Immer, auch leer: ein
+    # Neuladen ohne Overrides darf keine alten stehen lassen.
+    modelinfo.install(konfig.model_overrides)
     return konfig
+
+
+def load_model_overrides() -> modelinfo.Overrides:
+    """Nur die Modell-Overrides, aus denselben drei Quellen wie alles andere.
+
+    Fuer `talos models`: der Befehl zeigt den Katalog auch ohne Token und Allowlist,
+    und die Overrides gehoeren zu dieser Anzeige. Wirft wie `load_config` bei
+    kaputtem JSON — mit dem Variablennamen, nie mit dem Wert.
+    """
+    secrets = {**_read_env_file(LOCAL_ENV), **_read_env_file(SECRETS_ENV)}
+    return modelinfo.parse(
+        (os.environ.get(modelinfo.ENV_VAR) or secrets.get(modelinfo.ENV_VAR, "")).strip()
+    )

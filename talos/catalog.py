@@ -28,11 +28,16 @@ from dataclasses import dataclass
 __all__ = [
     "AUTH_KINDS",
     "WIRE_KINDS",
+    "MODEL_INFO",
+    "MODEL_INFO_FIELDS",
     "PROVIDERS",
+    "ModelInfo",
     "ProviderInfo",
     "get",
     "by_auth",
     "by_wire",
+    "model_ids",
+    "model_info",
     "slugs",
     "without_models",
 ]
@@ -80,6 +85,51 @@ class ProviderInfo:
     @property
     def needs_key(self) -> bool:
         return self.auth in _KEYED_AUTH
+
+
+# Die Felder, die ein Modell beschreiben — und die EINZIGEN, die ein Betreiber per
+# `TALOS_MODEL_OVERRIDES` korrigieren darf. Geschlossen, damit ein Override nie
+# Anbieter, Adresse oder Schluesselnamen tragen kann: das waere ein zweiter Weg zu
+# Rechten, am Katalog und an `credentials.py` vorbei (siehe `modelinfo.py`).
+MODEL_INFO_FIELDS: tuple[str, ...] = (
+    "context_window", "input_price", "output_price", "vision", "reasoning",
+)
+
+
+@dataclass(frozen=True)
+class ModelInfo:
+    """Eckdaten eines Modells. Unveraenderlich.
+
+    `0` und `False` heissen UNBEKANNT — nie „gratis" und nie „kann es nicht". Ein
+    Verbraucher, der aus 0 einen Preis von null macht, erfindet eine Zahl; deshalb
+    fragt er `has_prices`, nicht den Wert. Preise gelten je Million Token in USD,
+    das Fenster in Token.
+
+    `overridden` nennt die Felder, die vom Betreiber stammen. Die Anzeige braucht das,
+    damit niemand den Katalog fuer die Quelle einer Zahl haelt, die er nie enthielt.
+    """
+
+    context_window: int = 0
+    input_price: float = 0.0
+    output_price: float = 0.0
+    vision: bool = False
+    reasoning: bool = False
+    overridden: frozenset[str] = frozenset()
+
+    @property
+    def has_prices(self) -> bool:
+        """Gibt es einen belegten Preis? Auch „0, vom Betreiber gesetzt" zaehlt: ein
+        lokales Modell kostet wirklich nichts, und das ist eine Auskunft, kein Loch."""
+        return bool({"input_price", "output_price"} & self.overridden) or (
+            self.input_price > 0 or self.output_price > 0
+        )
+
+    @property
+    def known(self) -> bool:
+        return bool(self.overridden) or bool(
+            self.context_window or self.input_price or self.output_price
+            or self.vision or self.reasoning
+        )
 
 
 # --- Der Katalog ----------------------------------------------------------------------
@@ -550,6 +600,36 @@ PROVIDERS: tuple[ProviderInfo, ...] = (
 )
 
 
+# --- Modell-Eckdaten -------------------------------------------------------------------
+#
+# ABSICHTLICH LEER, aus demselben Grund, aus dem eine `base_url` leer bleiben darf:
+# Preise und Fenster wechseln bei manchen Anbietern im Monatsrhythmus, und eine
+# veraltete Zahl hier saehe aus wie Wissen. `/usage` rechnete dann mit einem Tarif,
+# den es nicht mehr gibt, und niemand koennte sagen, woher er stammt. Wer die Zahlen
+# braucht, traegt sie in `TALOS_MODEL_OVERRIDES` ein (`modelinfo.py`) — die Anzeige
+# nennt sie dann als Wort des Betreibers, nicht als unseres. Kommt hier je ein
+# belegter Eintrag hinzu, legt sich der Override Feld fuer Feld darueber; er ersetzt
+# den Eintrag nie ganz und legt nie einen neuen an.
+MODEL_INFO: dict[str, ModelInfo] = {}
+
+_UNKNOWN_MODEL = ModelInfo()
+
+
+def model_info(model_id: str) -> ModelInfo:
+    """Was der ausgelieferte Katalog ueber ein Modell sagt — oder `ModelInfo()`.
+
+    Nie `None`: der Aufrufer soll Felder lesen koennen, ohne vorher zu fragen, ob es
+    den Eintrag gibt. Unbekannt heisst hier 0/False, und die Verbraucher pruefen das
+    (`has_prices`), statt mit einer Null zu rechnen.
+    """
+    return MODEL_INFO.get(model_id, _UNKNOWN_MODEL)
+
+
+def model_ids() -> tuple[str, ...]:
+    """Jede Modell-ID, die der ausgelieferte Katalog nennt — einmal, in Katalogfolge."""
+    return tuple(dict.fromkeys(model for provider in PROVIDERS for model in provider.models))
+
+
 # --- Zugriff --------------------------------------------------------------------------
 
 
@@ -631,4 +711,22 @@ def _check_all(providers: tuple[ProviderInfo, ...]) -> dict[str, ProviderInfo]:
     return index
 
 
+def _check_model_info(table: dict[str, ModelInfo]) -> None:
+    """Dieselbe Disziplin fuer die Modell-Eckdaten. Wirft `ValueError`.
+
+    Ein negativer Preis rechnet still Guthaben aus; ein leerer Name trifft nie. Und
+    `overridden` muss im ausgelieferten Bestand leer sein: das Feld gehoert dem
+    Betreiber — ein Katalog, der sich als sein Wort ausgibt, verdreht die Kennzeichnung,
+    fuer die es gedacht ist.
+    """
+    for model_id, info in table.items():
+        if not model_id or not isinstance(info, ModelInfo):
+            raise ValueError(f"catalog model entry {model_id!r} is malformed")
+        if info.context_window < 0 or info.input_price < 0 or info.output_price < 0:
+            raise ValueError(f"catalog model entry {model_id!r} carries a negative value")
+        if info.overridden:
+            raise ValueError(f"catalog model entry {model_id!r} must not claim to be an override")
+
+
 _BY_SLUG: dict[str, ProviderInfo] = _check_all(PROVIDERS)
+_check_model_info(MODEL_INFO)

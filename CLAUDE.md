@@ -12,9 +12,9 @@ preferences live in `USER.md`. All three are operator-owned prompt state and rel
 
 | | |
 |---|---|
-| Gate path | `policy.py`, **889 lines** — has to stay readable in one sitting |
-| Tools | **27**, every one gated |
-| Suites | **2208** tests · **206** adversarial · 44 end-to-end |
+| Gate path | `policy.py`, **895 lines** — has to stay readable in one sitting |
+| Tools | **28**, every one gated |
+| Suites | **2321** tests · **208** adversarial · 44 end-to-end |
 | Home | <https://talos-agent.ch> · docs at `/docs/` |
 | Repository | `talos-kernel/talos` is the public source tree |
 
@@ -192,14 +192,54 @@ In practice:
   is one line — `render_compact` says how many findings and what most of them are, and
   points at `talos review` for the argued list; a report that gets wiped unread has the
   same effect as none.
+- **A stop is a stop, never a yes.** `/stopall` cancels the running thought, drains the
+  queue, detaches every background run at its next step boundary (the model call itself
+  is a blocking subprocess and stays untouchable; its report is discarded,
+  `conductor.reply_discarded`) and discards every pending approval — discards, never
+  approves. `approval.discard_all` is the only kernel touch and points in the DENY
+  direction. Schedules stay: a stop that deleted timers would create the next incident
+  ("why did the morning report not come?") while ending this one. Conductor and
+  CommandCenter share **one** `BackgroundDesk`; two instances would be two truths about
+  what is running, and `/stopall` would detach jobs the conductor never heard of.
+- **A probe is a tool call, not a sensor privilege.** `continuity.py` runs a schedule's
+  `probe` as an ordinary `run_shell` of the task's principal through `executor.run`,
+  under the same `UnattendedCeiling` as the run; the module imports neither
+  `PolicyKernel` nor `sandbox`, so it cannot build a second way. A failed probe — DENY,
+  error, refused sandbox, timeout — fires the run and says why
+  (`schedule.probe_failed`): a broken sensor must not be the way to silence a watcher.
+  Only an unchanged, cleanly read fingerprint saves the model call. The previous result
+  enters the prompt framed as data (« »), the error-dedup key comes from
+  `outcome.failed_tools` over the event log and never from prose, and the
+  `before_reply` hook can only withhold a reply, never grant anything — a hook that
+  raises delivers.
+- **Steering is a turn, not a right.** `delegate_steer` queues text on the background
+  desk; the run reads it at the same step boundary as a typed correction (`redirect`),
+  framed "no additional rights", and every tool call it provokes passes the kernel under
+  the run's own ceiling. Only `/background` runs are steerable — the only runs with a step
+  boundary in this process; an unknown id is a refusal with a reason, never a pretend
+  "ok". Origin is the person and conversation that started the task, taken from the
+  thread context and never from the arguments. Under `ReadOnlyCeiling` the tool is DENY
+  (`subagent.NOT_FOR_DELEGATES`): a delegate must be able to do less than its caller, and
+  the run it would steer may write. Two red-team cases hold both directions.
+- **An override corrects a number, never a route.** `TALOS_MODEL_OVERRIDES` (one JSON
+  object, keyed by model id) lets the operator set `context_window`, `input_price`,
+  `output_price`, `vision` and `reasoning` for a model the shipped catalogue knows
+  nothing about — the field list in `catalog.MODEL_INFO_FIELDS` is closed, and
+  `provider`, `base_url`, `env_key` or any key are not in it: a value that could change
+  the way to a model would be policy, and `schema.py` classes the key as `SETTING`
+  for exactly that reason. Broken JSON stops the start and names the variable, never
+  the value; an unknown model id or field is dropped with `model.override_dropped` in
+  the log — an override never adds a model. `talos models`, `/usage` and `/status`
+  mark overridden values as the operator's word, not the catalogue's. There is no
+  token-based context cap: the window shows in the display, it is not a bound.
 
 ## Commands
 
 ```bash
 python3 -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt
 
-python -m pytest tests/ -q   # 2208 tests, ~30s
-python redteam.py            # 206 adversarial cases — mandatory for any kernel change
+python -m pytest tests/ -q   # 2321 tests, ~30s
+python redteam.py            # 208 adversarial cases — mandatory for any kernel change
 python e2e.py                # 44 cases against a real model (costs tokens and time)
 python -m talos --once       # single cycle, for diagnosis
 python -m talos              # run
@@ -268,7 +308,7 @@ python -m talos anchor       # pin the chain head — exit 1 if the log shrank (
 
 - Comments and docstrings explain **why**, especially where a rule looks counterintuitive.
   Those are the ones that get argued away six months later.
-- Small modules. The gate path (`policy.py`, 889 lines) must stay readable in one sitting.
+- Small modules. The gate path (`policy.py`, 895 lines) must stay readable in one sitting.
 - Glyphs come from `talos/ux.py` only, one meaning each, **never inside an answer's prose**.
 - Telegram edit interval stays ≥ 1.2 s; the API tolerates roughly one edit per second
   per chat.

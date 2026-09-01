@@ -60,6 +60,13 @@ def write_file(req: ToolRequest) -> str:
     return f"{len(content)} Zeichen geschrieben nach {path}"
 
 
+# Zwei Marker der Shell-Quittung, auf die eine andere Stelle sich verlaesst (die
+# Zeitplan-Sonde in `continuity.py`): eine verweigerte Sandbox und ein abgebrochener
+# Lauf sind KEIN Messwert. Sie stehen hier, damit es genau eine Schreibweise gibt.
+SHELL_REFUSED = "rc=refused"
+SHELL_TIMED_OUT = "[timed out]"
+
+
 def run_shell(req: ToolRequest) -> str:
     """Shell — ab hier eingesperrt statt geraten.
 
@@ -81,13 +88,13 @@ def run_shell(req: ToolRequest) -> str:
     try:
         result = sandbox.run_sandboxed(command)
     except sandbox.SandboxUnavailable as error:
-        return f"rc=refused\n{error}"
+        return f"{SHELL_REFUSED}\n{error}"
     out = (result.stdout or "").strip()
     err = (result.stderr or "").strip()
     tail = out if not err else f"{out}\n[stderr] {err}".strip()
     note = ""
     if result.timed_out:
-        note = "\n[timed out]"
+        note = f"\n{SHELL_TIMED_OUT}"
     elif result.truncated:
         note = "\n[output truncated]"
     return f"rc={result.returncode} [{result.backend}]\n{tail}{note}".strip()
@@ -365,6 +372,17 @@ def default_manifest(*, agy_backend: bool = True) -> ToolManifest:
         # Aufruf fasst nichts an, er fragt den Worker.
         .with_tool(ToolSpec("delegate_status", Effect.READ, reversible=True,
                             requires_env=frozenset({"TALOS_CLAUDE_WORKER_SOCKET"})))
+        # Eine Kurskorrektur an einen LAUFENDEN Hintergrundauftrag (`/background`).
+        # READ wie `delegate_status`, und zwar aus demselben Grund wie bei `delegate`:
+        # der Aufruf legt Text in ein Postfach, sonst nichts. Wirkung entsteht erst,
+        # wenn der gelenkte Lauf daraus einen Werkzeugwunsch macht — und der passiert
+        # denselben Kernel unter DESSEN Decke (unbeaufsichtigt: NEEDS_HUMAN bleibt
+        # DENY). Steuern erweitert keine Decke und oeffnet keinen Wirkungsweg; waere
+        # es WRITE, muesste der Betreiber jede Kurskorrektur freigeben, und eine
+        # Freigabe, die man reflexhaft erteilt, ist die, die spaeter durchgewunken
+        # wird. Die eine Ausnahme steht in `subagent.NOT_FOR_DELEGATES`: ein
+        # Untergebener darf nicht lenken, weil der gelenkte Lauf mehr darf als er.
+        .with_tool(ToolSpec("delegate_steer", Effect.READ, reversible=True))
         # Der rendernde Browser. READ wie `web_fetch`: er liest eine Seite, er bedient
         # sie nicht — Klicken und Formulare gibt es bewusst nicht, weil ein Klick kein
         # ableitbares Ziel hat und ein Werkzeug ohne Ziel per Bauart DENY ist.
@@ -661,3 +679,44 @@ def make_delegate_status_runner(
         return "\n".join(zeilen)
 
     return delegate_status
+
+
+def make_delegate_steer_runner(
+    desk: object,
+    *,
+    context: Callable[[], object | None],
+) -> Callable[[ToolRequest], str]:
+    """Baut den `delegate_steer`-Runner: eine Kurskorrektur an einen LAUFENDEN
+    Hintergrundauftrag. Dumm wie die anderen — Argumente lesen, im Schreibtisch
+    ablegen, Quittung formatieren. Was steuerbar ist und was nicht, entscheidet der
+    Schreibtisch (`background.BackgroundDesk.steer`): nur `/background`-Laeufe, weil nur
+    sie eine Schrittgrenze in diesem Prozess haben. Alles andere kommt als Absage mit
+    Grund zurueck, die der Executor als ERROR protokolliert — kein „ok" fuer etwas,
+    das nicht geschah.
+
+    `context` liefert Person und Unterhaltung des ausfuehrenden Threads (dieselbe
+    Spaetbindung wie bei `ask_operator`). Beides kommt NIE aus `req.args`: das Modell
+    entscheidet nicht, als wer es lenkt. Ohne Kontext gibt es keine Herkunft, und ohne
+    Herkunft keine Lenkung.
+    """
+
+    def delegate_steer(req: ToolRequest) -> str:
+        task_id = _need(req, "task_id").strip()
+        instruction = _need(req, "instruction")
+        ctx = context()
+        if ctx is None:
+            raise ValueError(
+                "delegate_steer: no conversation context — a steer must come from a run "
+                "that belongs to a person and a conversation; nothing was queued"
+            )
+        steer = desk.steer(
+            task_id, instruction,
+            principal=str(ctx.principal), conversation=str(ctx.conversation),
+        )
+        return (
+            f"delegate_steer task_id={task_id} queued ({len(steer.text)} chars) — the run "
+            "reads it before its next step, not during the current model call; its "
+            "ceiling is unchanged (unattended: anything needing approval is still refused)"
+        )
+
+    return delegate_steer

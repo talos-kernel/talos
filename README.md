@@ -15,13 +15,13 @@
 </p>
 
 <p align="center">
-  <!-- ⚠️ Bewusst „tests", nicht „passing": die Zahl kommt aus dem Einsammeln (2208).
+  <!-- ⚠️ Bewusst „tests", nicht „passing": die Zahl kommt aus dem Einsammeln (2321).
        Plattformabhaengige Sandbox- und Repository-Pruefungen koennen uebersprungen werden;
        `test_site_claims` prueft deshalb die gesammelte Zahl statt ein Umgebungsresultat. -->
-  <img src="https://img.shields.io/badge/tests-2208-2e7d32.svg" alt="Tests">
-  <img src="https://img.shields.io/badge/red%20team-206%2F206-2e7d32.svg" alt="Red team">
-  <img src="https://img.shields.io/badge/gate%20path-889%20lines-8a4318.svg" alt="Gate path">
-  <img src="https://img.shields.io/badge/tools-27%20gated-8a4318.svg" alt="Tools">
+  <img src="https://img.shields.io/badge/tests-2321-2e7d32.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/red%20team-208%2F208-2e7d32.svg" alt="Red team">
+  <img src="https://img.shields.io/badge/gate%20path-895%20lines-8a4318.svg" alt="Gate path">
+  <img src="https://img.shields.io/badge/tools-28%20gated-8a4318.svg" alt="Tools">
   <img src="https://img.shields.io/badge/default%20identities-0-c62828.svg" alt="Default identities">
   <img src="https://img.shields.io/badge/python-3.11%2B-1565c0.svg" alt="Python">
   <img src="https://img.shields.io/badge/licence-MIT-616161.svg" alt="MIT">
@@ -105,7 +105,7 @@ authorised individually, bound to its exact arguments and targets, valid once, f
 seconds. Forgetting to call the gate does not produce an unchecked effect — it produces no
 effect at all, because the raw runners are unreachable without a token.
 
-That design is testable, and it is tested: 206 adversarial scenarios run on every change and
+That design is testable, and it is tested: 208 adversarial scenarios run on every change and
 try to get an effect past the kernel. They are in [`redteam.py`](redteam.py). Read them
 before you trust anything written above.
 
@@ -174,8 +174,8 @@ pip install -r requirements.txt
 
 python -m talos setup                    # asks three things, writes a file, stops
 python -m talos doctor                   # what is still missing
-python -m pytest tests/ -q               # 2208 tests
-python redteam.py                        # 206 adversarial cases
+python -m pytest tests/ -q               # 2321 tests
+python redteam.py                        # 208 adversarial cases
 python -m talos                          # run it
 ```
 
@@ -191,6 +191,9 @@ python -m talos setup model              # switch what it thinks with
 python -m talos setup mail               # add the second way in (IMAP)
 python -m talos config list              # every key, its kind, whether it is set
 python -m talos config set TALOS_MODEL claude-fable-5
+python -m talos config set TALOS_MODEL_OVERRIDES '{"local-model": {"context_window": 128000}}'
+                                         # a window or a price the catalogue does not know —
+                                         # never a provider, url or key; shown as your word
 python -m talos models --refresh         # ask each provider what it offers now
 python -m talos status                   # what it did last
 python -m talos chat                     # a session here; approvals at a terminal
@@ -274,6 +277,21 @@ flow back into the history either — it arrives as its own message, marked as a
 
 If no ceiling is wired, the task is **refused** rather than run uncapped. A forgotten
 parameter may only ever allow less.
+
+A running background task can be **steered**: `delegate_steer` queues a course correction,
+and the task reads it at its next step boundary — the same seam where a typed correction
+enters a foreground run, only from its own mailbox. The instruction arrives as a framed
+turn ("no additional rights"); every tool call it provokes passes the same kernel under
+the same ceiling. Only the person and conversation that started the task may steer it,
+a delegated run may not steer at all, and anything without a step boundary in this
+process — a synchronous `delegate`, a worker job, a timed run — answers with a refusal
+rather than a pretend "ok".
+
+And everything stoppable stops at once: `/stopall` (also `/estop`) aborts the running
+thought, drains the queue, detaches every background task at its next step and discards
+its report, and **discards** every pending approval — it never approves one. Timed runs
+stay; a stop that deleted timers would create the next incident while ending this one.
+The reply is an honest balance per category, and a second `/stopall` says so.
 
 ## What it remembers
 
@@ -391,6 +409,16 @@ what may run without asking runs, everything else is **reported rather than perf
 Not parked until morning either — an approval question whose occasion is six hours old is
 how reflexive clicking starts. So a timed run may do strictly *less* than something you
 typed, which is the opposite of how cron usually works.
+
+A blueprint can give a timed run a **memory** and a **probe**. With `continuity: true`
+the previous result is placed in front of the task as data — "yesterday 91 %, and
+today?" — and a run that ends in the same failure as its predecessor is logged instead
+of repeated into the chat. With `monitor: true` and a `probe` (a shell command) the
+probe is read *before* the model is asked: an unchanged output means no model call at
+all, with `schedule.skipped_unchanged` in the log. The probe is an ordinary `run_shell`
+of the task's principal through the same executor, kernel and sandbox, under the same
+unattended ceiling — no new permission. And a probe that fails, whatever the reason,
+fires the run: a broken sensor must not be the way to silence a watcher.
 
 ## Announced plans
 
@@ -591,6 +619,7 @@ tool that skips the kernel — a tool without a target extractor is `DENY` by co
 | `delegate` | a sub-run that can only read |
 | `delegate_code` / `delegate_dag` / `delegate_status` | a bounded coding job — or a small acyclic graph of them — for a confined Claude worker: opt-in, off by default, writes only into a kernel-derived disposable workspace |
 | `delegate_agy` | the same confined worker's second backend (the agy CLI): same trust form and workspace, behind its own opt-in gates on agent and worker, no MCP |
+| `delegate_steer` | a course correction into a *running* `/background` task — a framed turn it reads at its next step, never a new right |
 | `agent_consult` | bounded advice from a second, operator-configured agent — data, never permission |
 | `ask_operator` | the one way it can ask you something on purpose |
 | `skill_write` | a new skill, written exactly once — and never without a human's yes |
@@ -635,7 +664,7 @@ photographs is a different conversation than one that can only look at them.
 **In a session** — the same set in the terminal and in the messenger, through one
 command centre.
 
-`/stop` `/queue` `/status` `/new` `/retry` `/background` · `/pending` `/approve` `/deny`
+`/stop` `/stopall` `/queue` `/status` `/new` `/retry` `/background` · `/pending` `/approve` `/deny`
 `/allowed` `/revoke` · `/log` `/undo` `/policy` `/autonomy` `/tools` `/whoami` `/version` ·
 `/usage` `/model` `/reasoning` `/debug`
 
@@ -655,7 +684,7 @@ executing anything. It is the fastest way to understand the kernel.
 
 ## Architecture
 
-Small modules on purpose. The gate path (`policy.py`, 889 lines) has to be readable in one
+Small modules on purpose. The gate path (`policy.py`, 895 lines) has to be readable in one
 sitting — a gate you cannot read is not a gate.
 
 | Module | Role |

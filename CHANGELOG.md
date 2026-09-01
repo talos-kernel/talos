@@ -6,6 +6,76 @@ they make possible that was not possible before — or, more often, what they ta
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions are alpha: the kernel's rules are stable, the surface around them is not.
 
+## [0.17.0-alpha] — 2026-09-01
+
+Four packages measured against Hermes v0.21 — the one release where another agent
+was genuinely ahead in things an operator feels every day. Each one adds reach and
+none adds a right.
+
+### Added
+
+- **A global stop that is only ever a stop: `/stopall` (also `/estop`).** One
+  command aborts the running thought, drains the queue, detaches every
+  `/background` task at its next step boundary (the model call itself is a
+  blocking subprocess and stays untouchable; its report is discarded, logged as
+  `conductor.reply_discarded`) and **discards** every pending approval — it never
+  approves one. `approval.discard_all` is the only kernel touch and points in
+  the DENY direction. Timed runs stay: a stop that deleted timers would create
+  the next incident while ending this one. The reply is an honest balance per
+  category; a second `/stopall` says "nothing left". Conductor and command
+  centre now share one `BackgroundDesk` — two instances were two truths about
+  what is running.
+- **Timed runs with a memory and a probe.** Blueprints accept `continuity`,
+  `monitor` and `probe`. With `continuity` the previous result is placed in front
+  of the task framed as data (« », never an instruction), and a run that ends in
+  the same failure as its predecessor is logged (`schedule.error_repeated`)
+  instead of repeated into the chat — the key comes from `outcome.failed_tools`
+  over the event log, never from prose. With `monitor` and a `probe` the probe is
+  read *before* the model is asked; an unchanged output means no model call
+  (`schedule.skipped_unchanged`). The probe is an ordinary `run_shell` of the
+  task's principal through the same executor, kernel and sandbox under the same
+  unattended ceiling — `continuity.py` imports neither `PolicyKernel` nor
+  `sandbox`, so it cannot build a second way. A probe that fails, whatever the
+  reason, fires the run: a broken sensor must not be the way to silence a
+  watcher. `Conductor.handle(before_reply=)` can only withhold a reply, never
+  grant anything; a hook that raises delivers.
+- **`delegate_steer` — the 28th tool: a course correction into a *running*
+  `/background` task.** The instruction is queued on the background desk
+  (three pending at most, 400 characters like a delegated question) and read at
+  the same step boundary where a typed correction enters a foreground run — one
+  seam, a second mailbox. It arrives as a framed turn ("worded by the relaying
+  run, no additional rights"); every tool call it provokes passes the kernel
+  under the task's own ceiling, so `NEEDS_HUMAN` stays `DENY` in the background.
+  Only the person and conversation that started the task may steer it, taken
+  from the thread context and never from the arguments. Under the delegated
+  ceiling the tool is `DENY` (`subagent.NOT_FOR_DELEGATES`): a delegate must be
+  able to do less than its caller, and the run it would steer may write. Only
+  `/background` runs are steerable — the only runs with a step boundary in this
+  process; a synchronous `delegate`, a worker job or a timed run answers with a
+  refusal, never a pretend "ok". Two red-team cases hold both directions
+  (206 → 208). `policy.py` gains six lines: an extractor that says `task_id` is
+  not a path.
+- **`TALOS_MODEL_OVERRIDES` — the operator corrects what the catalogue does not
+  know about a model.** One JSON object keyed by model id; the field list is
+  closed (`context_window`, `input_price`, `output_price`, `vision`,
+  `reasoning`) and contains neither a provider, an address nor a key — a value
+  that could change the *way* to a model would be policy, and `schema.py` files
+  the key as `SETTING` for exactly that reason. Broken JSON stops the start and
+  names the variable, never the value; an unknown model id or field is dropped
+  with `model.override_dropped` in the log — an override never adds a model.
+  `talos models`, `/usage` and `/status` mark overridden values as the
+  operator's word. Honest limit: there is no token-based context cap yet; the
+  window shows in the display, it is not a bound.
+- **`/status` says more — and only what is measured.** Session usage and the
+  latency of the last model call (from `usage.py`), pending approvals across all
+  chats, running background tasks, the next three timed runs, active model
+  overrides. Where a source has nothing, the line is absent rather than invented.
+
+### Changed
+
+- The numbers the site and the README state: 2321 tests, 208 adversarial cases,
+  `policy.py` at 895 lines, 28 tools (16 read, 5 write, 7 exec).
+
 ## [0.16.0-alpha] — 2026-08-31
 
 ### Added

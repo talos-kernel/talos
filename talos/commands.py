@@ -27,8 +27,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Mapping, Protocol
 
-from . import autonomy
+from . import autonomy, modelinfo
 from .approval import ApprovalStore
+from .catalog import ModelInfo
 from .channel import Principal, StructuredMessage
 from .autonomy import AutonomyError, AutonomyGovernor
 from .channel import ChannelRegistry
@@ -110,8 +111,10 @@ HELP = """{name} — commands
 
 Control
 /stop — abort the running thought and clear the queue
+/stopall (also /estop) — stop everything stoppable: thought, queue, background jobs,
+  pending approvals. Schedules are not touched.
 /queue — what is running, what is waiting
-/status — runtime, queue, pending approval
+/status — runtime, queue, pending approval, usage, background jobs, next schedules
 /new — clear the active context (log and searchable archive stay)
 /retry — ask the last question again
 /background <task> (also /bg, /btw) — run it beside this conversation; unattended, so anything
@@ -197,6 +200,10 @@ class CommandCenter:
     # Betreibers gebunden — es gibt bewusst kein Werkzeug dafuer: ein Modell, das sich
     # selbst einen wiederkehrenden Auftrag anlegen kann, verlaengert seine eigene Leine.
     schedules: object | None = None
+    # Der Hintergrund-Schreibtisch (background.BackgroundDesk) — fuer `/stopall`
+    # (abmelden) und `/status` (anzeigen). Dieselbe Instanz wie im Conductor,
+    # sonst zeigt und stoppt das Kommando eine andere Wahrheit als der Lauf.
+    background: object | None = None
     # Blueprints (talos/blueprints.py) — installierbare Automatisierungen mit
     # menschenlesbarer Zeitangabe. Dasselbe Argument wie bei den Zeitplaenen: NUR der
     # Kommando-Pfad installiert, und ein installierter Blueprint laeuft ueber denselben
@@ -208,6 +215,11 @@ class CommandCenter:
     standing: StandingStore | None = None
     start_status: Callable[[], Mapping[str, object]] | None = None
     model_picker: ModelPicker | None = None
+    # Modell-Eckdaten (Kontextfenster, Preise) fuer `/usage` und `/status`: Katalog
+    # plus die beim Laden installierten Betreiber-Overrides (`modelinfo`). Als
+    # Funktionen injizierbar, damit Tests nichts Globales anfassen muessen.
+    model_infos: Callable[[str], ModelInfo] = modelinfo.lookup
+    model_overrides: Callable[[], modelinfo.Overrides] = modelinfo.active
 
     def dispatch(self, name: str, rest: str, *, principal: Principal, conversation: str) -> CommandResult:
         if name == "start":
@@ -237,6 +249,8 @@ class CommandCenter:
                     else CommandResult(reply=EMPTY))
         if name in ("stop", "cancel"):
             return CommandResult(reply=self._stop())
+        if name in ("stopall", "estop"):
+            return CommandResult(reply=self._stopall())
         if name == "approve":
             return CommandResult(forward_as="yes")
         if name == "deny":
@@ -543,6 +557,12 @@ class CommandCenter:
             f"when: {blueprint.when}",
             f"task: {blueprint.prompt}",
         ]
+        # Nur, was gesetzt ist: ein Blueprint ohne Schalter bekommt keine Zeile darueber.
+        if blueprint.continuity:
+            lines.append("continuity: on — the previous result goes in as data; "
+                         "a repeated error is logged, not sent")
+        if blueprint.monitor:
+            lines.append(f"monitor: {blueprint.probe} — unchanged output skips the run")
         if stand is None:
             lines.append(f"state: not installed — /blueprint install {blueprint.name}")
         elif stand.get("enabled"):
@@ -617,7 +637,55 @@ class CommandCenter:
                 f"Tokens: {stats['issued']} minted, {stats['redeemed']} redeemed "
                 "(je einmalig, an eine Handlung gebunden)"
             )
-        return "\n".join(lines)
+        # --- Die neuen Fakten: nur was die jeweilige Quelle wirklich hergibt ----------
+        # Verbrauch der laufenden Session (usage.py) und Latenz des letzten
+        # Reasoner-Aufrufs. Falsch waere, eine Zahl hier zu erfinden — dieselbe
+        # Disziplin wie bei `/usage`: was nicht gemessen wird, steht nicht da.
+        if self.usage is not None:
+            snap = self.usage.snapshot()
+            if snap.runs:
+                total = snap.input_tokens + snap.output_tokens + snap.cache_total
+                lines.append(f"Verbrauch: {_tokens(total)} total ({snap.runs} Läufe)")
+                if snap.last is not None:
+                    lines.append(
+                        f"Letzter Denkzug: {snap.last.duration_s:.0f}s"
+                        f" · {_short_model(snap.last.model) or 'Modell unbekannt'}"
+                        f"{self._context_note(snap.last)}"
+                    )
+        # Betreiber-Korrekturen an Modell-Eckdaten (TALOS_MODEL_OVERRIDES): nur die
+        # Zahl, und nur wenn es welche gibt — die Werte selbst zeigt `talos models`.
+        aktiv = self.model_overrides()
+        if aktiv.entries:
+            lines.append(f"Modell-Overrides: {len(aktiv.entries)} aktiv ({modelinfo.ENV_VAR})")
+        # Offene Freigaben UEBER ALLE Chats — nicht nur die dieser Unterhaltung.
+        # Die Zeile darunter zeigt weiter die hier entscheidbare; die Zahl sagt,
+        # ob sonst wo noch eine Frage wartet.
+        offen_insgesamt = self.approvals.pending_count()
+        if offen_insgesamt:
+            lines.append(f"Offene Freigaben gesamt: {offen_insgesamt}")
+        # Laufende Hintergrund-Jobs (BackgroundDesk) — dieselbe Instanz wie der
+        # Conductor, sonst wuerde /status eine andere Wahrheit zeigen als laeuft.
+        if self.background is not None:
+            jobs = self.background.running()
+            if jobs:
+                zeilen = [f"Hintergrund: {len(jobs)} aktiv"]
+                zeilen += [f"  #{task.number} {task.short} ({task.task_id})" for task in jobs]
+                lines.append("\n".join(zeilen))
+        # Die naechsten 1-3 Zeitplaene (ScheduleStore). Bewusst nur die Zahl und
+        # die drei naechsten — ein rollierender Plan-Text gehoert zu /schedules.
+        if self.schedules is not None:
+            try:
+                alle = self.schedules.list_for(conversation)
+            except Exception:
+                alle = ()
+            if alle:
+                naechste = sorted(alle, key=lambda task: task.next_run)[:3]
+                lines.append(
+                    "Nächste Zeitpläne: "
+                    + ", ".join(f"{t.id} in {_duration(max(0, t.next_run - time.time()))}"
+                                for t in naechste)
+                )
+        return "\n".join(task for task in lines if task)
 
     def _new(self, conversation: str) -> str:
         """Vergisst den Verlauf DIESER Konversation — und sagt dazu, was bleibt.
@@ -677,6 +745,56 @@ class CommandCenter:
         if dropped:
             parts.append(f"{dropped} wartende Nachricht(en) verworfen")
         return "Abgebrochen: " + ", ".join(parts) + "."
+
+    def _stopall(self) -> str:
+        """`/stopall` — der grosse Stopp: alles, was gerade laeuft oder wartet.
+
+        ⚠️ Ehrliche Bilanz pro Kategorie statt Pauschalversprechen. Wer den
+        Not-Halt drueckt, will SICHER sein, was gestoppt ist und was weiterlaeuft
+        — eine Antwort „alles gestoppt", waehrend ein Hintergrund-Job noch seinen
+        Bericht schickt, verspielt genau das Vertrauen, fuer das der Knopf da ist.
+
+        Was „stoppen" je nach Kategorie konkret heisst:
+          - Denkzug/Warteschlange: wie `/stop` (Abbruch des Subprozesses, Verwerfen).
+          - Hintergrund-Jobs: ABGEMELDET, nicht getoetet — ein laufender
+            Modellaufruf ist ein blockierender Subprozess und bleibt unantastbar.
+            Der Job beendet seinen aktuellen Denkschritt noch, beginnt aber keinen
+            neuen (Schrittgrenze), und sein Bericht wird verworfen statt zugestellt.
+          - Offene Freigaben: VERWORFEN, niemals genehmigt — ein Not-Halt darf eine
+            unbeantwortete Frage nicht in eine Erlaubnis kippen.
+          - Zeitplaene: BLEIBEN. Ein Not-Halt, der stille Termine mitloeschte,
+            schuefe den naechsten Vorfall („warum kommt der Morgenbericht nicht
+            mehr?"), waehrend er den ersten beendet — `/unschedule` ist der Weg.
+        """
+        killed = self.reasoner.cancel()
+        dropped = self.worker.drain()
+        jobs: tuple = ()
+        if self.background is not None:
+            jobs = tuple(self.background.cancel_all())
+        verworfen = self.approvals.discard_all()
+        if not killed and not dropped and not jobs and not verworfen:
+            # Idempotent: das zweite /stopall hintereinander sagt ehrlich „nichts
+            # mehr da", statt eine Bilanz ueber Nullen zu behaupten.
+            return ("Nichts zu stoppen — es lief nichts, es wartete nichts, "
+                    "keine Freigabe offen. Zeitpläne bleiben ohnehin unberührt.")
+        lines = ["Gestoppt, was stoppbar war:"]
+        lines.append("- Denkzug: abgebrochen" if killed else "- Denkzug: lief gerade nichts")
+        lines.append(f"- Warteschlange: {dropped} verworfen" if dropped
+                     else "- Warteschlange: war leer")
+        if self.background is None:
+            lines.append("- Hintergrund-Jobs: nicht verdrahtet")
+        elif jobs:
+            lines.append(
+                f"- Hintergrund-Jobs: {len(jobs)} abgemeldet — der laufende Denkschritt "
+                "endet noch, kein neuer beginnt, der Bericht wird verworfen"
+            )
+        else:
+            lines.append("- Hintergrund-Jobs: keine aktiv")
+        lines.append(f"- Offene Freigaben: {verworfen} verworfen — nichts wurde genehmigt"
+                     if verworfen else "- Offene Freigaben: keine offen")
+        lines.append("Zeitpläne bleiben bestehen und feuern weiter — "
+                     "/schedules zeigt sie, /unschedule <id> löscht sie.")
+        return "\n".join(lines)
 
     # --- Freigabe ----------------------------------------------------------------
     def _pending(self, conversation: str) -> str:
@@ -888,11 +1006,19 @@ class CommandCenter:
             f"Rechnerisch: ${snap.cost_usd:.2f} — Listenpreis derselben Anfragen ueber die API. "
             "Talos laeuft ueber ein Abo; abgerechnet wird davon nichts.",
         ]
+        if snap.cost_override_usd > 0:
+            # Getrennt genannt: ein selbst eingetragener Tarif ist eine Rechnung des
+            # Betreibers, keine Meldung des Anbieters — und soll auch so gelesen werden.
+            lines.append(
+                f"Davon ${snap.cost_override_usd:.2f} nach Betreiber-Preisen aus "
+                f"{modelinfo.ENV_VAR} — fuer diese Laeufe meldete der Anbieter keinen Preis."
+            )
         last = snap.last
         if last is not None:
             detail = f"{_clock(last.at)} · {_short_model(last.model) or 'Modell unbekannt'} · {last.duration_s:.0f}s"
             if last.cost_usd:
                 detail += f" · ${last.cost_usd:.2f}"
+            detail += self._context_note(last)
             if last.note:
                 detail += f" · {last.note}"
             lines.append(f"Letzter Lauf: {detail}")
@@ -905,6 +1031,27 @@ class CommandCenter:
                 "kleiner Scope waere billiger und sauberer."
             )
         return "\n".join(lines)
+
+    def _context_note(self, run) -> str:
+        """„· Kontext 20.0k/200k (10 %)" — nur, wenn das Fenster belegt ist.
+
+        Gefuellt hat das Fenster alles, was hineinging: Eingabe plus Cache-Token (die
+        CLI meldet sie getrennt, im Fenster liegen sie trotzdem). Das Fenster selbst
+        kommt aus dem Katalog oder vom Betreiber — und im zweiten Fall steht das dabei,
+        damit niemand die Zahl fuer eine Auskunft des Anbieters haelt.
+        """
+        if not run.model:
+            return ""
+        info = self.model_infos(run.model)
+        belegt = run.input_tokens + run.cache_read + run.cache_write
+        if not info.context_window or not belegt:
+            return ""
+        anteil = 100.0 * belegt / info.context_window
+        quelle = " (Betreiber-Wert)" if "context_window" in info.overridden else ""
+        return (
+            f" · Kontext {_tokens(belegt)}/{modelinfo.format_tokens(info.context_window)}"
+            f" ({anteil:.0f} %){quelle}"
+        )
 
     def _model(self) -> str:
         """Zeigt, was gedacht hat — und sagt, warum es hier keinen Schalter gibt."""

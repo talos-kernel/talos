@@ -62,6 +62,13 @@ class Fetched:
     error: str = ""
 
 
+def is_model_id(name: str) -> bool:
+    """Sieht das aus wie eine Modell-ID? Dieselbe Form fuer eine live geholte ID und
+    fuer einen Schluessel in `TALOS_MODEL_OVERRIDES`: was hier nicht durchkaeme, kann
+    dort nichts treffen."""
+    return bool(name) and len(name) <= MAX_NAME_CHARS and bool(_NAME_OK.match(name))
+
+
 def clean_names(raw: Iterable[object]) -> tuple[str, ...]:
     """Was aus einer fremden Antwort als Modellname durchgeht.
 
@@ -71,7 +78,7 @@ def clean_names(raw: Iterable[object]) -> tuple[str, ...]:
     gesehen: list[str] = []
     for eintrag in raw or ():
         name = str(eintrag or "").strip()
-        if not name or len(name) > MAX_NAME_CHARS or not _NAME_OK.match(name):
+        if not is_model_id(name):
             continue
         if name not in gesehen:
             gesehen.append(name)
@@ -223,11 +230,32 @@ def _catalog():
     return safe_talos_registry(roh)
 
 
+def known_model_ids() -> frozenset[str]:
+    """Jede Modell-ID, die `talos models` zeigen wuerde — Katalog plus Zwischenspeicher.
+
+    Der Massstab fuer „gibt es dieses Modell", den `talos doctor` an die Overrides legt.
+    Bewusst dieselbe Quelle wie die Anzeige: ein Name, der hier fehlt, fehlt auch dort.
+    """
+    from .config import MODEL_CACHE
+
+    voll = merged(_catalog(), load_cache(Path(MODEL_CACHE)))
+    return frozenset(model for anbieter in voll.providers for model in anbieter.models)
+
+
 def run_models(argv: list[str] | None = None, *, out=None, get=None) -> int:
-    """`talos models [--refresh]` — zeigt den Katalog, holt ihn auf Wunsch neu."""
+    """`talos models [--refresh]` — zeigt den Katalog, holt ihn auf Wunsch neu.
+
+    Betreiber-Overrides (`TALOS_MODEL_OVERRIDES`) stehen unter dem Modell, das sie
+    treffen, und sind als solche gekennzeichnet: der Katalog liefert diese Zahlen nicht,
+    und die Anzeige darf nicht so tun. Was keinen Katalog-Eintrag trifft, steht als
+    Warnung darunter — und kaputtes JSON ist eine Fehlerzeile mit Rueckgabewert 1, nie
+    ein stiller Katalog ohne Overrides.
+    """
     import sys
 
-    from .config import MODEL_CACHE, load_config
+    from . import catalog, modelinfo
+    from .config import MODEL_CACHE, load_config, load_model_overrides
+    from .ux import SYM_FAIL
 
     argumente = list(argv or [])
     schreiben = (out or sys.stdout).write
@@ -247,13 +275,35 @@ def run_models(argv: list[str] | None = None, *, out=None, get=None) -> int:
         )
         schreiben(render(ergebnisse, load_cache(pfad)))
 
+    # Ohne die ganze Konfiguration: dieser Befehl laeuft auch ohne Token und Allowlist,
+    # und die Overrides gehoeren zur Anzeige des Katalogs, nicht zum Dienst.
+    fehler = ""
+    try:
+        overrides = load_model_overrides()
+    except ValueError as problem:
+        overrides, fehler = modelinfo.EMPTY, str(problem)
+
     voll = merged(_catalog(), load_cache(pfad))
+    overrides = modelinfo.reconcile(
+        overrides, (model for anbieter in voll.providers for model in anbieter.models)
+    )
     schreiben("\n")
     for anbieter in voll.providers:
         schreiben(f"  {anbieter.slug:16} {len(anbieter.models):3} models   {anbieter.label}\n")
+        for modell in anbieter.models:
+            eintrag = overrides.get(modell)
+            if eintrag is not None:
+                info = modelinfo.merge(catalog.model_info(modell), eintrag)
+                schreiben(f"  {'':16} {modell}: {modelinfo.describe(info)}\n")
+    if overrides.entries:
+        schreiben(f"\n  {len(overrides.entries)} model override(s) from {modelinfo.ENV_VAR}\n")
+    for grund in overrides.dropped:
+        schreiben(f"  {SYM_FAIL} {grund}\n")
+    if fehler:
+        schreiben(f"  {SYM_FAIL} {fehler}\n")
     schreiben(f"\n  cache: {pfad}"
               f"{' — empty, run `talos models --refresh`' if not pfad.is_file() else ''}\n\n")
-    return 0
+    return 1 if fehler else 0
 
 
 __all__ = [
@@ -265,6 +315,8 @@ __all__ = [
     "clean_names",
     "fetch",
     "fresh_models",
+    "is_model_id",
+    "known_model_ids",
     "load_cache",
     "merged",
     "refresh",

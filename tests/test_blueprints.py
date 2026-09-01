@@ -350,3 +350,54 @@ def test_describe_next_matches_the_every_format() -> None:
 
     assert describe_next(None) == "not scheduled"
     assert describe_next(1000.0) == time.strftime("%a %d.%m %H:%M", time.localtime(1000.0))
+
+
+# --- Gedaechtnis und Monitor: optionale Felder, die nur durchgereicht werden ----------
+
+def test_blueprint_flags_reach_the_schedule_entry_unchanged(tmp_path: Path) -> None:
+    """`continuity`, `monitor`, `probe` landen im selben Store-Eintrag wie ein /every —
+    der Blueprint erfindet keinen zweiten Weg, er fuellt drei Felder."""
+    vorlagen = tmp_path / "vorlagen"
+    vorlagen.mkdir()
+    _schreibe(vorlagen, "platte", when="every 2 hours", prompt="Pruefe die Platte",
+              continuity=True, monitor=True, probe="df -h /")
+    buch = BlueprintBook(vorlagen, tmp_path / "stand.json", ScheduleStore(tmp_path / "s.db"))
+    task = buch.install("platte", conversation=CHAT, principal=str(OWNER))
+    assert task.continuity and task.monitor and task.probe == "df -h /"
+    # Reaktivieren baut denselben Eintrag wieder auf — Schalter inklusive.
+    buch.disable("platte")
+    wieder = buch.enable("platte")
+    assert wieder.continuity and wieder.monitor and wieder.probe == "df -h /"
+
+
+def test_blueprint_flags_are_strict_and_name_their_reason(tmp_path: Path) -> None:
+    """Ein „yes" ist kein true, ein Monitor ohne Sonde hat nichts zu vergleichen —
+    beides wird beim Laden abgewiesen und mit Dateinamen genannt, nie still ignoriert."""
+    _schreibe(tmp_path, "text-flag", continuity="yes")
+    _schreibe(tmp_path, "ohne-sonde", monitor=True)
+    _schreibe(tmp_path, "sonde-ohne-monitor", probe="df -h")
+    _schreibe(tmp_path, "sonde-kein-text", monitor=True, probe=["df", "-h"])
+    _schreibe(tmp_path, "gut", continuity=True)
+    katalog = load(tmp_path)
+    assert [b.name for b in katalog.blueprints] == ["gut"]
+    assert katalog.blueprints[0].continuity and not katalog.blueprints[0].monitor
+    assert len(katalog.rejected) == 4
+    assert any("text-flag.json" in g and "true or false" in g for g in katalog.rejected)
+    assert any("ohne-sonde.json" in g and "belong together" in g for g in katalog.rejected)
+    assert any("sonde-ohne-monitor.json" in g and "belong together" in g for g in katalog.rejected)
+    assert any("sonde-kein-text.json" in g and "probe" in g for g in katalog.rejected)
+
+
+def test_blueprint_status_names_memory_and_monitor(tmp_path: Path) -> None:
+    vorlagen = tmp_path / "vorlagen"
+    vorlagen.mkdir()
+    _schreibe(vorlagen, "platte", when="every 2 hours", prompt="Pruefe die Platte",
+              continuity=True, monitor=True, probe="df -h /")
+    buch = BlueprintBook(vorlagen, tmp_path / "stand.json", ScheduleStore(tmp_path / "s.db"))
+    center = _center(tmp_path, buch)
+    status = center.dispatch("blueprint", "status platte", principal=OWNER, conversation=CHAT).reply
+    assert "continuity" in status and "monitor" in status and "df -h /" in status
+    # Ohne Schalter keine Zeile — was nicht gesetzt ist, wird nicht erwaehnt.
+    _schreibe(vorlagen, "schlicht", when="every 2 hours", prompt="x")
+    status = center.dispatch("blueprint", "status schlicht", principal=OWNER, conversation=CHAT).reply
+    assert "continuity" not in status and "monitor" not in status

@@ -24,7 +24,7 @@ from typing import Callable
 
 import requests
 
-from . import claudejobs, consult, dag, notify, tools
+from . import background, claudejobs, consult, continuity, dag, notify, tools
 from . import apiclient, gitops
 from .api_reasoner import SUPPORTED_PROVIDERS, ApiReasoner
 from .approval import ApprovalPicker, ApprovalStore
@@ -344,6 +344,12 @@ def run(once: bool = False, ask: str = "", chat: bool = False) -> None:
         allow_http=True,
         allowed_addresses=config.web_allowed_addresses,
     )["web_fetch"]
+    # EIN Hintergrund-Schreibtisch fuer Conductor (startet), CommandCenter
+    # (zeigt/stoppt ihn) und den delegate_steer-Runner (lenkt): mehrere Instanzen
+    # waeren mehrere Wahrheiten darueber, was gerade laeuft — /stopall wuerde Jobs
+    # abmelden, die der Conductor gar nicht kennt, oder eine Kurskorrektur laege in
+    # einem Postfach, das kein Lauf je liest.
+    background_desk = background.BackgroundDesk()
     runners = {
         **tools.RUNNERS,
         **tools.make_vault_runners(config.vault_dir, config.qmd_bin),
@@ -384,6 +390,14 @@ def run(once: bool = False, ask: str = "", chat: bool = False) -> None:
             ceiling=delegated,
             propose=delegate_propose(reasoner),
             run_id=new_run_id,
+        ),
+        # Kurskorrektur an einen laufenden Hintergrundauftrag. Der Schreibtisch ist
+        # DERSELBE, den _start_background fuellt; Person und Unterhaltung kommen aus
+        # dem Thread-Kontext (spaet gebunden wie bei ask_operator), nie aus den
+        # Werkzeug-Argumenten — das Modell entscheidet nicht, als wer es lenkt.
+        "delegate_steer": tools.make_delegate_steer_runner(
+            background_desk,
+            context=lambda: conductor.ask_contexts.current(),
         ),
         # Fester Betreiber-Endpunkt; URL und Token kommen aus der Dienstumgebung,
         # niemals aus Modelltext. Die Antwort bleibt Beratung und erteilt keine Rechte.
@@ -491,6 +505,8 @@ def run(once: bool = False, ask: str = "", chat: bool = False) -> None:
     # Ueberlebt den Neustart. Faellt es aus, laeuft der Agent ohne — Erinnern ist
     # kein Gate, und ein kaputter Speicher darf den Waechter nicht anhalten.
     long_memory = Recall(RECALL_DB)
+    # `background_desk` entsteht weiter oben, vor den Runnern — der delegate_steer-
+    # Runner braucht dieselbe Instanz wie Conductor und CommandCenter.
     commands = CommandCenter(
         log=log,
         approvals=approvals,
@@ -516,6 +532,7 @@ def run(once: bool = False, ask: str = "", chat: bool = False) -> None:
         transcript_db=TRANSCRIPT_DB,
         schedules=schedules,
         blueprints=blueprint_book,
+        background=background_desk,
         start_status=lambda: _start_status(reasoner, config),
         model_picker=model_picker,
     )
@@ -545,6 +562,9 @@ def run(once: bool = False, ask: str = "", chat: bool = False) -> None:
         # („niemand sitzt davor"), und zwei Decken waeren zwei Wahrheiten darueber.
         unattended=unattended,
         recall=long_memory,
+        # DIESELBE Hintergrund-Instanz wie das CommandCenter — /stopall und
+        # /status arbeiten gegen denselben Stand, den _start_background fuellt.
+        background=background_desk,
         # Lernschritt nach der Antwort (distill.py): an per Vorgabe, AUS ist eine
         # bewusste Betreiber-Entscheidung (TALOS_DISTILL=0), kein vergessener Parameter.
         distill=os.environ.get("TALOS_DISTILL", "1") != "0",
@@ -561,6 +581,12 @@ def run(once: bool = False, ask: str = "", chat: bool = False) -> None:
     #
     # `mark_run` steht VOR der Ausfuehrung: ein Auftrag, der laenger dauert als sein
     # Intervall, wuerde sonst beim naechsten Tick erneut anlaufen und sich selbst ueberholen.
+    #
+    # Gedaechtnis und Sonde (`continuity.py`) haengen an DEMSELBEN Executor wie jeder
+    # Werkzeugwunsch — Kernel, Sandbox, Token, Audit — und laufen unter derselben
+    # Decke wie der Lauf. Das Modul hat keinen anderen Weg zur Shell als `executor.run`.
+    continuity_desk = continuity.Continuity(schedules=schedules, log=log, execute=executor.run)
+
     def tick_schedules() -> None:
         while True:
             time.sleep(SCHEDULE_TICK_S)
@@ -576,15 +602,20 @@ def run(once: bool = False, ask: str = "", chat: bool = False) -> None:
                         log.append(Event(new_run_id(), "schedule", "schedule.refused",
                                          {"id": task.id, "reason": "principal no longer allowed"}))
                         continue
-                    update = Inbound(
-                        principal=principal,
-                        conversation=task.conversation,
-                        text=task.prompt,
-                        dedup_key=f"schedule:{task.id}:{int(time.time())}",
-                    )
-                    log.append(Event(new_run_id(), "schedule", "schedule.fired", {"id": task.id}))
                     with unattended.active():
-                        conductor.handle(update)
+                        # Sonde und Gedaechtnis VOR dem Lauf, unter derselben Decke:
+                        # `None` heisst „unveraendert" — im Log belegt, kein Modellzug.
+                        bereit = continuity_desk.prepare(task, principal, run_id=new_run_id())
+                        if bereit is None:
+                            continue
+                        update = Inbound(
+                            principal=principal,
+                            conversation=task.conversation,
+                            text=bereit.text,
+                            dedup_key=f"schedule:{task.id}:{int(time.time())}",
+                        )
+                        log.append(Event(new_run_id(), "schedule", "schedule.fired", {"id": task.id}))
+                        conductor.handle(update, before_reply=bereit.before_reply)
             except Exception as error:  # ein kaputter Zeitplan darf den Agenten nicht anhalten
                 log.append(Event(new_run_id(), "schedule", "schedule.error", {"error": str(error)}))
 
