@@ -125,6 +125,7 @@ ANTHROPIC_MODELS = (
     "claude-sonnet-5",
     "claude-haiku-4-5",
     "claude-opus-4-8",
+    "claude-fable-5-1",
 )
 # Für OpenAI-kompatible Anbieter gibt es keine kuratierbare Liste — jeder Anbieter
 # hinter einer eigenen `base_url` hat eigene Namen. Vorgeschlagen wird deshalb das,

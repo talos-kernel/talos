@@ -226,7 +226,9 @@ def _catalog():
     try:
         roh = HermesCatalogLoader(HERMES_PROVIDER_CATALOG, HERMES_MODELS).load()
     except Exception:
-        roh = ProviderRegistry((Provider("claude-cli", "placeholder", ("claude-fable-5",)),))
+        roh = ProviderRegistry((Provider(
+            "claude-cli", "placeholder", ("claude-fable-5", "claude-fable-5-1")
+        ),))
     return safe_talos_registry(roh)
 
 

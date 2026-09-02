@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
+from pathlib import Path
 
 import pytest
 
@@ -178,12 +179,33 @@ def test_model_ids_are_non_empty_and_unique_per_provider() -> None:
 
 
 def test_anthropic_entries_use_current_model_ids() -> None:
-    provider = catalog.get("anthropic-api")
-    assert provider is not None
-    assert provider.wire == "anthropic"
-    assert "claude-opus-5" in provider.models
-    for model in provider.models:
-        assert model.startswith("claude-"), model
+    expected = {
+        "anthropic-max": (
+            "claude-opus-5", "claude-fable-5", "claude-sonnet-5",
+            "claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5",
+            "claude-fable-5-1",
+        ),
+        "anthropic-api": (
+            "claude-opus-5", "claude-fable-5", "claude-sonnet-5",
+            "claude-opus-4-8", "claude-opus-4-7", "claude-sonnet-4-6",
+            "claude-haiku-4-5", "claude-fable-5-1",
+        ),
+        "claude-cli": (
+            "claude-opus-5", "claude-fable-5", "claude-sonnet-5",
+            "claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5",
+            "claude-fable-5-1",
+        ),
+    }
+    for slug, models in expected.items():
+        provider = catalog.get(slug)
+        assert provider is not None
+        assert provider.models == models
+        assert all(model.startswith("claude-") for model in provider.models)
+    assert catalog.get("anthropic-api").wire == "anthropic"
+    readme = Path(__file__).parents[1] / "README.md"
+    assert "python -m talos config set TALOS_MODEL claude-fable-5-1" in readme.read_text(
+        encoding="utf-8"
+    )
 
 
 def test_slugs_of_the_two_api_paths_match_the_reasoner() -> None:

@@ -10,6 +10,7 @@ import io
 
 from talos import config
 from talos.setup_wizard import (
+    ANTHROPIC_MODELS,
     EXIT_OK,
     HttpError,
     HttpResponse,
@@ -403,6 +404,10 @@ def test_without_a_local_cli_the_suggestion_is_the_own_api_key(tmp_path) -> None
     assert "1) claude-cli" not in text
     assert "1) hermes" not in text
     assert "TALOS_MODEL_PROVIDER=anthropic-api" in out.read_text(encoding="utf-8")
+    assert ANTHROPIC_MODELS == (
+        "claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5",
+        "claude-opus-4-8", "claude-fable-5-1",
+    )
 
 
 def test_chosen_provider_model_and_key_land_under_the_promised_names(tmp_path) -> None:

@@ -683,6 +683,10 @@ def safe_talos_registry(registry: ProviderRegistry | None) -> ProviderRegistry:
         "claude-fable-5", "claude-sonnet-5", "claude-opus-4-8",
         "claude-opus-4-7", "claude-opus-4-6", "claude-sonnet-4-6",
     )
+    # An installed Hermes catalog can lag Anthropic's official catalog. Keep every
+    # native entry in place, but do not let that lag hide Talos's curated additions.
+    if "claude-fable-5-1" not in claude_models:
+        claude_models += ("claude-fable-5-1",)
     providers: list[Provider] = []
     for provider in hermes_providers:
         if provider.slug in blocked:

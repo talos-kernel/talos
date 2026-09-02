@@ -99,6 +99,13 @@ def test_safe_registry_without_hermes_still_has_the_built_in_ways() -> None:
     slugs = {provider.slug for provider in registry.providers}
     assert {"claude-cli", "anthropic-api", "openai-api"} <= slugs
     assert registry.get("openai-api").models
+    claude_models = (
+        "claude-fable-5", "claude-sonnet-5", "claude-opus-4-8",
+        "claude-opus-4-7", "claude-opus-4-6", "claude-sonnet-4-6",
+        "claude-fable-5-1",
+    )
+    assert registry.get("claude-cli").models == claude_models
+    assert registry.get("anthropic-api").models == claude_models
 
 
 def test_with_local_provider_makes_the_configured_local_model_known() -> None:
@@ -404,7 +411,7 @@ def test_picker_typed_switch_requires_exact_two_arguments(tmp_path: Path) -> Non
     assert router.current == ModelSelection("alpha", "model-2")
 
 
-def test_safe_registry_routes_claude_only_through_cli_and_blocks_antigravity() -> None:
+def test_safe_registry_extends_stale_hermes_claude_models_without_unsafe_routes() -> None:
     raw = ProviderRegistry((
         Provider("openai-codex", "Codex", ("gpt",)),
         Provider("anthropic", "Anthropic", ("claude-fable-5", "claude-sonnet-5")),
@@ -436,7 +443,7 @@ def test_safe_registry_routes_claude_only_through_cli_and_blocks_antigravity() -
     assert safe.get("claude-cli") == Provider(
         "claude-cli",
         "Anthropics Max (CLI OAuth)",
-        ("claude-fable-5", "claude-sonnet-5"),
+        ("claude-fable-5", "claude-sonnet-5", "claude-fable-5-1"),
     )
 
 

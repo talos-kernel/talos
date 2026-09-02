@@ -190,7 +190,7 @@ Later, a single part can be redone without repeating the rest:
 python -m talos setup model              # switch what it thinks with
 python -m talos setup mail               # add the second way in (IMAP)
 python -m talos config list              # every key, its kind, whether it is set
-python -m talos config set TALOS_MODEL claude-fable-5
+python -m talos config set TALOS_MODEL claude-fable-5-1
 python -m talos config set TALOS_MODEL_OVERRIDES '{"local-model": {"context_window": 128000}}'
                                          # a window or a price the catalogue does not know —
                                          # never a provider, url or key; shown as your word
