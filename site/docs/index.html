@@ -246,7 +246,7 @@ html.js .rv.in{opacity:1; transform:none}
     <p class="lede">That one decision shapes the rest of this manual. It is why the
     command list is short, and why a few obvious conveniences are missing on purpose.</p>
     <div class="spec-row">
-      <div class="spec"><b>2330</b>unit tests</div>
+      <div class="spec"><b>2342</b>unit tests</div>
       <div class="spec"><b>208/208</b>adversarial</div>
       <div class="spec"><b>895</b>gate lines</div>
       <div class="spec"><b>27</b>gated tools</div>
@@ -283,7 +283,7 @@ curl -fsSL https://talos-agent.ch/install.sh | sh</pre>
 <pre>git clone https://github.com/talos-kernel/talos.git
 cd talos
 python3 -m venv .venv &amp;&amp; . .venv/bin/activate
-pip install -r requirements.txt
+pip install --require-hashes -r requirements.lock -r requirements-dev.lock
 python -m pytest tests/ -q</pre>
     <div class="note good">
       <b>The installer starts nothing</b>

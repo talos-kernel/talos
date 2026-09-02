@@ -14,7 +14,7 @@ preferences live in `USER.md`. All three are operator-owned prompt state and rel
 |---|---|
 | Gate path | `policy.py`, **895 lines** — has to stay readable in one sitting |
 | Tools | **28**, every one gated |
-| Suites | **2330** tests · **208** adversarial · 44 end-to-end |
+| Suites | **2342** tests · **208** adversarial · 44 end-to-end |
 | Home | <https://talos-agent.ch> · docs at `/docs/` |
 | Repository | `talos-kernel/talos` is the public source tree |
 
@@ -236,9 +236,9 @@ In practice:
 ## Commands
 
 ```bash
-python3 -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt
+python3 -m venv .venv && . .venv/bin/activate && pip install --require-hashes -r requirements.lock -r requirements-dev.lock
 
-python -m pytest tests/ -q   # 2330 tests, ~30s
+python -m pytest tests/ -q   # 2342 tests, ~30s
 python redteam.py            # 208 adversarial cases — mandatory for any kernel change
 python e2e.py                # 44 cases against a real model (costs tokens and time)
 python -m talos --once       # single cycle, for diagnosis
@@ -258,6 +258,18 @@ python -m talos why <id>     # why that was allowed or refused, and what came of
 python -m talos verify       # prove the event log was not edited after the fact (exit 1 if it was)
 python -m talos anchor       # pin the chain head — exit 1 if the log shrank (--send mails the digest)
 ```
+
+## Dependencies: intent vs. what gets installed
+
+`requirements*.txt` is the statement of intent (ranges). `requirements*.lock` is what
+gets installed: every version pinned, every file hashed, resolved for every platform
+with `uv pip compile --universal --generate-hashes --python-version 3.11` (exact
+commands in `tests/test_requirements_lock.py` — run them from the repo root with
+RELATIVE paths, the lock's header quotes the command line). After ANY change to a
+`requirements*.txt`, regenerate both locks in that order (the dev lock takes the
+runtime lock as constraint). `install.sh`, `talos update` and CI install with
+`--require-hashes` and refuse a tree without the lock: the signature over the archive
+covers the packages only through it. `pip` is never upgraded unpinned first.
 
 ## Traps that have already cost time
 

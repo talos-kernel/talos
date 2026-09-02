@@ -26,7 +26,7 @@ sonst verbietet. Deshalb der Ablauf:
 
 Wem welcher Pfad gehoert
 ------------------------
-    <prefix>/talos/ · tests/ · redteam.py · requirements*.txt · .venv/
+    <prefix>/talos/ · tests/ · redteam.py · requirements*.{txt,lock} · .venv/
         gehoeren der Auslieferung. Sie kommen aus dem Tarball und werden ersetzt.
     <prefix>/talos.env      Konfiguration des Betreibers (Bot-Token, Allowlist, 0600)
     <prefix>/data/          Event-Log und Snapshots (0700) — die Belege ueber alles Getane
@@ -385,7 +385,7 @@ def _verify_signature(payload: bytes, fetch: Fetcher, plan: _Plan, out: _Writer)
     except ImportError:
         raise UpdateError(
             "the `cryptography` package is missing, so the release signature cannot be "
-            "checked. Install it (`pip install -r requirements.txt`) — an update is the "
+            "checked. Install it (`pip install --require-hashes -r requirements.lock`) — an update is the "
             "one place that must not be taken on trust.",
             EXIT_SIGNATURE,
         ) from None
@@ -502,16 +502,40 @@ def _unpack(payload: bytes, plan: _Plan, workdir: Path) -> None:
 # --- Neuer Baum: bauen und beweisen -------------------------------------------------
 
 
+# Woraus der neue Baum seine Abhaengigkeiten bekommt. Der Lock nennt jede Version fest
+# und jede Datei mit SHA-256, aufgeloest fuer alle Plattformen beim Schneiden des
+# Releases; installiert unter --require-hashes deckt der Signatur-Beweis ueber das
+# Archiv damit auch die Pakete, die pip DANACH laedt. Ohne Lock endete der Beweis beim
+# Archiv — pip holte danach, was PyPI gerade anbot. Ein signierter Baum bringt den Lock
+# mit; einer, der nur Bereiche nennt, wird deshalb nicht installiert.
+DEPENDENCY_SETS = (
+    ("requirements.lock", "requirements.txt"),
+    ("requirements-dev.lock", "requirements-dev.txt"),
+)
+
+
+def dependency_installs(staging: Path) -> tuple[tuple[str, list[str]], ...]:
+    """(Datei, pip-Argumente) je Abhaengigkeitssatz, den der neue Baum mitbringt."""
+    installs: list[tuple[str, list[str]]] = []
+    for lock, plain in DEPENDENCY_SETS:
+        if (staging / lock).is_file():
+            installs.append((lock, ["--require-hashes", "-r", lock]))
+        elif (staging / plain).is_file():
+            raise UpdateError(
+                f"{plain} without {lock}: this tree names version ranges, not the releases "
+                "it was proven with. A signed release ships the lock — nothing was switched."
+            )
+    return tuple(installs)
+
+
 def _prepare(run: Runner, plan: _Plan, out: _Writer) -> None:
     """Eigenes venv im NEUEN Baum. Die laufende Installation wird dabei nicht angefasst."""
     out.step("Creating an isolated Python environment for the new tree")
     if run([sys.executable, "-m", "venv", str(plan.staging / ".venv")], plan.staging) != 0:
         raise UpdateError("venv failed — is python3-venv installed?")
     venv_python = plan.staging / VENV_PYTHON
-    for name in ("requirements.txt", "requirements-dev.txt"):
-        if not (plan.staging / name).is_file():
-            continue
-        argv = [str(venv_python), "-m", "pip", "install", "--quiet", "-r", name]
+    for name, args in dependency_installs(plan.staging):
+        argv = [str(venv_python), "-m", "pip", "install", "--quiet", *args]
         if run(argv, plan.staging) != 0:
             raise UpdateError(f"{name} could not be installed. Nothing was switched.")
     out.ok(f".venv in {plan.staging.name} — {plan.prefix} untouched so far")

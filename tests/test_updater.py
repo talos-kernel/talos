@@ -44,6 +44,8 @@ RELEASE_FILES = {
     "redteam.py": "raise SystemExit(0)\n",
     "requirements.txt": "requests>=2.31\n",
     "requirements-dev.txt": "pytest>=8.0\n",
+    "requirements.lock": "requests==2.34.2 \\\n    --hash=sha256:" + "0" * 64 + "\n",
+    "requirements-dev.lock": "pytest==9.1.1 \\\n    --hash=sha256:" + "0" * 64 + "\n",
 }
 
 

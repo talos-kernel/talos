@@ -15,7 +15,7 @@
 
 set -euo pipefail
 
-VERSION="0.17.1-alpha"
+VERSION="0.17.2-alpha"
 BASE="${TALOS_BASE:-https://talos-agent.ch}"
 TARBALL="${BASE}/dist/talos-${VERSION}.tar.gz"
 PREFIX="${TALOS_PREFIX:-$HOME/talos}"
@@ -199,18 +199,21 @@ ok "unpacked into $PREFIX"
 step "Creating an isolated Python environment"
 spin "venv" "$PY" -m venv "$PREFIX/.venv" || die "venv failed — is python3-venv installed?"
 VPY="$PREFIX/.venv/bin/python"
-"$VPY" -m pip install --quiet --upgrade pip >/dev/null 2>&1 || true
-if [ -f "$PREFIX/requirements.txt" ]; then
-  spin "dependencies" "$VPY" -m pip install --quiet -r "$PREFIX/requirements.txt" \
-    || die "dependencies failed."
-fi
-# The proofs below need a test runner. It is a separate file because the agent
+# Every version pinned, every file hashed, resolved for every platform when the
+# release was cut — installed under --require-hashes, so the signature checked
+# above also covers what pip fetches now. pip itself is not upgraded first: that
+# would be one unpinned download ahead of all the pinned ones.
+[ -f "$PREFIX/requirements.lock" ] \
+  || die "this archive ships no requirements.lock — refusing to install unpinned dependencies."
+spin "dependencies" "$VPY" -m pip install --quiet --require-hashes -r "$PREFIX/requirements.lock" \
+  || die "dependencies failed — a hash mismatch here means a package did not arrive as released."
+# The proofs below need a test runner. It is a separate lock because the agent
 # itself never imports it — installing it here is the price of not asking you
 # to take the claims on faith.
-if [ -f "$PREFIX/requirements-dev.txt" ]; then
-  spin "test runner" "$VPY" -m pip install --quiet -r "$PREFIX/requirements-dev.txt" \
-    || die "could not install the test runner — the proofs below would be skipped."
-fi
+[ -f "$PREFIX/requirements-dev.lock" ] \
+  || die "this archive ships no requirements-dev.lock — the proofs below would run unpinned."
+spin "test runner" "$VPY" -m pip install --quiet --require-hashes -r "$PREFIX/requirements-dev.lock" \
+  || die "could not install the test runner — the proofs below would be skipped."
 ok "$PREFIX/.venv — no system packages touched"
 
 # --- 4. proof ----------------------------------------------------------------

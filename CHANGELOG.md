@@ -6,6 +6,24 @@ they make possible that was not possible before — or, more often, what they ta
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions are alpha: the kernel's rules are stable, the surface around them is not.
 
+## [0.17.2-alpha] — 2026-09-02
+
+### Security
+
+- **Dependencies are pinned and hashed; the installer, the updater and CI
+  refuse anything else.** `requirements.txt` named ranges (`requests>=2.31`),
+  so the signature over the archive proved the archive — and then `pip
+  install` fetched whatever PyPI offered at that moment, unverified (CWE-494;
+  raised in the review of the `llmman launch talos` integration). Every
+  release now ships `requirements.lock` and `requirements-dev.lock`: each
+  version fixed, each file with its SHA-256, resolved for every platform when
+  the release was cut. `install.sh`, `talos update` and the workflow install
+  with `--require-hashes` — a package that does not arrive as released stops
+  the install, and a tree that only names ranges is not installed at all. The
+  installer no longer upgrades pip first, which was one unpinned download
+  ahead of all the pinned ones. The `requirements*.txt` files stay as the
+  statement of intent the locks are resolved from.
+
 ## [0.17.1-alpha] — 2026-09-02
 
 ### Fixed

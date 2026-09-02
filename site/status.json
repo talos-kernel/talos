@@ -1,9 +1,9 @@
 {
-  "version": "0.17.1-alpha",
-  "tests": 2330,
+  "version": "0.17.2-alpha",
+  "tests": 2342,
   "redteam_faelle": 208,
   "kernel_zeilen": 895,
   "werkzeuge": 28,
-  "sha": "d350b90238",
-  "gebaut_am": "2026-09-02T06:17:00Z"
+  "sha": "9385d6101b",
+  "gebaut_am": "2026-09-02T07:50:00Z"
 }
