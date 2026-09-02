@@ -14,6 +14,16 @@
 # deshalb zeigt die Weiterleitung auf /; die Anker leben dort.
 Redirect 301 /dossier.html /
 
+# .gz ist hier ein ARCHIVFORMAT, keine Transportkodierung. Der Apache dieses Hostings
+# haengt an .gz per Voreinstellung `Content-Encoding: x-gzip` — ein Client, der das
+# auswertet (curl --compressed, Python requests, jeder Browser), entpackt beim Empfang
+# und haelt dann ein rohes Tar mit anderem SHA-256 in der Hand als das, was .sha256 und
+# .sig beschreiben. Gemessen am 2026-09-02 im Review der llmman-Integration. Ohne
+# Kodierung bekommt jeder Client dieselben Bytes wie der Installer (curl ohne
+# --compressed) und der Updater (urllib), die nie betroffen waren.
+RemoveEncoding .gz .tgz
+AddType application/gzip .gz .tgz
+
 # Der Quell-Tarball ist erreichbar, gehoert aber in keinen Suchindex.
 <IfModule mod_headers.c>
   <FilesMatch "\.(tar\.gz|sig|sha256)$">
