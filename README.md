@@ -15,10 +15,10 @@
 </p>
 
 <p align="center">
-  <!-- ⚠️ Bewusst „tests", nicht „passing": die Zahl kommt aus dem Einsammeln (2342).
+  <!-- ⚠️ Bewusst „tests", nicht „passing": die Zahl kommt aus dem Einsammeln (2343).
        Plattformabhaengige Sandbox- und Repository-Pruefungen koennen uebersprungen werden;
        `test_site_claims` prueft deshalb die gesammelte Zahl statt ein Umgebungsresultat. -->
-  <img src="https://img.shields.io/badge/tests-2342-2e7d32.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-2343-2e7d32.svg" alt="Tests">
   <img src="https://img.shields.io/badge/red%20team-208%2F208-2e7d32.svg" alt="Red team">
   <img src="https://img.shields.io/badge/gate%20path-895%20lines-8a4318.svg" alt="Gate path">
   <img src="https://img.shields.io/badge/tools-28%20gated-8a4318.svg" alt="Tools">
@@ -174,7 +174,7 @@ pip install --require-hashes -r requirements.lock -r requirements-dev.lock
 
 python -m talos setup                    # asks three things, writes a file, stops
 python -m talos doctor                   # what is still missing
-python -m pytest tests/ -q               # 2342 tests
+python -m pytest tests/ -q               # 2343 tests
 python redteam.py                        # 208 adversarial cases
 python -m talos                          # run it
 ```

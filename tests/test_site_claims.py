@@ -137,7 +137,17 @@ EXTRA_PAGES = (
     ROOT / "site" / "vergleich" / "index.html",
     ROOT / "site" / "registry" / "index.html",
     ROOT / "site" / "redteam" / "index.html",
+    ROOT / "site" / "setup" / "index.html",
+    ROOT / "site" / "llms.txt",
 )
+
+# ⚠️ Am 02.09. nannte die Vergleichsseite 27 Werkzeuge (Kopfzeile) und 26 (Fliesstext),
+# echt waren 28 — und der Test war gruen, weil `\b\d{2,5}\b` auch die 28 aus dem Datum
+# „2026-08-28" zaehlte. Ein Zaehler, den ein Datum erfuellt, bewacht nichts. Datumsangaben
+# werden deshalb vor dem Zaehlen entfernt; und die Prosa-Zahlen („26 tools", „tool
+# number 26") bekommen unten ihren eigenen Test, weil sie nie als Zaehler formatiert sind.
+_ISO_DATE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
+_TOOL_PROSE = re.compile(r"\b(\d+)(?:</b>)?\s*tools\b|\btool number (\d+)\b")
 
 
 def _tool_count() -> int:
@@ -148,7 +158,19 @@ def _tool_count() -> int:
 
 
 def _page_claims(seite: Path) -> list[int]:
-    return [int(value) for value in _COUNTER.findall(seite.read_text(encoding="utf-8"))]
+    text = _ISO_DATE.sub(" ", seite.read_text(encoding="utf-8"))
+    return [int(value) for value in _COUNTER.findall(text)]
+
+
+def test_every_page_states_the_real_tool_count_in_prose() -> None:
+    """„26 tools" im Fliesstext driftet leiser als jeder Zaehler — und steht laenger."""
+    echt = _tool_count()
+    for seite in (SITE, *EXTRA_PAGES, ROOT / "README.md"):
+        if not seite.exists():
+            continue
+        genannt = [int(a or b) for a, b in _TOOL_PROSE.findall(seite.read_text(encoding="utf-8"))]
+        falsch = [zahl for zahl in genannt if zahl != echt]
+        assert not falsch, f"{seite.relative_to(ROOT)} nennt {falsch} Werkzeuge, echt sind {echt}."
 
 
 def test_every_page_of_the_site_states_the_real_numbers() -> None:
@@ -196,6 +218,9 @@ def test_the_readme_badges_state_the_real_numbers() -> None:
     )
     assert _redteam_cases() in zahlen, (
         f"Das Red-Team-Abzeichen nennt {zahlen}, tatsaechlich sind es {_redteam_cases()}."
+    )
+    assert _tool_count() in zahlen, (
+        f"Das Werkzeug-Abzeichen nennt {zahlen}, tatsaechlich sind es {_tool_count()}."
     )
 
 
