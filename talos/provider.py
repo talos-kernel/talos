@@ -645,22 +645,46 @@ class HermesCatalogLoader:
                 providers.append(Provider(slug, label, models))
         return ProviderRegistry(providers)
 
+    def load_if_present(self) -> ProviderRegistry | None:
+        """Wie `load()` — aber ohne Hermes gibt es KEINEN Katalog statt eines Abbruchs.
 
-def safe_talos_registry(registry: ProviderRegistry) -> ProviderRegistry:
+        ⚠️ Gemessen am 02.09. mit einer frischen Installation auf einer Maschine ohne
+        Hermes-Checkout: `talos ask` endete bei jedem Start in „catalog helper not
+        found" — vor dem ersten Modellzug. Der Hermes-Katalog ist ein Zusatz (er kennt
+        die Modelle einer lokal installierten Hermes-CLI); die eingebauten Wege in
+        `safe_talos_registry` waren immer als Ersatz gedacht, kamen aber nie an die
+        Reihe, weil diese Zeile vorher warf. Ein fehlender Zusatz ist ein Mangel, kein
+        Urteil — er kostet die Hermes-Modelle, nie den Start.
+
+        Nur die VORGABE-Pfade duerfen fehlen. Wer `TALOS_HERMES_PROVIDER_CATALOG` selbst
+        gesetzt hat, meint eine Datei; die fehlt dann laut — ueber `load()`, das der
+        Aufrufer in diesem Fall nimmt (`config.hermes_catalog_configured`).
+        """
+        if not self.provider_catalog_path.is_file() or not self.models_path.is_file():
+            return None
+        return self.load()
+
+
+def safe_talos_registry(registry: ProviderRegistry | None) -> ProviderRegistry:
     """Expose only routes Talos can invoke without bypassing the operator's auth policy.
 
     Native ``anthropic`` can consume API/extra-usage credentials and Antigravity is
     an isolated worker, never a main reasoner. Claude models are therefore exposed
     through the already hardened Claude CLI OAuth runtime.
+
+    `None` heisst: kein Hermes-Katalog auf dieser Maschine (`load_if_present`). Dann
+    bleiben genau die eingebauten Wege — der Fall, fuer den sie unten seit jeher
+    angehaengt werden.
     """
     blocked = {"anthropic", "antigravity", "google-antigravity", "claude-cli"}
-    native_anthropic = next((p for p in registry.providers if p.slug == "anthropic"), None)
+    hermes_providers = registry.providers if registry is not None else ()
+    native_anthropic = next((p for p in hermes_providers if p.slug == "anthropic"), None)
     claude_models = native_anthropic.models if native_anthropic is not None else (
         "claude-fable-5", "claude-sonnet-5", "claude-opus-4-8",
         "claude-opus-4-7", "claude-opus-4-6", "claude-sonnet-4-6",
     )
     providers: list[Provider] = []
-    for provider in registry.providers:
+    for provider in hermes_providers:
         if provider.slug in blocked:
             continue
         safe_models = tuple(
@@ -695,6 +719,34 @@ def safe_talos_registry(registry: ProviderRegistry) -> ProviderRegistry:
 OPENAI_API_MODELS: tuple[str, ...] = (
     "gpt-5.6-sol", "gpt-5.2", "gpt-5-codex", "o4-mini",
 )
+
+
+def with_local_provider(registry: ProviderRegistry, wanted: ModelSelection) -> ProviderRegistry:
+    """Der EINGESTELLTE lokale Anbieter (ollama, lm-studio, custom) steht im Katalog —
+    mit dem einen Modell, das der Betreiber genannt hat.
+
+    Kein ausgelieferter Katalog kann die Modelle eines lokalen Servers kennen: was dort
+    liegt, hat der Betreiber gezogen. Bisher kannte Talos `ollama` nur, wenn ein
+    Hermes-Katalog es fuehrte — auf einer Maschine ohne (oder mit einem aelteren)
+    Hermes hiess `TALOS_MODEL_PROVIDER=ollama` „unknown provider", und die Einrichtung
+    ueber `ollama launch talos` oder `llmman launch talos` starb am Start. Gemessen am
+    02.09. gegen eine frische Installation.
+
+    Der Name kommt aus der Konfiguration des Betreibers, nicht aus Modelltext; die
+    Adresse bleibt Sache von `credentials.py`; die uebrigen Namen ergaenzt
+    `talos models --refresh` ueber den Zwischenspeicher (`models.merged`). Ein
+    bekannter Name ist kein Recht: jeder Zug geht weiter durch denselben Kernel.
+    """
+    from . import catalog
+
+    info = catalog.get(wanted.provider)
+    if info is None or info.auth != "local" or not wanted.model:
+        return registry
+    if any(provider.slug == wanted.provider for provider in registry.providers):
+        return registry
+    return ProviderRegistry(
+        (*registry.providers, Provider(wanted.provider, info.label, (wanted.model,)))
+    )
 
 
 def _looks_like_claude_model(model: str) -> bool:

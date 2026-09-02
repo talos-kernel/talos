@@ -16,7 +16,9 @@ from talos.provider import (
     Provider,
     ProviderRegistry,
     restore_selection,
+    resolve_fallback,
     safe_talos_registry,
+    with_local_provider,
 )
 
 OWNER = Principal("telegram", "7")
@@ -78,6 +80,59 @@ def test_catalog_loader_executes_real_dataclass_style_modules(tmp_path: Path) ->
     )
     loaded = HermesCatalogLoader(catalog, models).load()
     assert loaded.selection("alpha", "m2") == ModelSelection("alpha", "m2")
+
+
+def test_catalog_loader_without_hermes_files_is_absent_not_fatal(tmp_path: Path) -> None:
+    """Gemessen 02.09.: eine frische Installation ohne Hermes-Checkout starb bei jedem
+    Start an „catalog helper not found". Die Vorgabe-Pfade duerfen fehlen — nur
+    `load()` (der Weg fuer eine vom Betreiber gesetzte Datei) bleibt laut."""
+    loader = HermesCatalogLoader(tmp_path / "nein" / "provider_catalog.py", tmp_path / "nein" / "models.py")
+    assert loader.load_if_present() is None
+    with pytest.raises(ValueError, match="catalog helper not found"):
+        loader.load()
+
+
+def test_safe_registry_without_hermes_still_has_the_built_in_ways() -> None:
+    """Die API-Wege und die Claude-CLI stehen auch ohne Hermes-Katalog im Katalog —
+    das war immer die Absicht, kam aber nie an die Reihe, weil der Loader vorher warf."""
+    registry = safe_talos_registry(None)
+    slugs = {provider.slug for provider in registry.providers}
+    assert {"claude-cli", "anthropic-api", "openai-api"} <= slugs
+    assert registry.get("openai-api").models
+
+
+def test_with_local_provider_makes_the_configured_local_model_known() -> None:
+    """`ollama` mit dem einen Modell, das der Betreiber genannt hat — ohne Hermes."""
+    registry = safe_talos_registry(None)
+    with pytest.raises(ValueError, match="unknown provider"):
+        registry.get("ollama")
+
+    seeded = with_local_provider(registry, ModelSelection("ollama", "qwen3.5:0.8b"))
+    assert seeded.get("ollama").models == ("qwen3.5:0.8b",)
+    assert seeded.selection("ollama", "qwen3.5:0.8b") == ModelSelection("ollama", "qwen3.5:0.8b")
+    # Die eingebauten Wege bleiben davor, unveraendert.
+    assert [p.slug for p in seeded.providers][:-1] == [p.slug for p in registry.providers]
+
+
+def test_with_local_provider_changes_nothing_for_hosted_or_known_or_empty() -> None:
+    registry = safe_talos_registry(None)
+    # Ein gehosteter Anbieter ausserhalb des Katalogs wird NICHT erfunden.
+    assert with_local_provider(registry, ModelSelection("openrouter", "x")) is registry
+    # Ohne Modellnamen gibt es nichts, was bekannt sein koennte.
+    assert with_local_provider(registry, ModelSelection("ollama", "")) is registry
+    # Kennt der Katalog (etwa aus Hermes) den Anbieter schon, bleibt seine Liste.
+    known = ProviderRegistry((*registry.providers, Provider("ollama", "Ollama (local)", ("a", "b"))))
+    assert with_local_provider(known, ModelSelection("ollama", "c")) is known
+
+
+def test_resolve_fallback_keeps_the_configured_local_model(tmp_path: Path) -> None:
+    """Der Weg von `ollama launch talos` / `llmman launch talos`: Anbieter ollama,
+    Modell aus der Konfiguration, kein Hermes — die Wahl bleibt, kein Rueckfall."""
+    log = EventLog(tmp_path / "events.db")
+    wanted = ModelSelection("ollama", "docker.io/ai/qwen3.5:0.8b")
+    registry = with_local_provider(safe_talos_registry(None), wanted)
+    assert resolve_fallback(log, registry, wanted) == wanted
+    assert not log.recent(1, ("model.fallback",))
 
 
 def test_router_switches_actual_reasoner_and_logs_selection(tmp_path: Path) -> None:

@@ -6,6 +6,37 @@ they make possible that was not possible before — or, more often, what they ta
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions are alpha: the kernel's rules are stable, the surface around them is not.
 
+## [0.17.1-alpha] — 2026-09-02
+
+### Fixed
+
+- **A machine without Hermes could not start Talos at all.** The model
+  catalogue was built from Hermes's own helper files, and a missing file was
+  a hard stop (`catalog helper not found`) before the first model call —
+  measured on 2026-09-02 against a fresh install from the published tarball,
+  which is exactly what `ollama launch talos` and `llmman launch talos` hand
+  a stranger. The built-in ways (`claude-cli`, `anthropic-api`, `openai-api`)
+  were always meant to remain without Hermes; they never got their turn. The
+  Hermes catalogue is now what it is, an addition: absent on the default
+  paths, it costs the Hermes models and leaves `catalog.hermes_absent` in the
+  log — never the start. Only a catalogue file the operator named
+  (`TALOS_HERMES_PROVIDER_CATALOG`, `TALOS_HERMES_MODELS`) still has to exist.
+- **The configured local provider is known even when no catalogue lists it.**
+  `TALOS_MODEL_PROVIDER=ollama` (or `lm-studio`, `custom`) was "unknown
+  provider" unless a Hermes catalogue happened to carry it. The provider now
+  enters the catalogue with the one model the operator named; the rest of a
+  local server's models still come from `talos models --refresh`. A known name
+  grants nothing — every call passes the same kernel.
+- **The readiness probe of a local provider asks the server, not the model.**
+  `validate()` used to ask every provider to answer `TALOS_READY`; a small
+  reasoning model behind `llmman serve` spent 3000 tokens thinking about that
+  and hit the 180 s timeout with address and model both correct. A local
+  provider has no key to prove, so the probe now reads `GET /models` (the
+  OpenAI form Ollama, LM Studio, llama.cpp and llmman all speak) and checks the
+  configured model is listed — no generated token. Anything else (no list, no
+  JSON, model absent, a transport without `get`) falls back to the marker
+  probe; never a silent yes.
+
 ## [0.17.0-alpha] — 2026-09-01
 
 Four packages measured against Hermes v0.21 — the one release where another agent

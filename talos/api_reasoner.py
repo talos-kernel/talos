@@ -104,6 +104,9 @@ OPENAI_BASE_URL = "https://api.openai.com/v1"
 ANTHROPIC_MAX_TOKENS = 16_000
 
 READY_MARKER = "TALOS_READY"
+# Die Modell-Liste eines LOKALEN Servers antwortet sofort oder gar nicht — laenger
+# zu warten hiesse, auf einen Server zu warten, der nicht da ist.
+LOCAL_PROBE_TIMEOUT_S = 10
 REDACTED = "***"
 _DETAIL_CHARS = 300
 
@@ -183,7 +186,11 @@ class HttpResponse(Protocol):
 
 
 class HttpTransport(Protocol):
-    """Die einzige Netz-Naht. `requests.Session` erfuellt sie ohne Adapter."""
+    """Die einzige Netz-Naht. `requests.Session` erfuellt sie ohne Adapter.
+
+    `get` braucht nur die Modell-Liste eines lokalen Servers (`_served_locally`);
+    ein Transport ohne `get` faellt dort auf die Marker-Probe zurueck.
+    """
 
     def post(
         self,
@@ -193,6 +200,14 @@ class HttpTransport(Protocol):
         json: Any,
         timeout: float,
         stream: bool,
+    ) -> HttpResponse: ...
+
+    def get(
+        self,
+        url: str,
+        *,
+        headers: Mapping[str, str],
+        timeout: float,
     ) -> HttpResponse: ...
 
 
@@ -756,6 +771,8 @@ class ApiReasoner:
         with self._lock:
             if self._active:
                 raise RuntimeError("API-Reasoner laeuft bereits")
+        if self._served_locally():
+            return
         try:
             answer = self._run("", f"Answer with exactly {READY_MARKER}.", None)
         except ReasonerFailure as failure:
@@ -765,6 +782,55 @@ class ApiReasoner:
             answer = failure.message
         if READY_MARKER not in answer:
             raise RuntimeError(f"API-Modellprobe ohne Bereitschaftsmarker: {answer[:160]}")
+
+    def _served_locally(self) -> bool:
+        """Lokaler Anbieter: den SERVER fragen, ob er das Modell fuehrt — nicht das
+        MODELL, ob es antworten mag.
+
+        ⚠️ Gemessen am 02.09. (llmman serve, qwen3.5:0.8b): auf „Answer with exactly
+        TALOS_READY" dachte das Modell 3000 Tokens lang nach und lief in den
+        180-s-Timeout — Adresse und Modell stimmten. Ein Marker, den ein Denkmodell
+        nicht rechtzeitig sagt, beweist nichts ueber den Weg, und die Probe war die
+        einzige Stelle, an der `ollama launch talos` und `llmman launch talos` noch
+        starben.
+
+        Ein lokaler Anbieter (Katalog: `auth == "local"`) hat keinen Schluessel zu
+        beweisen. `GET /models` — die OpenAI-Form, die Ollama, LM Studio, llama.cpp
+        und llmman alle sprechen — beweist Adresse und Modellnamen ohne einen einzigen
+        erzeugten Token. Jede Abweichung faellt auf die alte Probe zurueck: kein `get`
+        am Transport, Netzfehler, kein 200, kein JSON, Modell nicht gelistet. Nie ein
+        stilles Ja — ein Server, der die Liste nicht kennt, muss weiter antworten.
+        """
+        info = catalog.get(self.provider)
+        if info is None or info.auth != "local" or self.provider == PROVIDER_ANTHROPIC:
+            return False
+        if self._worker_socket:
+            return False
+        get = getattr(self._http, "get", None)
+        if not callable(get):
+            return False
+        route = self._route()
+        headers = {"accept": "application/json"}
+        if route.api_key:
+            headers["authorization"] = f"Bearer {route.api_key}"
+        try:
+            response = get(f"{route.base_url}/models", headers=headers,
+                           timeout=LOCAL_PROBE_TIMEOUT_S)
+        except Exception:
+            return False
+        try:
+            if response.status_code != 200:
+                return False
+            payload = json.loads(response.text or "")
+        except (ValueError, AttributeError):
+            return False
+        finally:
+            close = getattr(response, "close", None)
+            if callable(close):
+                close()
+        entries = payload.get("data", ()) if isinstance(payload, dict) else ()
+        ids = {str(entry.get("id", "")) for entry in entries if isinstance(entry, dict)}
+        return self.model in ids
 
     def cancel(self) -> bool:
         """True, wenn wirklich ein Lauf abgeschossen wurde. False heisst: es lief nichts."""

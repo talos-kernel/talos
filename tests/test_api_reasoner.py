@@ -62,10 +62,21 @@ class FakeResponse:
 
 
 class FakeHttp:
-    def __init__(self, response: FakeResponse | None = None, error: Exception | None = None) -> None:
+    def __init__(self, response: FakeResponse | None = None, error: Exception | None = None,
+                 models: FakeResponse | None = None) -> None:
         self.response = response
         self.error = error
         self.calls: list[dict] = []
+        # Antwort auf `GET /models` (die Probe eines lokalen Anbieters). Ohne eine
+        # gesetzte Liste antwortet der Server wie einer, der den Weg nicht kennt.
+        self.models = models
+        self.get_calls: list[dict] = []
+
+    def get(self, url, *, headers, timeout):
+        self.get_calls.append({"url": url, "headers": dict(headers), "timeout": timeout})
+        if self.models is None:
+            return FakeResponse([], status_code=404, text="not found")
+        return self.models
 
     def post(self, url, *, headers, json, timeout, stream):  # noqa: A002 — Vertragsname
         self.calls.append(
@@ -489,6 +500,74 @@ def test_ollama_falls_back_to_the_catalog_address_when_the_route_has_none() -> N
     http = FakeHttp(response=FakeResponse(OPENAI_LINES))
     ApiReasoner("ollama", "qwen3:27b", bestand, timeout_s=30, http=http).reason("x")
     assert http.calls[-1]["url"] == "http://localhost:11434/v1/chat/completions"
+
+
+def _models_listing(*ids: str) -> FakeResponse:
+    return FakeResponse([], status_code=200,
+                        text=json.dumps({"object": "list", "data": [{"id": i} for i in ids]}))
+
+
+def test_validate_of_a_local_provider_asks_the_server_for_its_models() -> None:
+    """Gemessen 02.09.: ein Denkmodell hinter einem lokalen Server brauchte fuer
+    „Answer with exactly TALOS_READY" 3000 Tokens und lief in den Timeout. Ein
+    lokaler Server hat keinen Schluessel zu beweisen — die Liste beweist den Weg."""
+    bestand = CredentialStore({"ollama": Route("ollama", "", "http://localhost:17434/v1")})
+    http = FakeHttp(response=FakeResponse(OPENAI_LINES),
+                    models=_models_listing("docker.io/ai/qwen3.5:0.8b", "other"))
+    reasoner = ApiReasoner("ollama", "docker.io/ai/qwen3.5:0.8b", bestand, timeout_s=30, http=http)
+    reasoner.validate()
+    assert http.get_calls[-1]["url"] == "http://localhost:17434/v1/models"
+    assert "authorization" not in http.get_calls[-1]["headers"]
+    assert http.calls == []  # kein erzeugter Token, keine Marker-Probe
+
+
+def test_validate_falls_back_to_the_marker_when_the_model_is_not_listed() -> None:
+    """Nie ein stilles Ja: fehlt das Modell in der Liste, entscheidet die alte Probe —
+    und die verlangt weiter den Marker."""
+    bestand = CredentialStore({"ollama": Route("ollama", "", "http://localhost:17434/v1")})
+    http = FakeHttp(response=FakeResponse(OPENAI_LINES), models=_models_listing("other"))
+    reasoner = ApiReasoner("ollama", "qwen3:27b", bestand, timeout_s=30, http=http)
+    with pytest.raises(RuntimeError, match="Bereitschaftsmarker"):
+        reasoner.validate()
+    assert http.calls[-1]["url"] == "http://localhost:17434/v1/chat/completions"
+
+
+def test_validate_falls_back_when_the_server_has_no_model_list() -> None:
+    """404, kein JSON oder ein Transport ohne `get`: die Marker-Probe bleibt."""
+    bestand = CredentialStore({"ollama": Route("ollama", "", "http://localhost:17434/v1")})
+    for http in (
+        FakeHttp(response=FakeResponse(OPENAI_LINES)),  # 404 auf /models
+        FakeHttp(response=FakeResponse(OPENAI_LINES),
+                 models=FakeResponse([], status_code=200, text="<html>nope</html>")),
+    ):
+        reasoner = ApiReasoner("ollama", "qwen3:27b", bestand, timeout_s=30, http=http)
+        with pytest.raises(RuntimeError, match="Bereitschaftsmarker"):
+            reasoner.validate()
+        assert http.calls[-1]["url"].endswith("/chat/completions")
+
+    class PostOnly:
+        def __init__(self) -> None:
+            self.calls: list[dict] = []
+
+        def post(self, url, *, headers, json, timeout, stream):  # noqa: A002
+            self.calls.append({"url": url})
+            return FakeResponse(OPENAI_LINES)
+
+    nur_post = PostOnly()
+    with pytest.raises(RuntimeError, match="Bereitschaftsmarker"):
+        ApiReasoner("ollama", "qwen3:27b", bestand, timeout_s=30, http=nur_post).validate()
+    assert nur_post.calls[-1]["url"].endswith("/chat/completions")
+
+
+def test_validate_of_a_keyed_provider_never_lists_models() -> None:
+    """Ein Schluessel wird durch einen echten Zug bewiesen, nicht durch eine Liste."""
+    bestand = CredentialStore({"kimi": Route("kimi", "kimi-eigener-key-123",
+                                             "https://api.kimi.com/coding/v1")})
+    http = FakeHttp(response=FakeResponse(OPENAI_LINES), models=_models_listing("k2"))
+    with pytest.raises(RuntimeError, match="Bereitschaftsmarker"):
+        ApiReasoner("kimi", "k2", bestand, timeout_s=30, http=http).validate()
+    assert http.get_calls == []
+    assert http.calls[-1]["url"].endswith("/chat/completions")
 
 
 def test_kimi_and_nvidia_build_with_their_own_keys() -> None:

@@ -55,6 +55,7 @@ from .provider import (
     ModelSelection,
     resolve_fallback,
     restore_selection,
+    with_local_provider,
     safe_talos_registry,
 )
 from .reasoner import ClaudeCliReasoner, HermesCliReasoner
@@ -196,18 +197,28 @@ def run(once: bool = False, ask: str = "", chat: bool = False) -> None:
     # nur von der Platte: ein Netzaufruf beim Hochfahren machte aus einer Stoerung beim
     # Anbieter eine Stoerung hier. Gefuellt wird der Zwischenspeicher mit
     # `talos models --refresh`.
+    # Der Hermes-Katalog ist ein ZUSATZ: ohne Hermes-Checkout gibt es ihn nicht, und
+    # dann bleiben die eingebauten Wege (`safe_talos_registry`) plus der eingestellte
+    # lokale Anbieter (`with_local_provider`). Nur eine vom Betreiber GESETZTE
+    # Katalogdatei darf laut fehlen — eine Vorgabe, die nicht da ist, ist kein Fehler.
+    hermes_catalog = HermesCatalogLoader(config.hermes_provider_catalog, config.hermes_models)
+    hermes_registry = (
+        hermes_catalog.load() if config.hermes_catalog_configured
+        else hermes_catalog.load_if_present()
+    )
+    if hermes_registry is None:
+        log.append(Event("boot", "provider", "catalog.hermes_absent", {
+            "path": str(config.hermes_provider_catalog),
+        }))
+    wanted_selection = ModelSelection(config.model_provider, config.model_name)
     model_registry = models.merged(
-        safe_talos_registry(HermesCatalogLoader(
-            config.hermes_provider_catalog, config.hermes_models
-        ).load()),
+        with_local_provider(safe_talos_registry(hermes_registry), wanted_selection),
         models.load_cache(Path(MODEL_CACHE)),
     )
     # ⚠️ EINMAL aufgeloest, bevor irgendjemand sie benutzt: `restore_selection` und
     # `ModelRouter` greifen beide darauf zu, und beide warfen auf einer frischen
     # Installation denselben Traceback ueber ein Modell, das der Katalog nicht kennt.
-    fallback_selection = resolve_fallback(
-        log, model_registry, ModelSelection(config.model_provider, config.model_name)
-    )
+    fallback_selection = resolve_fallback(log, model_registry, wanted_selection)
     initial_selection = restore_selection(log, model_registry, fallback_selection)
 
     # Skills kommen aus Verzeichnissen, die dem Betreiber gehoeren — Talos liefert keine

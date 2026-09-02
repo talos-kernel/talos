@@ -169,6 +169,10 @@ class TalosConfig:
     hermes_bin: str = HERMES_BIN
     hermes_provider_catalog: Path = HERMES_PROVIDER_CATALOG
     hermes_models: Path = HERMES_MODELS
+    # Hat der Betreiber die Hermes-Katalogdateien SELBST benannt? Dann muessen sie da
+    # sein (laut). Die Vorgabe-Pfade duerfen fehlen — eine Maschine ohne Hermes ist
+    # der Normalfall einer oeffentlichen Installation, kein Defekt.
+    hermes_catalog_configured: bool = False
     model_provider: str = DEFAULT_MODEL_PROVIDER
     model_name: str = DEFAULT_MODEL
     # Die Laufzeit-Fallback-Kette (TALOS_MODEL_FALLBACKS), kommagetrennt als
@@ -408,6 +412,12 @@ def load_config(*, require_channel: bool = True) -> TalosConfig:
             os.environ.get("TALOS_HERMES_MODELS")
             or secrets.get("TALOS_HERMES_MODELS", str(HERMES_MODELS))
         ).expanduser(),
+        hermes_catalog_configured=bool(
+            os.environ.get("TALOS_HERMES_PROVIDER_CATALOG")
+            or secrets.get("TALOS_HERMES_PROVIDER_CATALOG")
+            or os.environ.get("TALOS_HERMES_MODELS")
+            or secrets.get("TALOS_HERMES_MODELS")
+        ),
         model_provider=(
             os.environ.get("TALOS_MODEL_PROVIDER")
             or secrets.get("TALOS_MODEL_PROVIDER", DEFAULT_MODEL_PROVIDER)
