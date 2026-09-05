@@ -18,6 +18,10 @@ preferences live in `USER.md`. All three are operator-owned prompt state and rel
 | Home | <https://talos-agent.ch> · docs at `/docs/` |
 | Repository | `talos-kernel/talos` is the public source tree |
 
+⚠️ **`public` is blocked for pushing.** Its push url is a deliberate dead end — the
+published state is only ever produced by `scripts/sync-public.sh` into a separate clone.
+A direct push from here would carry 108 commits and a real author address across.
+
 ## The rule everything rests on
 
 **The model proposes, it does not decide.** The reasoner emits `TOOL_CALL` text, the kernel
@@ -257,6 +261,10 @@ python -m talos anchor       # pin the chain head — exit 1 if the log shrank (
 
 ## Dependencies: intent vs. what gets installed
 
+Scan the shipped pins explicitly with OSV: `osv-scanner scan source --no-resolve
+--lockfile requirements.txt:requirements.lock --lockfile requirements.txt:requirements-dev.lock`.
+Automatic discovery scans the range files and misses these nonstandard lock names.
+
 `requirements*.txt` is the statement of intent (ranges). `requirements*.lock` is what
 gets installed: every version pinned, every file hashed, resolved for every platform
 with `uv pip compile --universal --generate-hashes --python-version 3.11` (exact
@@ -292,7 +300,21 @@ covers the packages only through it. `pip` is never upgraded unpinned first.
    that did not survive an update makes a deliberately configured install answer with the
    shipped default. The fallback stays, but it leaves a trace — and a real deployment
    names its model in `talos.env` so the fallback is *its* model, not this repo's.
-9. **An operator installation is not this repo.** The instance on the operator's machine has
+9. **Two repositories, and the remotes say which is which.** In this working tree
+   `private` carries the full history and the real author address; `public` is
+   `talos-kernel/talos`, an own clean history from zero. Run `git remote -v` for the
+   addresses — ⚠️ they are deliberately **not** written out here, because this file is
+   published with the tree, and the private one has no business being in it. The
+   deployment target is neither: it is a running instance fed by `rsync`, and a third
+   remote for it no longer exists.
+   ⚠️ Moved into the organisation on 2026-08-06 by pushing fresh, **not** by transfer:
+   a transfer leaves a permanent redirect from the personal account, and with zero stars
+   it would have bought nothing. The old repo was deleted, so no redirect exists.
+   ⚠️ **`public` is blocked
+   for pushing** — its push url is a deliberate dead end. The public state is only ever
+   produced by `scripts/sync-public.sh` into a separate clone; a direct push from here
+   would carry the whole private history across.
+10. **An operator installation is not this repo.** The instance on the operator's machine has
    its own `SOUL.md` (its first heading is the agent's *name*), its own `CLAUDE.md`,
    its own env file and its own `data/`. Sync the **package** (`talos/` → `talos/`), never
    the repository root, or the deployment gets renamed and loses its event log — which is
@@ -302,7 +324,7 @@ covers the packages only through it. `pip` is never upgraded unpinned first.
 
 - Comments and docstrings explain **why**, especially where a rule looks counterintuitive.
   Those are the ones that get argued away six months later.
-- Small modules. The gate path (`policy.py`, 895 lines) must stay readable in one sitting.
+- Small modules. The gate path (`policy.py`, 896 lines) must stay readable in one sitting.
 - Glyphs come from `talos/ux.py` only, one meaning each, **never inside an answer's prose**.
 - Telegram edit interval stays ≥ 1.2 s; the API tolerates roughly one edit per second
   per chat.
@@ -338,8 +360,3 @@ labels, the sandbox holds the rest.
 
 `tests/test_sandbox.py` runs those attacks for real rather than against doubles, and
 skips instead of claiming green where a platform has no implementation.
-
-## Worker and display setup
-
-See `docs/codex-worker.md` for the opt-in Codex backend and expressive Telegram activity.
-Design context is in `PRODUCT.md` and `DESIGN.md`.
