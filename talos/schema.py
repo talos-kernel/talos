@@ -80,6 +80,13 @@ def _positive_int(value: str) -> str:
     return text
 
 
+def _status_style(value: str) -> str:
+    text = _one_line(value)
+    if text not in {"geometric", "expressive"}:
+        raise ValueError("expected geometric or expressive")
+    return text
+
+
 def _mcp_server_list(value: str) -> str:
     """Komma-Liste von MCP-Servernamen. Leer ist erlaubt (= keiner frei);
     jeder Eintrag muss dem Namensmuster der Registry genuegen — ein Tippfehler
@@ -113,6 +120,8 @@ def _model_overrides(value: str) -> str:
 
 
 KEYS: tuple[Key, ...] = (
+    Key("TALOS_CLAUDE_BIN", POLICY,
+        "the Claude executable; setup model saves the detected path", validate=_one_line),
     # --- Politik: die drei, mit denen man den Kernel umstellt statt ihn zu ueberreden.
     Key("TALOS_ALLOWED_PRINCIPALS", POLICY,
         "who may command the agent (channel:id, comma separated) — this IS the "
@@ -138,6 +147,9 @@ KEYS: tuple[Key, ...] = (
         "dedicated HOME for Claude jobs holding only the Claude OAuth state"),
     Key("TALOS_CLAUDE_WORKER_BIN", POLICY,
         "pinned claude binary path for worker jobs", default="claude"),
+    Key("TALOS_CODEX_BACKEND", POLICY,
+        "exposes the confined Codex worker tool; the worker also requires its own configuration",
+        default="0", validate=_bool01),
     Key("TALOS_AGY_BACKEND", POLICY,
         "agent-side gate for the worker's agy backend — without it "
         "delegate_agy is not even in the manifest; the worker has its own "
@@ -205,6 +217,9 @@ KEYS: tuple[Key, ...] = (
         "warning, broken JSON stops the start", validate=_model_overrides),
     Key("TALOS_OWNER_LABEL", SETTING, "how the agent addresses its operator",
         validate=_one_line),
+    Key("TALOS_STATUS_STYLE", SETTING,
+        "activity display: geometric symbols or expressive emoji and a timeline",
+        default="geometric", validate=_status_style),
     Key("TELEGRAM_BOT_USERNAME", SETTING, "shown in the greeting; purely cosmetic",
         validate=_one_line),
     Key("TALOS_MAIL_HOST", SETTING, "IMAP host of the mail channel", validate=_one_line),

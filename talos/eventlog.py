@@ -129,7 +129,11 @@ class EventLog:
         """
         ts = _norm_ts(time.time() if now is None else now)
         payload_json = json.dumps(event.payload, ensure_ascii=False, default=str)
-        with self._lock:
+        with self._lock, self._conn:
+            # The Python lock covers this connection; BEGIN IMMEDIATE covers all
+            # service/CLI connections. Reserve the writer BEFORE reading the head.
+            # The connection context commits on success and rolls back on failure.
+            self._conn.execute("BEGIN IMMEDIATE")
             # Der Vorgaenger-Hash wird INNERHALB des Locks geholt: sonst koennten zwei
             # Threads denselben prev lesen und die Kette gabeln. `prev` ist der chain_hash
             # der letzten Zeile — oder GENESIS, wenn es keine gibt ODER die letzte noch
@@ -158,8 +162,11 @@ class EventLog:
                 )
                 self._conn.commit()
                 return True
-            except sqlite3.IntegrityError:
-                return False  # idempotency_key bereits vorhanden -> schon verarbeitet
+            except sqlite3.IntegrityError as error:
+                self._conn.rollback()
+                if error.sqlite_errorcode == sqlite3.SQLITE_CONSTRAINT_UNIQUE:
+                    return False  # idempotency_key already processed
+                raise
 
     def has_key(self, idempotency_key: str) -> bool:
         with self._lock:

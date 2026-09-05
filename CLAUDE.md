@@ -12,15 +12,11 @@ preferences live in `USER.md`. All three are operator-owned prompt state and rel
 
 | | |
 |---|---|
-| Gate path | `policy.py`, **895 lines** — has to stay readable in one sitting |
-| Tools | **28**, every one gated |
-| Suites | **2343** tests · **208** adversarial · 44 end-to-end |
+| Gate path | `policy.py`, **896 lines** — has to stay readable in one sitting |
+| Tools | **29**, every one gated |
+| Suites | **2398** tests · **210** adversarial · 44 end-to-end |
 | Home | <https://talos-agent.ch> · docs at `/docs/` |
 | Repository | `talos-kernel/talos` is the public source tree |
-
-⚠️ **`public` is blocked for pushing.** Its push url is a deliberate dead end — the
-published state is only ever produced by `scripts/sync-public.sh` into a separate clone.
-A direct push from here would carry 108 commits and a real author address across.
 
 ## The rule everything rests on
 
@@ -238,8 +234,8 @@ In practice:
 ```bash
 python3 -m venv .venv && . .venv/bin/activate && pip install --require-hashes -r requirements.lock -r requirements-dev.lock
 
-python -m pytest tests/ -q   # 2343 tests, ~30s
-python redteam.py            # 208 adversarial cases — mandatory for any kernel change
+python -m pytest tests/ -q   # 2398 tests, ~30s
+python redteam.py            # 210 adversarial cases — mandatory for any kernel change
 python e2e.py                # 44 cases against a real model (costs tokens and time)
 python -m talos --once       # single cycle, for diagnosis
 python -m talos              # run
@@ -296,21 +292,7 @@ covers the packages only through it. `pip` is never upgraded unpinned first.
    that did not survive an update makes a deliberately configured install answer with the
    shipped default. The fallback stays, but it leaves a trace — and a real deployment
    names its model in `talos.env` so the fallback is *its* model, not this repo's.
-9. **Two repositories, and the remotes say which is which.** In this working tree
-   `private` carries the full history and the real author address; `public` is
-   `talos-kernel/talos`, an own clean history from zero. Run `git remote -v` for the
-   addresses — ⚠️ they are deliberately **not** written out here, because this file is
-   published with the tree, and the private one has no business being in it. The
-   deployment target is neither: it is a running instance fed by `rsync`, and a third
-   remote for it no longer exists.
-   ⚠️ Moved into the organisation on 2026-08-06 by pushing fresh, **not** by transfer:
-   a transfer leaves a permanent redirect from the personal account, and with zero stars
-   it would have bought nothing. The old repo was deleted, so no redirect exists.
-   ⚠️ **`public` is blocked
-   for pushing** — its push url is a deliberate dead end. The public state is only ever
-   produced by `scripts/sync-public.sh` into a separate clone; a direct push from here
-   would carry the whole private history across.
-10. **An operator installation is not this repo.** The instance on the operator's machine has
+9. **An operator installation is not this repo.** The instance on the operator's machine has
    its own `SOUL.md` (its first heading is the agent's *name*), its own `CLAUDE.md`,
    its own env file and its own `data/`. Sync the **package** (`talos/` → `talos/`), never
    the repository root, or the deployment gets renamed and loses its event log — which is
@@ -356,3 +338,8 @@ labels, the sandbox holds the rest.
 
 `tests/test_sandbox.py` runs those attacks for real rather than against doubles, and
 skips instead of claiming green where a platform has no implementation.
+
+## Worker and display setup
+
+See `docs/codex-worker.md` for the opt-in Codex backend and expressive Telegram activity.
+Design context is in `PRODUCT.md` and `DESIGN.md`.

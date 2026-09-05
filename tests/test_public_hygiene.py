@@ -44,6 +44,14 @@ def test_blocked_marker_in_a_path_is_detected() -> None:
     assert "blocked private marker" in findings
 
 
+def test_url_literals_and_malformed_hosts_do_not_crash_the_publication_check() -> None:
+    path = ROOT / 'probe.py'
+    assert not PUBLIC_HYGIENE._findings(path, r'https://example.com\x1b[0m')
+    assert not PUBLIC_HYGIENE._findings(path, 'https://[2606:4700:4700::1111]/')
+    assert any('malformed URL' in item for item in
+               PUBLIC_HYGIENE._findings(path, 'https://' + '[broken/'))
+
+
 @pytest.mark.parametrize("kind", ("RSA ", "EC ", "OPENSSH ", ""))
 def test_standard_private_key_headers_are_detected(kind: str) -> None:
     header = f"-----BEGIN {kind}PRIVATE KEY-----"

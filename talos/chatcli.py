@@ -169,11 +169,14 @@ def banner(*, agent: str, version: str, model: str, autonomy: str, uid: int,
     """
     decke = ("approvals possible — you are at a terminal" if attended_now
              else "unattended: no terminal, so NEEDS_HUMAN becomes DENY")
-    return (
-        f"{agent} {version}  ·  {model}  ·  autonomy {autonomy}\n"
-        f"speaking as {CHANNEL_NAME}:{uid}  ·  {decke}\n"
-        f"/help for commands, `exit` to leave\n"
-    )
+    from .terminalui import clean, heading, paint
+
+    return (heading(f"{agent}  /  {version}", "Your terminal. Your rules.")
+            + f"  model      {clean(model)}\n"
+            + f"  policy     autonomy {clean(autonomy)}\n"
+            + f"  identity   {CHANNEL_NAME}:{uid}\n"
+            + f"  session    {paint(decke, 'ok' if attended_now else 'warn')}\n\n"
+            + paint("  /help for commands, `exit` to leave\n", "muted"))
 
 
 def interactive(channel: ChatChannel, registry, conductor, *, unattended=None,
@@ -189,8 +192,10 @@ def interactive(channel: ChatChannel, registry, conductor, *, unattended=None,
     Decke — dieselbe wie im Zeitplan.
     """
     schreiben = (out or sys.stdout).write
+    from .terminalui import paint
+
     while True:
-        zeile = read_line(reader=reader)
+        zeile = read_line(prompt=paint("\n  you › ", out=out, bold=True), reader=reader)
         if zeile is None:
             schreiben("\n")
             return 0

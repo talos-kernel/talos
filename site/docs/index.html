@@ -207,6 +207,8 @@ html.js .rv.in{opacity:1; transform:none}
   html{scroll-behavior:auto}
 }
 </style>
+<link rel="stylesheet" href="/interface.css">
+<script src="/interface.js" defer></script>
 </head>
 <body>
 
@@ -241,15 +243,15 @@ html.js .rv.in{opacity:1; transform:none}
     <h1>Setting it up</h1>
     <p class="lede">Talos takes instructions over a chat channel, reasons with a language
     model, and runs tools: a real shell, a confined Claude worker, a browser on request.
-    None of the 28 tools runs until a deterministic kernel has ruled on the
+    None of the 29 tools runs until a deterministic kernel has ruled on the
     action. <strong>The model proposes; it does not decide.</strong></p>
     <p class="lede">That one decision shapes the rest of this manual. It is why the
     command list is short, and why a few obvious conveniences are missing on purpose.</p>
     <div class="spec-row">
-      <div class="spec"><b>2343</b>unit tests</div>
-      <div class="spec"><b>208/208</b>adversarial</div>
-      <div class="spec"><b>895</b>gate lines</div>
-      <div class="spec"><b>27</b>gated tools</div>
+      <div class="spec"><b>2398</b>unit tests</div>
+      <div class="spec"><b>210/210</b>adversarial</div>
+      <div class="spec"><b>896</b>gate lines</div>
+      <div class="spec"><b>29</b>gated tools</div>
       <div class="spec"><b>30s</b>token life</div>
       <div class="spec"><b>0</b>default identities</div>
     </div>
@@ -303,8 +305,14 @@ python -m pytest tests/ -q</pre>
     <p>Talos ships with <strong>zero</strong> identities allowed to command it. That is
     not an oversight. It is the starting state, and the reason you can install it
     before you have decided anything.</p>
-<pre>python -m talos setup</pre>
-    <p>The wizard writes <code>talos.env</code> and stops. The key that matters:</p>
+<p>Start in your terminal with two guided steps: confirm your local identity,
+    then choose your model connection. No Telegram account is needed.</p>
+<pre>python -m talos setup terminal
+python -m talos chat</pre>
+    <p>For a Telegram bot, run <code>python -m talos setup</code>, then
+    <code>python -m talos</code>. The wizard prints the file it writes and the next
+    command. It preserves other settings, stores the detected CLI path, and saves
+    each section atomically with mode 0600. The key that matters:</p>
 <pre><span class="f">TALOS_ALLOWED_PRINCIPALS</span>=telegram:123456789,cli:1000</pre>
     <p>An identity is <strong>channel-qualified</strong>. The same number on a different
     channel is a different identity — so a Telegram account that may command Talos grants
@@ -334,6 +342,16 @@ python -m pytest tests/ -q</pre>
 <pre>python -m talos models              <span class="c"># the catalogue</span>
 python -m talos models --refresh    <span class="c"># ask the providers directly</span>
 python -m talos setup model</pre>
+    <p>Find and understand a setting before changing it:</p>
+<pre>python -m talos config list model
+python -m talos config describe TALOS_STATUS_STYLE
+python -m talos config set TALOS_STATUS_STYLE expressive
+python -m talos config validate
+python -m talos help setup</pre>
+    <p><code>config</code> works on the selected file; process environment variables
+    can override it. Restart a running service after changing file settings. For a
+    different Claude executable, rerun <code>setup model</code> or set
+    <code>TALOS_CLAUDE_BIN</code> in the protected configuration.</p>
     <p>Each provider carries its <strong>own</strong> key and its own base url, resolved
     at the moment of the call:</p>
 <pre><span class="f">ANTHROPIC_API_KEY</span>=sk-ant-…
@@ -631,6 +649,26 @@ talos why 4831                    <span class="c"># the verdict, the rule, and w
   </section>
 
 </div>
+  <section id="codex-worker" class="rv">
+    <p class="sec-tag">Optional worker</p>
+    <h2>Let Codex take a scoped coding task</h2>
+    <p>Enable the worker on both sides. The agent needs its existing worker switch and socket, plus <code>TALOS_CODEX_BACKEND=1</code>. The worker needs an installed Codex CLI and an authenticated, private credential home:</p>
+    <pre><code>TALOS_CLAUDE_WORKER_CODEX_BIN=/usr/bin/codex
+TALOS_CLAUDE_WORKER_CODEX_HOME=/var/lib/talos/codex-home</code></pre>
+    <p>Authenticate as the worker user. Protect the directory with mode 0700 and its auth file with 0600. Each job gets an auth-only copy in its disposable workspace. Missing configuration fails before the job starts. MCP and browser tasks remain on the Claude backend.</p>
+    <p>The CLI runs inside Talos's mandatory outer sandbox. A completed worker turn still needs the appropriate file or test check before you call the task finished. <a href="https://github.com/talos-kernel/talos/blob/main/docs/codex-worker.md">Read the full worker setup and boundaries →</a></p>
+  </section>
+  <section id="first-run" class="rv">
+    <p class="sec-tag">Your first useful run</p>
+    <h2>Start with something you can check.</h2>
+    <p>After configuring your model and chat identity, try these in your own conversation. No sample needs a secret, an external message or a production change.</p>
+    <ol>
+      <li><strong>Read:</strong> ask Talos to read a README in its workspace and explain how the project starts.</li>
+      <li><strong>Make:</strong> ask for a small notes file inside the workspace. Read it back and use <code>/undo</code> to verify recovery.</li>
+      <li><strong>Inspect:</strong> use <code>/log</code> to see the recorded calls, or <code>/stop</code> to interrupt a running thought.</li>
+    </ol>
+    <p>For an enabled coding worker, describe the task, the relevant source material and a testable result. Wait for the job's terminal receipt, then inspect its artifacts.</p>
+  </section>
 </main>
 
 <footer>

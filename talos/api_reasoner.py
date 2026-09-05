@@ -67,7 +67,7 @@ from typing import Any, Callable, Iterable, Mapping, Protocol
 
 from . import catalog, instructions
 from .credentials import WORKER_ENV_VAR, CredentialStore, Route, parse_worker_socket
-from .reasoner import CANCELLED_TEXT, PLAN_PROTOCOL, TOOL_PROTOCOL, skills_block
+from .reasoner import CANCELLED_TEXT, PLAN_PROTOCOL, TOOL_PROTOCOL, render_skill_source
 from .stream import OnText
 from .usage import Run, UsageMeter
 
@@ -407,18 +407,13 @@ class ApiReasoner:
 
     # --- Prompt ------------------------------------------------------------------
 
-    def _skills_text(self) -> str:
+    def _skills_text(self, prompt: str = "") -> str:
         """Der Skill-Katalog fuer diesen Zug — leer, wenn keine Quelle verdrahtet ist.
 
         Injiziert statt selbst entdeckt, wie bei den CLI-Reasonern: ein Fehler in der
         Quelle kostet den Katalog, nie den Zug.
         """
-        if self._skills is None:
-            return ""
-        try:
-            return skills_block(self._skills())
-        except Exception:
-            return ""
+        return render_skill_source(self._skills, prompt)
 
     def _compose(self, prompt: str) -> tuple[str, str]:
         """(stehende Anweisungen, Nachricht) — pro Zug gelesen, nicht beim Start eingefroren.
@@ -432,7 +427,7 @@ class ApiReasoner:
         return instructions.assemble_system_prompt(
             tool_protocol=TOOL_PROTOCOL,
             plan_protocol=PLAN_PROTOCOL,
-            skills=self._skills_text(),
+            skills=self._skills_text(prompt),
         ), prompt
 
     def _route(self) -> Route:

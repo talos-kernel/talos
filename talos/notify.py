@@ -57,7 +57,7 @@ MAX_PROMPT_SHORT = 56
 # "delegate_code job_id=<id> state=accepted (workspace …)". Gelesen wird NUR die
 # angenommene Anmeldung — eine Fehlerzeile ("worker unavailable — …") traegt keine
 # job_id und meldet folgerichtig auch nichts an.
-_SUBMITTED = re.compile(r"^delegate_code job_id=(\S+) state=accepted\b", re.MULTILINE)
+_SUBMITTED = re.compile(r"^delegate_(?:code|agy|codex) job_id=(\S+) state=accepted\b")
 
 
 def _zeile(text: object, limit: int) -> str:
@@ -75,6 +75,7 @@ class Watch:
     job_id: str
     conversation: str
     short: str = ""
+    tool: str = "delegate_code"
 
 
 @dataclass
@@ -127,7 +128,7 @@ def watching(runner: Callable, *, desk: CompletionDesk,
             ziel = context()
             if ziel is not None:
                 kurz = _zeile(getattr(req, "args", {}).get("prompt", ""), MAX_PROMPT_SHORT)
-                desk.watch(Watch(job_id, ziel.conversation, kurz))
+                desk.watch(Watch(job_id, ziel.conversation, kurz, antwort.split()[0]))
         return antwort
 
     return delegate_code
@@ -137,7 +138,7 @@ def completion_text(watch: Watch, frame: dict) -> str:
     """Die kurze, faktische Meldung eines Endzustands. Alles Sichtbare kommt aus dem
     Worker-Frame (Stream-Beleg) und der Anmeldung — kein Wort davon ist Modelltext."""
     state = str(frame.get("state", "?"))
-    kopf = f"delegate_code job {watch.job_id} finished — {state}"
+    kopf = f"{watch.tool} job {watch.job_id} finished — {state}"
     if watch.short:
         kopf += f"\n  {watch.short}"
     zeilen = [kopf]
@@ -156,7 +157,7 @@ def gone_text(watch: Watch) -> str:
     """Der Worker kennt den Job nicht mehr. Das ist ein Endzustand, kein Wackeln:
     ein neu gestarteter Worker weiss von nichts (siehe claudeworker) — die Meldung
     sagt das ehrlich, statt ein Ergebnis zu erfinden."""
-    kopf = f"delegate_code job {watch.job_id} — the worker no longer knows this job"
+    kopf = f"{watch.tool} job {watch.job_id} — the worker no longer knows this job"
     if watch.short:
         kopf += f"\n  {watch.short}"
     return kopf + "\n(worker restarted? no result available)"

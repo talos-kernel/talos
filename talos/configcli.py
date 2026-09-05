@@ -38,12 +38,15 @@ from . import schema
 from .ux import SYM_FAIL, SYM_OK
 
 USAGE = """\
-  talos config list                 every key, its kind and whether it is set
+  talos config list [SEARCH]        find keys by name or description
+  talos config describe <KEY>       explain a key, its default and how to change it
   talos config get <KEY>            the value — secrets always answer [REDACTED]
   talos config set <KEY> <VALUE>    settings only; secrets and policy are refused
   talos config validate             check the file against the schema
 
   Options: --file <path>   which config file to work on
+  Reads the selected file, not environment overrides or the running service.
+  After a change, restart a running service; the next chat reads it on start.
 """
 
 
@@ -72,6 +75,10 @@ def read_file(path: Path) -> dict[str, str]:
 
 
 def write_key(path: Path, name: str, value: str) -> None:
+    write_keys(path, {name: value})
+
+
+def write_keys(path: Path, values: dict[str, str]) -> None:
     """Setzt einen Schluessel — atomar, symlink-sicher, 0600 von Anfang an.
 
     ⚠️ `os.open(..., O_NOFOLLOW)` auf der TEMPORAeREN Datei: liegt dort ein Symlink,
@@ -82,18 +89,21 @@ def write_key(path: Path, name: str, value: str) -> None:
     Eintraege ueberleben. Wer eine Konfiguration umschreibt und dabei die Notizen des
     Betreibers verliert, wird beim naechsten Mal von Hand editiert.
     """
+    if path.is_symlink():
+        raise OSError("refusing a symlink config file; choose the real path")
+    values = {name: schema._one_line(value) for name, value in values.items()}
     zeilen = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
-    neu, ersetzt = [], False
+    neu, ersetzt = [], set()
     for zeile in zeilen:
         blank = zeile.strip()
-        if blank and not blank.startswith("#") and blank.partition("=")[0].strip() == name:
-            if not ersetzt:
-                neu.append(f"{name}={value}")
-                ersetzt = True
+        name = blank.partition("=")[0].strip()
+        if blank and not blank.startswith("#") and name in values:
+            if name not in ersetzt:
+                neu.append(f"{name}={values[name]}")
+                ersetzt.add(name)
             continue                       # doppelte Eintraege desselben Schluessels fallen weg
         neu.append(zeile)
-    if not ersetzt:
-        neu.append(f"{name}={value}")
+    neu.extend(f"{name}={value}" for name, value in values.items() if name not in ersetzt)
     inhalt = "\n".join(neu).rstrip("\n") + "\n"
 
     temp = path.with_name(path.name + ".neu")
@@ -104,10 +114,10 @@ def write_key(path: Path, name: str, value: str) -> None:
             datei.write(inhalt)
             datei.flush()
             os.fsync(datei.fileno())
+        os.replace(temp, path)
     except BaseException:
         temp.unlink(missing_ok=True)
         raise
-    os.replace(temp, path)
 
 
 def _target(argv: list[str]) -> tuple[Path, list[str]]:
@@ -125,15 +135,18 @@ def _target(argv: list[str]) -> tuple[Path, list[str]]:
     return (SECRETS_ENV if SECRETS_ENV.is_file() else LOCAL_ENV), rest
 
 
-def cmd_list(werte: dict[str, str], schreiben) -> int:
+def cmd_list(werte: dict[str, str], schreiben, query: str = "") -> int:
     schreiben("\n")
-    for eintrag in schema.KEYS:
+    entries = [key for key in schema.KEYS if query.casefold() in
+               (key.name + " " + key.help).casefold()]
+    for eintrag in entries:
         gesetzt = bool(werte.get(eintrag.name, "").strip())
         # ⚠️ Auch hier keine Auskunft ueber Geheimnisse: „—" heisst nicht „leer",
         # es heisst „darueber wird nichts gesagt".
         zustand = "—" if eintrag.kind == schema.SECRET else ("set" if gesetzt else "unset")
         schreiben(f"  {eintrag.name:34} {eintrag.kind:8} {zustand}\n")
-    schreiben(f"\n  {len(schema.KEYS)} keys — settings are writable, secrets and policy are not\n\n")
+    schreiben(f"\n  {len(entries)} keys — settings are writable, secrets and policy are not\n"
+              "  Explain one: talos config describe <KEY>\n\n")
     return 0
 
 
@@ -212,21 +225,47 @@ def cmd_validate(werte: dict[str, str], path: Path, schreiben) -> int:
 
 def run_config(argv: list[str] | None = None, *, out=None) -> int:
     schreiben = (out or sys.stdout).write
+    args = list(argv or [])
+    if args in ([], ["--help"], ["-h"]):
+        schreiben("\n" + USAGE + "\n")
+        return 0
     try:
-        pfad, rest = _target(list(argv or []))
+        pfad, rest = _target(args)
     except ValueError as fehler:
         schreiben(f"  {SYM_FAIL} {fehler}\n")
         return 1
     unterbefehl = rest[0] if rest else ""
+    if unterbefehl == "describe" and len(rest) == 2:
+        key = schema.get(rest[1])
+        if key is None:
+            schreiben(f"  {SYM_FAIL} unknown key; use talos config list <search>\n")
+            return 1
+        schreiben(f"\n  {key.name} ({key.kind})\n  {key.help}\n")
+        if key.kind == schema.SETTING:
+            schreiben(f"  Default: {key.default or '(empty)'}\n"
+                      f"  Change: talos config set {key.name} <value>\n")
+        else:
+            schreiben("  Use talos setup or edit the protected file directly.\n")
+        return 0
+    try:
+        return _run(pfad, rest, schreiben)
+    except OSError:
+        schreiben(f"  {SYM_FAIL} cannot access {pfad}; check the path and its permissions.\n")
+        return 1
+
+
+def _run(pfad: Path, rest: list[str], schreiben) -> int:
+    unterbefehl = rest[0] if rest else ""
     werte = read_file(pfad)
 
-    if unterbefehl == "list":
-        return cmd_list(werte, schreiben)
-    if unterbefehl == "get" and len(rest) >= 2:
+    if unterbefehl == "list" and len(rest) <= 2:
+        schreiben(f"  File: {pfad}\n")
+        return cmd_list(werte, schreiben, rest[1] if len(rest) == 2 else "")
+    if unterbefehl == "get" and len(rest) == 2:
         return cmd_get(rest[1], werte, schreiben)
-    if unterbefehl == "set" and len(rest) >= 3:
-        return cmd_set(rest[1], " ".join(rest[2:]), pfad, schreiben)
-    if unterbefehl == "validate":
+    if unterbefehl == "set" and len(rest) == 3:
+        return cmd_set(rest[1], rest[2], pfad, schreiben)
+    if unterbefehl == "validate" and len(rest) == 1:
         return cmd_validate(werte, pfad, schreiben)
     schreiben("\n" + USAGE + "\n")
     return 0 if not unterbefehl else 1

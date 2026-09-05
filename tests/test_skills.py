@@ -491,6 +491,40 @@ def test_an_empty_catalog_renders_to_nothing(tmp_path: Path) -> None:
     assert SkillCatalog().render() == ""
 
 
+def test_matching_skill_is_visible_before_the_catalog_limit_and_includes_its_path(tmp_path: Path) -> None:
+    for index in range(40):
+        _simple(tmp_path, f'alpha-{index:02d}', 'Generic unrelated procedure. ' * 4)
+    wanted = _simple(tmp_path, 'server-plans', 'Compare VPS plans and infrastructure costs.')
+    catalog = discover_skills(tmp_path)
+    rendered = catalog.render(max_chars=500, query='Which VPS server plan should I choose?')
+    assert len(rendered) <= 500 and 'omitted' in rendered
+    assert 'server-plans' in rendered and str(wanted / 'SKILL.md') in rendered
+    assert '## Steps' not in rendered
+
+
+def test_live_skill_source_ranks_the_request_without_using_tool_result_instructions(tmp_path: Path) -> None:
+    _simple(tmp_path, 'server-plans', 'VPS infrastructure plans.')
+    _simple(tmp_path, 'alpha-unrelated', 'Unrelated example.')
+    source = skills_module.SkillSource((tmp_path,))
+    prompt = 'VPS server plans?\n[Tool results so far]\n' + 'alpha unrelated ' * 1000
+    text = source.for_prompt(prompt)
+    assert text.index('server-plans') < text.index('alpha-unrelated')
+    _simple(tmp_path, 'new-vps', 'VPS provisioning.')
+    assert 'new-vps' in source.for_prompt('VPS')
+
+
+def test_reasoners_accept_ranked_and_legacy_skill_sources() -> None:
+    from talos.reasoner import render_skill_source
+
+    class Ranked:
+        def for_prompt(self, prompt):
+            assert prompt == 'server plans'
+            return '- matching procedure'
+    assert 'matching procedure' in render_skill_source(Ranked(), 'server plans')
+    assert 'legacy procedure' in render_skill_source(lambda: '- legacy procedure')
+    assert render_skill_source(lambda: 1 / 0) == ''
+
+
 def test_the_skill_count_is_capped(tmp_path: Path) -> None:
     """Auch die Zahl der Skills ist eine Angriffsflaeche — 10 000 Verzeichnisse waeren
     kein Katalog mehr, sondern ein Denial of Service am Kontextfenster."""

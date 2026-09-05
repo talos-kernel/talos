@@ -89,7 +89,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterator, Mapping
 
-from . import mcpservers, sandbox
+from . import codexworker, mcpservers, sandbox
 from .mcpservers import SERVER_NAME, McpServerRegistry
 from .sandbox import SandboxLimits
 
@@ -478,6 +478,7 @@ class _Job:
 
     def __init__(self, job_id: str, prompt: str, workspace: str, *,
                  backend: str = "claude", agy_home: str = "",
+                 codex: codexworker.CodexBackend | None = None,
                  mcp_eintraege: dict[str, dict] | None = None,
                  legacy_browser: bool = False) -> None:
         self.job_id = job_id
@@ -490,6 +491,8 @@ class _Job:
         # Der Pfad gehoert der Worker-Konfiguration und taucht weder in der
         # Job-Env noch in argv auf.
         self.agy_home = agy_home
+        self.codex = codex
+        self.codex_home_fd: int | None = None
         # Vom WORKER aufgeloeste MCP-Konfigurationseintraege (Name →
         # {"command": …, "args": […]}) — der Frame lieferte nur Namen.
         self.mcp_eintraege = mcp_eintraege or {}
@@ -528,7 +531,8 @@ class _Jobs:
                  browser: BrowserMcp | None = None,
                  mcp_registry: McpServerRegistry | None = None,
                  mcp_enabled: frozenset[str] = frozenset(),
-                 agy: AgyBackend | None = None) -> None:
+                 agy: AgyBackend | None = None,
+                 codex: codexworker.CodexBackend | None = None) -> None:
         self._max_parallel = max_parallel
         self._worker_home = worker_home
         self._browser = browser if browser is not None else BrowserMcp()
@@ -542,6 +546,7 @@ class _Jobs:
         # ein agy-Frame wird dann benannt abgelehnt, nicht gegen eine halbe
         # Konfiguration gefahren.
         self._agy = agy
+        self._codex = codex
         self._schloss = threading.Lock()
         self._jobs: dict[str, _Job] = {}
 
@@ -576,7 +581,8 @@ class _Jobs:
                browser_mcp: bool = False,
                mcp_servers: Sequence[str] = (),
                backend: str = "claude",
-               agy_spawn: Spawn | None = None) -> str:
+               agy_spawn: Spawn | None = None,
+               codex_spawn: Spawn | None = None) -> str:
         with self._schloss:
             if job_id in self._jobs:
                 raise ValueError(f"job_id {job_id!r} is already known")
@@ -586,7 +592,17 @@ class _Jobs:
                 raise _Busy
             agy_home = ""
             lauf_spawn = spawn
-            if backend == "agy":
+            if backend not in ("claude", "agy", "codex"):
+                raise ValueError("unknown worker backend")
+            if backend == "codex":
+                if self._codex is None:
+                    raise _Unavailable("codex backend is not configured on this worker")
+                if browser_mcp or mcp_servers:
+                    raise ValueError("mcp servers are only available on the claude backend")
+                if not (Path(self._codex.home) / "auth.json").is_file():
+                    raise _Unavailable("codex auth is missing — log in under the configured codex home")
+                lauf_spawn = codex_spawn if codex_spawn is not None else spawn
+            elif backend == "agy":
                 # Beide Gates stehen, oder es gibt keinen Job: das Backend
                 # selbst (Binary + agy-HOME) und der Login darin. Der
                 # Fehler heisst `unavailable` — es fehlt Infrastruktur,
@@ -618,6 +634,7 @@ class _Jobs:
             if namen:
                 eintraege, legacy_browser = self._loese_mcp(namen)
             job = _Job(job_id, prompt, workspace, backend=backend,
+                       codex=self._codex if backend == "codex" else None,
                        agy_home=agy_home, mcp_eintraege=eintraege,
                        legacy_browser=legacy_browser)
             self._jobs[job_id] = job
@@ -663,6 +680,21 @@ def _lies_oauth_token(worker_home: str) -> str:
 
 def _run_job(job: _Job, worker_home: str, spawn: Spawn,
              limits: SandboxLimits, deadline: float) -> None:
+    try:
+        _execute_job(job, worker_home, spawn, limits, deadline)
+    finally:
+        if job.codex_home_fd is not None:
+            # Credentials and Codex runtime state are not result artifacts.
+            # Keep the original parent open: a job replacing .home with a symlink
+            # must never redirect cleanup into an operator-owned directory.
+            try:
+                shutil.rmtree(".codex", dir_fd=job.codex_home_fd, ignore_errors=True)
+            finally:
+                os.close(job.codex_home_fd)
+
+
+def _execute_job(job: _Job, worker_home: str, spawn: Spawn,
+             limits: SandboxLimits, deadline: float) -> None:
     """Thread-Rumpf eines Jobs. Hält die Gesamt-Deadline ueber ALLEM — die
     Pruefung steht vor jedem `next()`, und das Handle liefert Herzschlaege,
     damit ein schweigendes Kind sie nicht aushungert."""
@@ -671,6 +703,9 @@ def _run_job(job: _Job, worker_home: str, spawn: Spawn,
     try:
         workspace.mkdir(parents=True, exist_ok=True)
         (workspace / ".home").mkdir(exist_ok=True)
+        if job.codex is not None:
+            codexworker.stage_auth(job.codex, workspace)
+            job.codex_home_fd = os.open(workspace / ".home", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         if job.backend == "agy":
             # Die agy-Credential NUR als Kopie im wegwerfbaren Job-HOME —
             # der Quellpfad bleibt fuer das Kind unsichtbar (nie Env, nie argv).
@@ -687,7 +722,11 @@ def _run_job(job: _Job, worker_home: str, spawn: Spawn,
         job.beenden("failed", fehler=f"workspace not creatable: {ungueltig}")
         return
     job.beenden("running", returncode=-1)
-    if job.backend == "agy":
+    if job.codex is not None:
+        argv = codexworker.argv(job.prompt, workspace, job.codex.model)
+        env = job_env(worker_home, workspace)
+        env["CODEX_HOME"] = str(workspace / ".home" / ".codex")
+    elif job.backend == "agy":
         argv = _agy_argv(job.prompt, limits.timeout_s)
         # Kein Claude-OAuth in der Env eines agy-Jobs: dessen Credential liegt
         # als Kopie im Job-HOME; die andere gehoert hier nicht hinein.
@@ -706,6 +745,7 @@ def _run_job(job: _Job, worker_home: str, spawn: Spawn,
         return
     try:
         events: Iterator[Any] = handle.events()
+        codex_completed = False
         while True:
             if time.monotonic() >= deadline:
                 toeten = getattr(handle, "kill", None)
@@ -721,15 +761,27 @@ def _run_job(job: _Job, worker_home: str, spawn: Spawn,
             except StopIteration as ende:
                 rc = ende.value if isinstance(ende.value, int) else -1
                 spur = str(getattr(handle, "stderr_tail", "") or "")
+                if job.backend == "codex" and rc == 0 and not codex_completed:
+                    job.beenden("failed", returncode=rc,
+                                fehler="Codex exited without turn.completed")
+                    return
                 job.beenden("done" if rc == 0 else "failed",
                             returncode=rc,
                             fehler="" if rc == 0 else (spur or f"exit code {rc}, no stderr"))
                 return
             if event is None:
                 continue  # Herzschlag — nur die Uhr lief weiter
-            summary, datei = parse_stream_event(event, workspace)
-            job.merke(summary, datei)
-            strom_fehler = stream_failure(event)
+            if job.backend == "codex":
+                codex_completed = codex_completed or event.get("type") == "turn.completed"
+                summary, files = codexworker.evidence(event, workspace)
+                job.merke(summary[:MAX_SUMMARY_CHARS] if summary else None, None)
+                for datei in files[:MAX_FILES]:
+                    job.merke(None, datei)
+                strom_fehler = codexworker.failure(event)
+            else:
+                summary, datei = parse_stream_event(event, workspace)
+                job.merke(summary, datei)
+                strom_fehler = stream_failure(event)
             if strom_fehler is not None:
                 # Der Strom meldet den Misserfolg (agy: auch bei RC 0 — der
                 # Auth-Fall) — das Kind wird beendet, der Job ist `failed`,
@@ -743,6 +795,10 @@ def _run_job(job: _Job, worker_home: str, spawn: Spawn,
                 job.beenden("failed", fehler=strom_fehler)
                 return
     except Exception as ungueltig:
+        try:
+            handle.kill()
+        except Exception:
+            pass
         job.beenden("failed", fehler=f"job loop failed: {ungueltig}")
 
 
@@ -894,12 +950,15 @@ def handle_frame(raw: bytes, jobs: _Jobs, *, spawn: Spawn | None = None,
                                for n in mcp_roh)):
                 return _invalid("mcp_servers must be a list of server names")
             backend = frame.get("backend", "claude")
-            if not isinstance(backend, str) or backend not in ("claude", "agy"):
+            if not isinstance(backend, str) or backend not in ("claude", "agy", "codex"):
                 return _invalid(f"unknown backend {backend!r}")
-            if backend == "agy" and (browser_mcp or mcp_roh):
+            if backend != "claude" and (browser_mcp or mcp_roh):
                 return _invalid(
                     "mcp servers are only available on the claude backend")
             agy_hersteller: Spawn | None = None
+            codex_hersteller: Spawn | None = None
+            if backend == "codex" and spawn is None and jobs._codex is not None:
+                codex_hersteller = make_spawn(jobs._codex.bin)
             if backend == "agy" and spawn is None and jobs._agy is not None:
                 # Der Produktions-Spawn fuer agy traegt die agy-Binary aus dem
                 # Worker-Gate — kein Frame der Leitung waehlt sie.
@@ -908,7 +967,8 @@ def handle_frame(raw: bytes, jobs: _Jobs, *, spawn: Spawn | None = None,
                 jobs.submit(job_id, prompt, workspace,
                             spawn=hersteller, limits=grenzen,
                             browser_mcp=browser_mcp, mcp_servers=mcp_roh,
-                            backend=backend, agy_spawn=agy_hersteller)
+                            backend=backend, agy_spawn=agy_hersteller,
+                            codex_spawn=codex_hersteller)
             except _Busy:
                 return _fehler(KIND_BUSY, "parallel job limit reached")
             except _Unavailable as fehlend:
@@ -1045,9 +1105,12 @@ def serve(socket_path: str = DEFAULT_SOCKET, env_path: str = DEFAULT_ENV, *,
     # (oder zeigt eines ins Leere), gibt es das Backend nicht.
     agy = _agy_gate(cfg("TALOS_CLAUDE_WORKER_AGY_BIN"),
                     cfg("TALOS_CLAUDE_WORKER_AGY_HOME"))
+    codex = codexworker.gate(cfg("TALOS_CLAUDE_WORKER_CODEX_BIN"),
+                            cfg("TALOS_CLAUDE_WORKER_CODEX_HOME"),
+                            cfg("TALOS_CLAUDE_WORKER_CODEX_MODEL"))
     jobs = _Jobs(max_parallel=max_parallel, worker_home=worker_home,
                  browser=browser, mcp_registry=mcp_registry,
-                 mcp_enabled=mcp_enabled, agy=agy)
+                 mcp_enabled=mcp_enabled, agy=agy, codex=codex)
     limits = SandboxLimits(timeout_s=timeout_s)
     # Kein Default-Spawn hier: handle_frame baut ihn selbst — und zwar pro
     # Backend (claude wie agy). Wer hier einen einzigen vorgefertigten Spawn

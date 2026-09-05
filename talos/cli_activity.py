@@ -23,6 +23,7 @@ from typing import Any, Callable
 
 from .agent_loop import AgentProgress, ProgressStage
 from .ux import GEOMETRIC, Style
+from .terminalui import is_terminal, paint
 
 __all__ = ["CliActivity"]
 
@@ -41,7 +42,8 @@ class CliActivity:
         clock: Callable[[], float] = time.monotonic,
         style: Style = GEOMETRIC,
     ) -> None:
-        self._schreiben = (out or sys.stdout).write
+        self._out = out or sys.stdout
+        self._schreiben = self._out.write
         self._clock = clock
         self._style = style
         self._start = clock()
@@ -54,7 +56,14 @@ class CliActivity:
 
     def _zeile(self, text: str) -> None:
         try:
-            self._schreiben(f"  {text}\n")
+            tone = "bronze"
+            for glyph, color in ((self._style.ok, "ok"), (self._style.fail, "fail"),
+                                 (self._style.gate, "warn"), (self._style.blocked, "warn")):
+                if text.lstrip().startswith(glyph):
+                    tone = color
+                    break
+            self._schreiben(paint(f"  {text}\n", tone, out=self._out))
+            self._out.flush()
         except Exception:
             pass
 
@@ -67,6 +76,8 @@ class CliActivity:
         if self._sichtbar:
             return
         self._sichtbar = True
+        if is_terminal(self._out):
+            self._zeile("┌─ ACTIVITY · measured as it happens")
         if self._denkt_seit is not None:
             schritt, von = self._denk_schritt
             zaehler = f" — step {schritt}/{von}" if von else ""

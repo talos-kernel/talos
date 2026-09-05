@@ -6,6 +6,64 @@ they make possible that was not possible before — or, more often, what they ta
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions are alpha: the kernel's rules are stable, the surface around them is not.
 
+## [0.18.0-alpha] — 2026-09-05
+
+### Added
+
+- Relevant skills are ranked against the current request before applying the context
+  limit, with real SKILL.md paths. Large libraries no longer show only the first
+  alphabetical entries. Discovery stays live, bounded and independent of permissions.
+
+- A shared bronze terminal design groups help, setup and session state. Color follows
+  terminal detection and `NO_COLOR`; pipes and `TERM=dumb` stay free of ANSI codes.
+
+- `setup terminal` guides a first local conversation without Telegram, with explicit
+  consent for the current terminal identity. Other identities and settings survive.
+- Command-specific help, typo suggestions, searchable configuration and
+  `config describe` make settings discoverable. Expressive status is configurable
+  through the schema; unknown styles and extra command arguments are rejected.
+
+- Expressive Telegram tracking now shows a named state, measured duration, tool-call
+  counts and a bounded activity trail. Approval, failure and a finished conversation
+  turn remain distinct; finishing a turn does not claim a delegated job completed.
+  The header uses escaped Telegram HTML, with no raw control markup or credentials.
+- A more conversational default personality, with purposeful emoji and dry humour.
+- A clearer public website, mobile navigation, an interactive workflow illustration,
+  worker documentation and a first-run guide. Reduced motion is respected; blocking
+  boot effects and the decorative background animation are removed.
+- `delegate_codex` runs bounded implementation and review tasks through the existing
+  confined worker. Both agent and worker must enable it. Binary, credentials and
+  optional model belong to the operator; a tool call cannot override them. Jobs use
+  an isolated auth-only Codex home, retain the workspace sandbox, require a completed
+  turn, and collect changed paths from successful file-change events. The temporary
+  credential copy is removed after the job. No MCP or browser on this backend.
+- Worker selection guidance now asks for a bounded objective, context, acceptance
+  checks and evidence; another enabled worker can handle an unavailable backend.
+
+### Fixed
+
+- Browser rendering prefers a verified IPv4 address on dual-stack hosts and brackets
+  IPv6 literals correctly. Timeouts give a short recovery hint; Chromium error pages
+  cannot masquerade as retrieved evidence. Routine lookups use flexible source
+  selection without a rigid plan announcement unless explicitly requested.
+- The publication scanner handles source-code URL escapes and IPv6 literals, and
+  reports malformed URLs without crashing.
+
+- Setup writes all fields in a section atomically, preserves unrelated settings,
+  refuses symlink targets and leaves the original intact after a failed write.
+- The CLI rejects unknown startup options instead of starting the agent.
+- Model setup persists the executable it detected. `TALOS_CLAUDE_BIN` supports a
+  protected operator-selected path, including native user-local Claude installs.
+
+- Plan instructions now state the parser's two-step minimum, so an explicitly
+  requested read-and-report sequence is not silently discarded as a one-step plan.
+- Concurrent CLI and service writes now reserve the SQLite writer before reading
+  the audit-chain head. Duplicate events release their transaction; other constraint
+  failures propagate instead of pretending the event was already processed.
+- Antigravity and Codex jobs receive completion notifications on the originating
+  conversation, using their actual tool name. Error text cannot forge a watch by
+  embedding an accepted-job line after a newline.
+
 ## [0.17.2-alpha] — 2026-09-02
 
 ### Security

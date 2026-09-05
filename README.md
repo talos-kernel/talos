@@ -15,13 +15,13 @@
 </p>
 
 <p align="center">
-  <!-- ⚠️ Bewusst „tests", nicht „passing": die Zahl kommt aus dem Einsammeln (2343).
+  <!-- ⚠️ Bewusst „tests", nicht „passing": die Zahl kommt aus dem Einsammeln (2398).
        Plattformabhaengige Sandbox- und Repository-Pruefungen koennen uebersprungen werden;
        `test_site_claims` prueft deshalb die gesammelte Zahl statt ein Umgebungsresultat. -->
-  <img src="https://img.shields.io/badge/tests-2343-2e7d32.svg" alt="Tests">
-  <img src="https://img.shields.io/badge/red%20team-208%2F208-2e7d32.svg" alt="Red team">
-  <img src="https://img.shields.io/badge/gate%20path-895%20lines-8a4318.svg" alt="Gate path">
-  <img src="https://img.shields.io/badge/tools-28%20gated-8a4318.svg" alt="Tools">
+  <img src="https://img.shields.io/badge/tests-2398-2e7d32.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/red%20team-210%2F210-2e7d32.svg" alt="Red team">
+  <img src="https://img.shields.io/badge/gate%20path-896%20lines-8a4318.svg" alt="Gate path">
+  <img src="https://img.shields.io/badge/tools-29%20gated-8a4318.svg" alt="Tools">
   <img src="https://img.shields.io/badge/default%20identities-0-c62828.svg" alt="Default identities">
   <img src="https://img.shields.io/badge/python-3.11%2B-1565c0.svg" alt="Python">
   <img src="https://img.shields.io/badge/licence-MIT-616161.svg" alt="MIT">
@@ -105,7 +105,7 @@ authorised individually, bound to its exact arguments and targets, valid once, f
 seconds. Forgetting to call the gate does not produce an unchecked effect — it produces no
 effect at all, because the raw runners are unreachable without a token.
 
-That design is testable, and it is tested: 208 adversarial scenarios run on every change and
+That design is testable, and it is tested: 210 adversarial scenarios run on every change and
 try to get an effect past the kernel. They are in [`redteam.py`](redteam.py). Read them
 before you trust anything written above.
 
@@ -163,33 +163,44 @@ Stated plainly, because a security claim without its limits is marketing:
 
 ## Install
 
-Requires Python 3.11+ and a working [Claude Code CLI](https://claude.com/product/claude-code)
-(the reasoner runs it headless via OAuth — no API key, no per-token billing).
+Requires Python 3.11+ on Linux or macOS and a model connection: your own API key,
+or an installed, signed-in Claude or Hermes CLI. The setup wizard offers the
+connections available on your machine.
 
 ```bash
 git clone https://github.com/talos-kernel/talos.git
 cd talos
 python3 -m venv .venv && . .venv/bin/activate
 pip install --require-hashes -r requirements.lock -r requirements-dev.lock
+export PATH="$PWD/bin:$PATH"              # makes `talos` available in this shell
 
-python -m talos setup                    # asks three things, writes a file, stops
-python -m talos doctor                   # what is still missing
-python -m pytest tests/ -q               # 2343 tests
-python redteam.py                        # 208 adversarial cases
-python -m talos                          # run it
+python -m talos setup terminal           # local identity + model; no Telegram needed
+python -m talos chat                     # your first conversation
+```
+
+Prefer Telegram? Run the bot wizard, then start the service:
+
+```bash
+python -m talos setup                    # token, identity and model
+python -m talos                          # run the Telegram agent
 ```
 
 `setup` proves what it can rather than trusting what you type: the token goes to `getMe`,
 and your identity comes from a **real message you send your own bot** — not from a number
 you copy. A wrong token announces itself on the first poll; a wrong identity does not, and
-a stranger's identity never does. It writes the file and stops; starting is yours.
+a stranger's identity never does. Setup preserves unrelated settings and writes each
+section atomically with mode 0600. It prints the configuration path and the next command.
+Use `talos doctor` for missing prerequisites and `talos help <command>` for command help.
+A running service needs a restart after changing its file settings.
 
 Later, a single part can be redone without repeating the rest:
 
 ```bash
 python -m talos setup model              # switch what it thinks with
 python -m talos setup mail               # add the second way in (IMAP)
-python -m talos config list              # every key, its kind, whether it is set
+python -m talos config list model        # find settings by name or description
+python -m talos config describe TALOS_STATUS_STYLE
+python -m talos config set TALOS_STATUS_STYLE expressive
 python -m talos config set TALOS_MODEL claude-fable-5-1
 python -m talos config set TALOS_MODEL_OVERRIDES '{"local-model": {"context_window": 128000}}'
                                          # a window or a price the catalogue does not know —
@@ -619,6 +630,7 @@ tool that skips the kernel — a tool without a target extractor is `DENY` by co
 | `delegate` | a sub-run that can only read |
 | `delegate_code` / `delegate_dag` / `delegate_status` | a bounded coding job — or a small acyclic graph of them — for a confined Claude worker: opt-in, off by default, writes only into a kernel-derived disposable workspace |
 | `delegate_agy` | the same confined worker's second backend (the agy CLI): same trust form and workspace, behind its own opt-in gates on agent and worker, no MCP |
+| `delegate_codex` | bounded implementation and independent review with Codex: the same kernel and sandbox, isolated auth, verified stream completion and originating-chat notifications; [setup](docs/codex-worker.md) |
 | `delegate_steer` | a course correction into a *running* `/background` task — a framed turn it reads at its next step, never a new right |
 | `agent_consult` | bounded advice from a second, operator-configured agent — data, never permission |
 | `ask_operator` | the one way it can ask you something on purpose |
@@ -684,7 +696,7 @@ executing anything. It is the fastest way to understand the kernel.
 
 ## Architecture
 
-Small modules on purpose. The gate path (`policy.py`, 895 lines) has to be readable in one
+Small modules on purpose. The gate path (`policy.py`, 896 lines) has to be readable in one
 sitting — a gate you cannot read is not a gate.
 
 | Module | Role |

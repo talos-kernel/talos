@@ -37,20 +37,31 @@ from .ux import SYM_FAIL, SYM_OK, SYM_TALOS
 HELP = f"""
   {SYM_TALOS} talos {__version__}
 
+  START HERE
+    talos setup terminal  →  talos chat
+    Telegram: talos setup →  python -m talos
+
+  RUN
   python -m talos                    run the agent
   python -m talos --once             a single cycle, for diagnosis
 
   chat                               a session in this terminal — approvals at a tty
   ask "..."                          one turn from here — no chat, no approvals
-  setup [identity|model|mail]        configure it; writes a file and stops
+
+  MAKE IT YOURS
+  setup [terminal|identity|model|mail]    guided setup; preserves other settings
   doctor [--online]                  what is missing — changes nothing
-  config list|get|set|validate       read and change settings
+  config list|get|set|describe|validate    find, explain and change settings
   models [--refresh]                 which models a provider offers
+
+  SEE WHAT HAPPENED
   status                             what it did last
   health [--json]                    is it well — runs, errors, schedules, anchor
   dashboard                          live view — observing only, localhost only
   events [--limit n] [--tool t] [--since 4h]    what happened — filterable, read-only
   why <event-id>                     why that was allowed or refused
+
+  OPERATE & VERIFY
   verify                             prove the log was not edited after the fact
   anchor [--send] [--mail]         pin the chain head — catches tail truncation
   briefing [--send] [--install]    morning status from the logs — health, chain, anchor
@@ -61,7 +72,7 @@ HELP = f"""
   version                            {__version__}
   help                               this list
 
-  Every subcommand takes --help.
+  Use talos help <command> or talos <command> --help.
 """
 
 
@@ -184,7 +195,16 @@ def cmd_ask(rest: list[str], out=None) -> int:
     from .askcli import check_identity, refuse_in_sandbox
 
     schreiben = (out or sys.stdout).write
-    frage = " ".join(r for r in rest if not r.startswith("-")).strip()
+    if rest in (["--help"], ["-h"]):
+        schreiben('  usage: talos ask [--] "your question"\n'
+                  '  One turn; actions requiring approval are refused. Use talos chat to approve.\n')
+        return 0
+    if rest and rest[0] == "--":
+        rest = rest[1:]
+    elif any(r.startswith("-") for r in rest):
+        schreiben('  unknown ask option; use talos ask -- "question starting with a dash"\n')
+        return 2
+    frage = " ".join(rest).strip()
     if not frage:
         schreiben('  usage: talos ask "your question"\n')
         return 2
@@ -222,6 +242,9 @@ def cmd_chat(rest: list[str], out=None) -> int:
     if "--help" in rest or "-h" in rest:
         schreiben("  usage: talos chat        (a session in this terminal; `exit` to leave)\n")
         return 0
+    if rest:
+        schreiben("  usage: talos chat (no arguments); use talos ask for one question\n")
+        return 2
     grund = refuse_in_sandbox()
     if grund:
         schreiben(f"  {grund}\n")
@@ -241,7 +264,11 @@ def cmd_chat(rest: list[str], out=None) -> int:
 
 
 def _help(_rest: list[str]) -> int:
-    sys.stdout.write(HELP)
+    from .terminalui import heading, help_text
+
+    body = HELP.split(f"  {SYM_TALOS} talos {__version__}\n", 1)[1]
+    sys.stdout.write(heading(f"T A L O S  /  {__version__}", "Real work. Your rules.")
+                     + help_text(body))
     return 0
 
 
@@ -275,15 +302,30 @@ def dispatch(args: list[str]) -> int | None:
     """Fuehrt einen Unterbefehl aus. `None` heisst: kein Unterbefehl, also starten."""
     befehl = args[0] if args and not args[0].startswith("-") else ""
     if not befehl:
-        if args and args[0] in ("-h", "--help"):
+        if args in (["-h"], ["--help"]):
             return _help(args)
-        if args and args[0] == "--version":
+        if args == ["--version"]:
             return cmd_version()
-        return None
+        if not args or args == ["--once"]:
+            return None
+        sys.stdout.write("  unknown run option; use talos --help\n")
+        return 2
+    if befehl == "help" and len(args) > 1:
+        if len(args) != 2:
+            sys.stdout.write("  usage: talos help <command>\n")
+            return 2
+        return dispatch([args[1], "--help"])
     handler = TABLE.get(befehl)
     if handler is None:
-        sys.stdout.write(f"\n  unknown command: {befehl}\n{HELP}")
+        from difflib import get_close_matches
+
+        matches = get_close_matches(befehl, TABLE, n=1, cutoff=0.65)
+        hint = f"  Did you mean talos {matches[0]}?\n" if matches else ""
+        sys.stdout.write(f"\n  unknown command: {befehl}\n{hint}  Use talos --help.\n")
         return 2
+    if befehl in {"status", "verify", "version"} and len(args) > 1:
+        sys.stdout.write(f"  usage: talos {befehl}\n")
+        return 0 if args[1:] in (["--help"], ["-h"]) else 2
     return handler(args[1:])
 
 

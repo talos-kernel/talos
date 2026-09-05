@@ -1,13 +1,14 @@
-"""Telegram-Kanal mit sauberer Antwort und einer flüchtigen Live-Aktivität.
+"""Telegram-Kanal mit einer lesbaren Antwort und einem bleibenden Arbeitsverlauf.
 
 `TelegramClient` kapselt ausschließlich die Bot-API. `TelegramChannel` übersetzt den
 kanal-neutralen Rückweg. `TelegramActivity` ist der kleine, injizierbare UX-Baustein:
-eine stille Nachricht, begrenzte/gedrosselte Edits und am Ende Löschen statt Chat-Müll.
+eine stille Nachricht mit begrenztem Verlauf und eingefrorenem Endzustand.
 `TelegramReply` ist der zweite: die mitwachsende Antwort, die am Ende die endgültige wird.
 """
 from __future__ import annotations
 
 import json
+import html
 import re
 import threading
 import time
@@ -22,7 +23,7 @@ from .agent_loop import AgentProgress, ProgressStage
 from .channel import Button, CallbackQuery, Inbound, Principal, StructuredMessage, Trust
 from .identity import agent_name
 from .tgmarkup import to_telegram_html
-from .ux import GEOMETRIC, Style, style_for
+from .ux import EXPRESSIVE, GEOMETRIC, Style, style_for
 
 _BASE = "https://api.telegram.org/bot{token}/{method}"
 CHANNEL_NAME = "telegram"
@@ -632,6 +633,10 @@ class TelegramActivity:
         self._dropped = 0
         self._step = 0
         self._max_steps = 0
+        self._tool_calls = 0
+        self._issues = 0
+        self._waiting = False
+        self._fatal = False
         self._finished = False
         self._start = clock()
         self._lock = threading.Lock()
@@ -672,7 +677,8 @@ class TelegramActivity:
             return True
         try:
             self._message_id = self._client.send_message(
-                self._chat_id, self._render(), disable_notification=True
+                self._chat_id, self._format(self._render()), disable_notification=True,
+                **({"parse_mode": "HTML"} if self._style is EXPRESSIVE else {}),
             )
         except Exception:
             return False
@@ -706,6 +712,8 @@ class TelegramActivity:
                 self._edit(force=True)
             return
         if event.stage is ProgressStage.TOOL:
+            self._tool_calls += 1
+            self._waiting = False
             self._end_thinking()
             self._append(
                 _Line(
@@ -757,6 +765,7 @@ class TelegramActivity:
         """
         if self._finished:
             return
+        self._fatal = True
         self._finished = True
         self._stop.set()
         self._settle()
@@ -799,6 +808,9 @@ class TelegramActivity:
             self._dropped += 1
 
     def _close_last(self, event: AgentProgress) -> None:
+        self._waiting = event.status == "needs_human"
+        if event.status not in {"done", "needs_human"}:
+            self._issues += 1
         if not self._lines:
             return
         line = self._lines[-1]
@@ -822,6 +834,8 @@ class TelegramActivity:
     def _render(self, *, final: bool = False, footer: str = "") -> str:
         now = self._clock()
         elapsed = now - self._start
+        if self._style is EXPRESSIVE:
+            return self._mission(now, elapsed, final=final, footer=footer)
         head = f"{self._style.talos} {self._name} · {elapsed:.0f}s"
         if not final and self._max_steps:
             head += f" · step {self._step}/{self._max_steps}"
@@ -833,6 +847,41 @@ class TelegramActivity:
             parts.append(footer)
         return "\n".join(parts)
 
+    def _mission(self, now: float, elapsed: float, *, final: bool, footer: str) -> str:
+        """A measured timeline: a finished turn never claims a worker job is done."""
+        if self._fatal:
+            glyph, state = self._style.fail, "STOPPED"
+        elif self._waiting:
+            glyph, state = self._style.gate, "NEEDS YOUR APPROVAL"
+        elif final:
+            glyph, state = ("⚠️", "TURN FINISHED WITH ISSUES") if self._issues else ("🏁", "TURN FINISHED")
+        else:
+            glyph, state = self._style.talos, "WORKING"
+        seconds = max(0, int(elapsed))
+        duration = f"{seconds // 60}m {seconds % 60:02d}s" if seconds >= 60 else f"{seconds}s"
+        calls = f"{self._tool_calls} tool call{'s' if self._tool_calls != 1 else ''}"
+        parts = [f"{glyph} {_redact(self._name)[:60]} · {state}", f"⏱ {duration}  ·  {calls}"]
+        if not final and self._step:
+            # max_steps is a safety budget, never a progress percentage or ETA.
+            parts.append(f"Step {self._step}" + (f"  ·  limit {self._max_steps}" if self._max_steps else ""))
+        parts.append("")
+        if self._dropped:
+            parts.append(f"↥ {self._dropped} earlier events · /log for the full record")
+        parts.extend(line.render(now) for line in self._lines)
+        if self._issues:
+            parts.append(f"\n⚠️ {self._issues} tool call{'s' if self._issues != 1 else ''} refused or failed")
+        if final and footer:
+            parts.append(f"\n{_redact(footer)}")
+        if not final:
+            parts.append("\n/stop to interrupt  ·  /log for receipts")
+        return "\n".join(parts)
+
+    def _format(self, text: str) -> str:
+        if self._style is not EXPRESSIVE:
+            return text
+        head, separator, body = text.partition("\n")
+        return f"<b>{html.escape(head)}</b>{separator}{html.escape(body)}"
+
     def _edit(self, *, text: str | None = None, force: bool = False) -> None:
         if self._message_id is None:
             return
@@ -842,7 +891,10 @@ class TelegramActivity:
             payload = self._render() if text is None else text
             self._last_edit = self._clock()
         try:
-            self._client.edit_message_text(self._chat_id, self._message_id, payload)
+            self._client.edit_message_text(
+                self._chat_id, self._message_id, self._format(payload),
+                **({"parse_mode": "HTML"} if self._style is EXPRESSIVE else {}),
+            )
         except Exception:
             # Die Anzeige ist Komfort. Ein 429 oder ein geloeschter Chat darf den Lauf
             # nicht stoppen und ihn erst recht nicht ein zweites Mal ausloesen.

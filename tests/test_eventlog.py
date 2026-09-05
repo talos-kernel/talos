@@ -45,6 +45,64 @@ def test_events_without_key_are_all_kept(tmp_path):
     assert log.count() == 3
 
 
+def test_duplicate_releases_database_for_another_connection(tmp_path):
+    first, second = make_log(tmp_path), make_log(tmp_path)
+    second._conn.execute("PRAGMA busy_timeout=100")
+    event = Event("run", "ingress", "received", {}, idempotency_key="duplicate")
+    try:
+        assert first.append(event)
+        assert not first.append(event)
+        assert second.append(Event("run", "cli", "next", {}))
+        assert second.verify() is None
+    finally:
+        first.close()
+        second.close()
+
+
+def test_invalid_event_is_not_mistaken_for_an_idempotent_duplicate(tmp_path):
+    log = make_log(tmp_path)
+    log._conn.execute("""CREATE TRIGGER reject_write BEFORE INSERT ON events
+                         BEGIN SELECT RAISE(ABORT, 'storage constraint'); END""")
+    try:
+        with pytest.raises(sqlite3.IntegrityError):
+            log.append(Event("run", "actor", "type", {}))
+    finally:
+        log.close()
+
+
+def test_separate_connections_cannot_fork_the_audit_chain(tmp_path, monkeypatch):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    from talos import eventlog
+
+    first, second = make_log(tmp_path), make_log(tmp_path)
+    reached, release, other_hashed = threading.Event(), threading.Event(), threading.Event()
+    original = eventlog._chain_hash
+    def paused(prev, ts, run_id, *rest):
+        if run_id == "first":
+            reached.set()
+            assert release.wait(3)
+        elif run_id == "second":
+            other_hashed.set()
+        return original(prev, ts, run_id, *rest)
+    monkeypatch.setattr(eventlog, "_chain_hash", paused)
+    try:
+        with ThreadPoolExecutor(2) as pool:
+            a = pool.submit(first.append, Event("first", "service", "write", {}))
+            assert reached.wait(3)
+            b = pool.submit(second.append, Event("second", "cli", "write", {}))
+            # The unfixed second writer reads the same head while the first pauses.
+            other_hashed.wait(.15)
+            release.set()
+            assert a.result(3) and b.result(3)
+        monkeypatch.setattr(eventlog, "_chain_hash", original)
+        assert first.count() == 2 and first.verify() is None
+    finally:
+        release.set()
+        first.close()
+        second.close()
+
+
 # --- Die Hash-Kette: das Log beweist sich selbst ---------------------------------------
 import pytest
 

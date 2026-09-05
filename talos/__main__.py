@@ -59,7 +59,7 @@ from .provider import (
     safe_talos_registry,
 )
 from .reasoner import ClaudeCliReasoner, HermesCliReasoner
-from .skills import discover_skills
+from .skills import SkillSource
 from .snapshot import Snapshotter
 from .telegram import TelegramChannel, TelegramClient
 from . import browser, frames, hearing, models, speech, vision, web
@@ -225,8 +225,7 @@ def run(once: bool = False, ask: str = "", chat: bool = False) -> None:
     # mit (Lizenz: jeder Skill hat seinen eigenen Autor). Entdeckt wird pro Zug, damit ein
     # neu abgelegter Skill ohne Neustart auftaucht; die Kosten sind ein Verzeichnis-Scan.
     # Faellt das aus, gibt es eben keinen Katalog — nie einen kaputten Zug.
-    def skills_catalogue() -> str:
-        return discover_skills(config.skills_dirs).render()
+    skills_catalogue = SkillSource(config.skills_dirs)
 
     def build_reasoner(selection: ModelSelection):
         # Der API-Weg zuerst: er ist der einzige, der ohne lokal angemeldete CLI laeuft,
@@ -276,7 +275,8 @@ def run(once: bool = False, ask: str = "", chat: bool = False) -> None:
     )
     model_picker = ModelPicker(model_registry, reasoner, can_select=reasoner.can_select)
     kernel = PolicyKernel(
-        manifest=tools.default_manifest(agy_backend=config.agy_backend),
+        manifest=tools.default_manifest(agy_backend=config.agy_backend,
+                                        codex_backend=config.codex_backend),
         allowed_identities=config.allowed_principals,
         vault_dir=config.vault_dir,
         shell_needs_human=config.shell_needs_human,
@@ -439,10 +439,17 @@ def run(once: bool = False, ask: str = "", chat: bool = False) -> None:
             # einem zweiten Gate — ohne TALOS_AGY_BACKEND=1 existiert das
             # Werkzeug weder im Manifest noch hier.
             **({
-                "delegate_agy": tools.make_delegate_agy_runner(
+                "delegate_agy": notify.watching(tools.make_delegate_agy_runner(
                     socket_path=config.claude_worker_socket,
-                    work_root=claude_work_root()),
+                    work_root=claude_work_root()), desk=pushes,
+                    context=lambda: conductor.ask_contexts.current()),
             } if config.agy_backend else {}),
+            **({
+                "delegate_codex": notify.watching(tools.make_delegate_codex_runner(
+                    socket_path=config.claude_worker_socket,
+                    work_root=claude_work_root()), desk=pushes,
+                    context=lambda: conductor.ask_contexts.current()),
+            } if config.codex_backend else {}),
             # Der DAG-Runner: gleiche Bauart wie delegate_code. Die Konversation
             # kommt aus dem Thread-Kontext (spaet gebunden), nie aus den
             # Werkzeug-Argumenten; den Graphen dreht der Ticker weiter unten.

@@ -34,6 +34,7 @@ frisches, temporaeres Verzeichnis, das danach verschwindet.
 from __future__ import annotations
 
 import shutil
+import ipaddress
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -81,9 +82,15 @@ def resolver_rules(safe: SafeUrl) -> str:
     eine echte Seite. Deshalb prueft der Test jetzt die WIRKUNG (spezifisch vor
     Sternchen) und nicht meine Vermutung ueber sie.
     """
-    ziel = safe.addresses[0] if safe.addresses else ""
+    # Chromium pins ONE address and cannot use Happy Eyeballs after this mapping.
+    # Prefer an already checked IPv4 address on dual-stack hosts. An IPv6 literal
+    # must be bracketed in Chromium's host-mapping grammar.
+    ziel = next((ip for ip in safe.addresses if ipaddress.ip_address(ip).version == 4),
+                safe.addresses[0] if safe.addresses else "")
     if not ziel:
         return "MAP * ~NOTFOUND"
+    if ":" in ziel:
+        ziel = f"[{ziel}]"
     return f"MAP {safe.host} {ziel}, MAP * ~NOTFOUND"
 
 
@@ -109,6 +116,7 @@ def chromium_argv(binary: str, safe: SafeUrl, profile: str) -> list[str]:
         "--metrics-recording-only",
         f"--host-resolver-rules={resolver_rules(safe)}",
         f"--virtual-time-budget={VIRTUAL_TIME_MS}",
+        "--timeout=15000",
         "--dump-dom",
         safe.url,
     ]
@@ -137,17 +145,26 @@ def render(
     if not exe:
         raise RuntimeError(NO_BROWSER)
     with tempfile.TemporaryDirectory(prefix="talos-browse-") as profile:
-        ergebnis = run(
-            chromium_argv(exe, safe, profile),
-            capture_output=True,
-            text=True,
-            timeout=RENDER_TIMEOUT_S,
-        )
+        try:
+            ergebnis = run(
+                chromium_argv(exe, safe, profile),
+                capture_output=True,
+                text=True,
+                timeout=RENDER_TIMEOUT_S,
+            )
+        except subprocess.TimeoutExpired:
+            raise RuntimeError(
+                f"Browser timed out after {RENDER_TIMEOUT_S}s. Try web_search for another "
+                "official source, then web_fetch; repeating the same render is unlikely to help."
+            ) from None
     dom = ergebnis.stdout or ""
     if not dom.strip():
-        fehler = (ergebnis.stderr or "").strip().splitlines()
-        hinweis = fehler[-1][:200] if fehler else "the page returned nothing"
-        raise RuntimeError(f"nothing rendered: {hinweis}")
+        raise RuntimeError("Browser returned no readable page. Try web_fetch or search for "
+                           "another official source; use talos doctor to check the browser.")
+    if getattr(ergebnis, "returncode", 0) != 0:
+        raise RuntimeError("Browser exited before rendering completed. Try another official source.")
+    if 'chrome-error://chromewebdata/' in dom or 'id="main-frame-error"' in dom:
+        raise RuntimeError("Browser could not load this page. Try web_fetch or another official source.")
     text = html_to_text(dom)
     if len(text) > MAX_PAGE_CHARS:
         text = text[: MAX_PAGE_CHARS - len(PAGE_CUT)] + PAGE_CUT

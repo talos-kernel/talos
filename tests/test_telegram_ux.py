@@ -551,3 +551,64 @@ def test_expressive_status_style_uses_emoji_and_verbs() -> None:
 
     assert style_for("expressive") is EXPRESSIVE
     assert style_for("nonsense") is GEOMETRIC   # unbekannt kippt die Vorgabe nie
+
+
+def test_mission_retains_counts_when_the_visible_trail_is_truncated() -> None:
+    from talos.ux import EXPRESSIVE
+    client = FakeTelegramClient()
+    activity = TelegramActivity(client, 42, style=EXPRESSIVE, max_lines=2,
+                                clock=lambda: client.now[0], heartbeat_s=0)
+    for index in range(4):
+        activity.progress(_tool("read_file", summary=f"read — file-{index}.txt"))
+        activity.progress(_result("read_file", "done"))
+    client.now[0] = 65
+    activity.tick()
+    text = client.edited[-1][2]
+    assert "1m 05s" in text and "4 tool calls" in text
+    assert "2 earlier events" in text and "file-0.txt" not in text
+    assert "limit 8" in text and "%" not in text and "ETA" not in text
+    assert len(client.sent) == 1 and client.deleted == []
+
+
+def test_mission_does_not_call_a_delegated_job_complete_at_turn_end() -> None:
+    from talos.ux import EXPRESSIVE
+    client = FakeTelegramClient()
+    activity = TelegramActivity(client, 42, style=EXPRESSIVE, heartbeat_s=0)
+    activity.progress(_tool("delegate_codex", summary=""))
+    activity.progress(_result("delegate_codex", "done"))
+    activity.succeed()
+    text = client.edited[-1][2]
+    assert "TURN FINISHED" in text and "Delegating to Codex" in text
+    assert "job complete" not in text.lower() and "100%" not in text
+
+
+def test_mission_approval_and_failure_never_get_a_success_header() -> None:
+    from talos.ux import EXPRESSIVE
+    client = FakeTelegramClient()
+    activity = TelegramActivity(client, 42, style=EXPRESSIVE, heartbeat_s=0)
+    activity.progress(_tool("remote_exec", summary=""))
+    activity.progress(_result("remote_exec", "needs_human"))
+    activity.succeed()
+    assert "NEEDS YOUR APPROVAL" in client.edited[-1][2]
+    assert "TURN FINISHED" not in client.edited[-1][2]
+    failed = TelegramActivity(client, 42, style=EXPRESSIVE, heartbeat_s=0)
+    failed.progress(_tool("read_file", summary=""))
+    failed.progress(_result("read_file", "denied"))
+    failed.succeed()
+    assert "TURN FINISHED WITH ISSUES" in client.edited[-1][2]
+    assert "1 tool call refused or failed" in client.edited[-1][2]
+
+
+def test_mission_escapes_operator_and_tool_text_and_redacts_failures() -> None:
+    from talos.ux import EXPRESSIVE
+    client = FakeTelegramClient()
+    activity = TelegramActivity(client, 42, style=EXPRESSIVE, name='<a href="bad">Agent</a>', heartbeat_s=0)
+    activity.progress(_tool("read_file", summary="read — <b>notes&more</b>"))
+    activity.fail("token=never-show-this <script>boom</script>")
+    text = client.edited[-1][2]
+    assert client.sent[0][2]["parse_mode"] == "HTML"
+    assert client.edited[-1][3]["parse_mode"] == "HTML"
+    assert "<a " not in text and "<script>" not in text
+    assert "&lt;b&gt;notes&amp;more&lt;/b&gt;" in text
+    assert "never-show-this" not in text and "[REDACTED]" in text
+    assert "STOPPED" in text

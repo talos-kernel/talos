@@ -131,7 +131,7 @@ PUBLICATION_PATTERNS = (
     re.compile(r"\bprivate[- ]deployment\b", re.IGNORECASE),
 )
 
-URL = re.compile(r"https?://[^\s<>'\"`]+", re.IGNORECASE)
+URL = re.compile(r"https?://[^\s<>'\"`\\]+", re.IGNORECASE)
 EMAIL = re.compile(r"\b[A-Z0-9._%+-]+@([A-Z0-9.-]+\.[A-Z]{2,})\b", re.IGNORECASE)
 WORD = re.compile(r"\b[A-Z][A-Z0-9_-]*\b", re.IGNORECASE)
 PUBLICATION_SUFFIXES = {".md", ".rst", ".txt", ".html", ".sh"}
@@ -191,7 +191,14 @@ def _findings(path: Path, text: str) -> list[str]:
 
     allowed_hosts = ALLOWED_ENDPOINT_FIXTURE_HOSTS.get(relative, frozenset())
     for match in URL.finditer(text):
-        host = urlsplit(match.group(0).rstrip(".,);]")).hostname
+        candidate = match.group(0).rstrip(".,);")
+        if "[" not in candidate:
+            candidate = candidate.rstrip("]")
+        try:
+            host = urlsplit(candidate).hostname
+        except ValueError:
+            findings.append("malformed URL; inspect its host before publishing")
+            continue
         if host:
             host = host.rstrip(".").lower()
             if _private_host(host) and host not in allowed_hosts:

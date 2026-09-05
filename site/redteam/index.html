@@ -3,19 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TALOS — 208 ways to break an agent</title>
-<meta name="description" content="What I throw at Talos before every release: 208 adversarial cases across 25 attack surfaces — token bypass, dial escalation, DNS smuggling, credential exfiltration — and what a green run does and doesn't prove.">
+<title>TALOS — 210 ways to break an agent</title>
+<meta name="description" content="What I throw at Talos before every release: 210 adversarial cases across 25 attack surfaces — token bypass, dial escalation, DNS smuggling, credential exfiltration — and what a green run does and doesn't prove.">
 <link rel="icon" href="../brand/favicon.ico" sizes="any">
 <link rel="apple-touch-icon" href="../brand/apple-touch-icon.png">
-<meta property="og:title" content="TALOS — 208 ways to break an agent">
-<meta property="og:description" content="208 adversarial cases, 25 attack surfaces, one kernel. What attacking my own agent before every release taught me.">
+<meta property="og:title" content="TALOS — 210 ways to break an agent">
+<meta property="og:description" content="210 adversarial cases, 25 attack surfaces, one kernel. What attacking my own agent before every release taught me.">
 <meta property="og:image" content="https://talos-agent.ch/brand/og-logo.png">
 <meta property="og:url" content="https://talos-agent.ch/redteam/">
 <link rel="canonical" href="https://talos-agent.ch/redteam/">
 <meta name="theme-color" content="#17140F">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="TALOS — 208 ways to break an agent">
-<meta name="twitter:description" content="208 adversarial cases, 25 attack surfaces, one kernel. What attacking my own agent before every release taught me.">
+<meta name="twitter:title" content="TALOS — 210 ways to break an agent">
+<meta name="twitter:description" content="210 adversarial cases, 25 attack surfaces, one kernel. What attacking my own agent before every release taught me.">
 <meta name="twitter:image" content="https://talos-agent.ch/brand/og-logo.png">
 <script>document.documentElement.classList.add('js')</script>
 <style>
@@ -189,6 +189,8 @@ html.js .rv.in{opacity:1; transform:none}
   html{scroll-behavior:auto}
 }
 </style>
+<link rel="stylesheet" href="/interface.css">
+<script src="/interface.js" defer></script>
 </head>
 <body>
 
@@ -221,9 +223,9 @@ html.js .rv.in{opacity:1; transform:none}
       <span>Classification · Public</span>
       <span>Subject · Attacking my own agent first</span>
     </div>
-    <h1>208 ways to break an agent.</h1>
+    <h1>210 ways to break an agent.</h1>
     <p class="lede">Every release runs <strong>redteam.py</strong> against the
-    kernel: 208 adversarial cases across <strong>25 attack surfaces</strong> — token forgery,
+    kernel: 210 adversarial cases across <strong>25 attack surfaces</strong> — token forgery,
     dial escalation, DNS smuggling, credential exfiltration, forged senders, prompt-level
     manipulation. Not because I enjoy losing. A security claim you cannot attack is
     <strong>marketing</strong>.</p>
@@ -231,11 +233,11 @@ html.js .rv.in{opacity:1; transform:none}
     This page is what attacking my own agent taught me — including the two cases I would
     not have caught by thinking harder.</p>
     <div class="spec-row">
-      <div class="spec"><b>208</b>adversarial cases</div>
+      <div class="spec"><b>210</b>adversarial cases</div>
       <div class="spec"><b class="red">25</b>attack surfaces</div>
-      <div class="spec"><b>895</b>kernel lines</div>
-      <div class="spec"><b>27</b>gated tools</div>
-      <div class="spec"><b>2343</b>unit tests</div>
+      <div class="spec"><b>896</b>kernel lines</div>
+      <div class="spec"><b>29</b>gated tools</div>
+      <div class="spec"><b>2398</b>unit tests</div>
       <div class="spec"><b class="red">0</b>passes sold as safety</div>
     </div>
   </div>
@@ -255,7 +257,7 @@ html.js .rv.in{opacity:1; transform:none}
     tell a real instruction from a well-written trap. Most frameworks answer that with
     a system prompt — a polite request to the model, written in the same channel the
     attack arrives in. That is not a boundary. That is a wish.</p>
-    <p>Talos answers with a kernel: ~895 lines of Python that return
+    <p>Talos answers with a kernel: ~896 lines of Python that return
     <code>allow</code>, <code>needs-human</code> or <code>deny</code> for every tool
     call, below the model, unreachable from its output. But a kernel is a claim like
     any other, so before every release I try to break it. The red team suite is not
@@ -364,7 +366,7 @@ headers sent  →  <span class="g">only the openai key</span>   <span class="c">
 
   <section id="proves" class="rv">
     <h2><span class="n">Section 05</span>What a green run proves — and what it doesn't</h2>
-    <p>A green <code>208/208</code> means: every attack shape I know fails the way the
+    <p>A green <code>210/210</code> means: every attack shape I know fails the way the
     doctrine says it should, and no fix since has reopened one. That is a regression
     net, and it is genuinely useful — most agent CVEs are old shapes in new clothing.</p>
     <p>It does <strong>not</strong> prove the system is secure. It proves I have not
@@ -384,7 +386,7 @@ headers sent  →  <span class="g">only the openai key</span>   <span class="c">
     <p>The whole suite ships with the repo and runs offline in seconds:</p>
 <pre>git clone https://github.com/talos-kernel/talos
 cd talos && python3 -m venv .venv && .venv/bin/pip install -q requests cryptography
-.venv/bin/python redteam.py   <span class="c"># 208 cases, named after what they try</span></pre>
+.venv/bin/python redteam.py   <span class="c"># 210 cases, named after what they try</span></pre>
     <p>If you find case 180, that is the most valuable contribution this project
     accepts. The issue tracker is open, and the kernel demo on the
     <a href="/">front page</a> lets you probe the policy logic in your browser before

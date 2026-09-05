@@ -1,0 +1,112 @@
+/* Shared public surfaces. Local assets only; the agent's own data never enters here. */
+@font-face{font-family:Talos Display;src:url('/fonts/cinzel-var.woff2') format('woff2');font-weight:400 900;font-display:swap}
+:root{--bg:oklch(.16 .016 75);--bg2:oklch(.20 .018 75);--amber:oklch(.80 .12 78);--hot:oklch(.94 .035 82);--dim:oklch(.74 .035 80);--faint:oklch(.64 .035 80);--line:oklch(.34 .028 80);--surface:oklch(.225 .022 77);--body:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+body{font-family:var(--body);font-size:16px;line-height:1.7}
+p,li{max-width:75ch}
+a,button,input{touch-action:manipulation}
+:focus-visible{outline:2px solid var(--amber);outline-offset:5px}
+section,[id]{scroll-margin-top:96px}
+.wrap{max-width:1260px}
+.crt-fx,.flicker,#rain,.rule{display:none!important}
+html.js #boot{display:none}
+nav{position:sticky;top:0;inset-inline:0;background:var(--bg);backdrop-filter:none;z-index:50}
+nav .wrap{align-items:center;gap:24px;min-height:76px;flex-wrap:wrap;padding-block:12px}
+nav .brand{white-space:nowrap;text-shadow:none;letter-spacing:.08em;flex-shrink:0}
+nav .status,nav .sp{display:none}
+nav a.lnk{font-family:var(--body);font-size:12px;letter-spacing:.015em;text-transform:none;white-space:nowrap;min-height:40px;display:inline-flex;align-items:center}
+.nav-links{display:flex;gap:20px;align-items:center;flex:1;justify-content:flex-end}
+.menu-toggle{display:none;margin-left:auto;background:var(--bg2);border:1px solid var(--line);color:var(--hot);padding:10px 16px;font:600 14px var(--body);border-radius:4px;cursor:pointer;min-height:44px}
+.skip-link{position:fixed;top:8px;left:12px;z-index:200;padding:10px 18px;background:var(--hot);color:var(--bg);transform:translateY(-160%)}
+.skip-link:focus{transform:none}
+h1,h2{letter-spacing:-.035em;text-shadow:none!important;text-wrap:balance}
+h1{font-family:'Talos Display',serif;font-weight:500;font-size:clamp(36px,5.3vw,72px);line-height:1.14}
+h2{font-family:var(--body);font-weight:600;font-size:clamp(28px,3.4vw,45px);line-height:1.2}
+.sub{font-size:17px;line-height:1.75}
+.sys,.sec-tag{font-family:var(--mono);font-size:11px;letter-spacing:.16em;color:var(--amber)}
+.btn{border-radius:4px;font-family:var(--body);letter-spacing:.02em;text-transform:none;font-size:15px;font-weight:600;min-height:48px;display:inline-flex;align-items:center;justify-content:center;transition:background .2s,color .2s,border-color .2s}
+.btn:not(.ghost){background:var(--amber);color:var(--bg)}
+.btn:hover{box-shadow:none;background:var(--hot)}
+.btn.ghost{color:var(--hot)}
+.btn:disabled{opacity:.55;cursor:default}
+.talos-home .hero{min-height:700px;padding:64px 0 72px}
+.talos-home .hero-grid{grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:52px}
+.talos-home h1{max-width:11ch}
+.talos-home .hero .lede{font-size:18px;line-height:1.75;max-width:45ch;margin-top:26px}
+.talos-home .scanbox{max-width:465px;opacity:.92}
+.talos-home .scanbox pre{filter:none;text-shadow:none}
+.talos-home .scan-label{color:var(--dim);letter-spacing:.12em}
+.talos-home .meter-row{border-top:1px solid var(--line);padding-top:22px;margin-top:30px;gap:28px;font-size:12px}
+.talos-home .meter-row b{font-family:var(--body);font-size:21px}
+.talos-home .tick{font-family:var(--mono);font-size:11px;margin-top:28px}
+.talos-home section{padding-block:clamp(56px,7vw,96px)}
+.talos-home .tools .tool-row{gap:24px}
+.talos-home .tool-row p{font-size:15px;line-height:1.75}
+.talos-home .limits li{font-size:16px}
+.talos-home .stats{gap:28px}
+.talos-home .stat .n{font-family:var(--body);font-size:40px;text-shadow:none}
+.talos-home .stat .l{line-height:1.5}
+.mission-section{background:var(--bg2);border-block:1px solid var(--line)}
+.mission-layout{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);gap:clamp(32px,6vw,88px);align-items:center}
+.mission-intro h2{max-width:14ch;margin-bottom:22px}
+.mission-intro p{color:var(--dim)}
+.scenario-controls{display:flex;flex-wrap:wrap;gap:8px;margin-top:28px}
+.scenario-controls button{background:transparent;border:1px solid var(--line);color:var(--dim);padding:11px 15px;font:500 14px var(--body);border-radius:4px;cursor:pointer;min-height:44px}
+.scenario-controls button[aria-pressed=true]{background:var(--amber);border-color:var(--amber);color:var(--bg)}
+.mission-intro .simulation-note{font-size:13px;margin-top:18px;max-width:42ch}
+.chat-preview{background:oklch(.18 .014 78);border:1px solid var(--line);border-radius:16px;padding:24px;box-shadow:0 24px 60px oklch(.10 .015 75/.25)}
+.chat-title{display:flex;align-items:center;gap:12px;padding-bottom:20px;border-bottom:1px solid var(--line)}
+.chat-avatar{background:var(--surface);border:1px solid var(--line);width:44px;height:44px;display:grid;place-items:center;border-radius:50%;font-size:20px}
+.chat-title strong{font-size:16px;display:block}.chat-title small{font-size:12px;color:var(--dim)}
+.demo-badge{margin-left:auto;font:10px var(--mono);letter-spacing:.1em;color:var(--amber);border:1px solid var(--line);padding:5px 8px;border-radius:3px}
+.chat-request{margin:22px 0 18px 35px;padding:13px 17px;border-radius:12px 12px 3px 12px;background:oklch(.30 .034 78);color:var(--hot);font-size:14px;line-height:1.6}
+.chat-receipt{background:var(--surface);border:1px solid var(--line);border-radius:3px 12px 12px 12px;padding:20px;min-height:284px}
+.receipt-header{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px;color:var(--hot)}
+.receipt-meta{font:11px var(--mono);color:var(--dim);margin:7px 0 19px}
+.receipt-trail{list-style:none;display:grid;gap:13px;margin:0;padding:0;font-size:14px}
+.receipt-trail li{display:flex;align-items:flex-start;gap:10px;line-height:1.5}
+.receipt-trail span:first-child{flex:0 0 22px}
+.receipt-result{border-top:1px solid var(--line);padding-top:14px;margin-top:19px;color:var(--hot);font-size:14px;line-height:1.6}
+.preview-actions{display:flex;align-items:center;gap:14px;margin-top:18px}
+.preview-actions .btn{padding:9px 16px;font-size:13px;min-height:44px}
+.preview-actions small{font-size:12px;color:var(--dim)}
+.worker-roster{display:grid;margin-top:34px;border-top:1px solid var(--line)}
+.worker-row{display:grid;grid-template-columns:42px 180px minmax(0,1fr);gap:22px;align-items:start;padding:24px 0;border-bottom:1px solid var(--line)}
+.worker-row .worker-icon{font-size:25px}.worker-row h3{font-size:18px;color:var(--hot)}
+.worker-row code{font-size:11px;color:var(--amber)}
+.worker-row p{font-size:16px;color:var(--dim);margin:0}
+.privacy-note{display:flex;gap:18px;align-items:flex-start;margin-top:28px;padding:22px 0;color:var(--dim);font-size:15px}
+.privacy-note>span{font-size:25px}.privacy-note strong{display:block;margin-bottom:6px}
+@media(max-width:1240px){
+  nav[data-menu] .menu-toggle{display:block}
+  nav[data-menu] .nav-links{display:none;flex-basis:100%;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px 20px;padding:8px 0 12px}
+  nav[data-menu][data-open] .nav-links{display:grid}
+  nav[data-menu] a.lnk{display:flex;font-size:15px;min-height:44px}
+}
+@media(max-width:940px){
+  .talos-home .hero-grid{grid-template-columns:1fr .7fr;gap:24px}
+  .talos-home .hero{min-height:0;padding:50px 0 56px}
+  .talos-home h1{font-size:clamp(38px,6vw,58px)}
+  .mission-layout{grid-template-columns:1fr}
+  .mission-intro h2{max-width:20ch}
+  .chat-preview{max-width:620px;width:100%}
+}
+@media(max-width:640px){
+  nav .wrap{min-height:68px;padding-block:8px}
+  nav[data-menu] .nav-links{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .talos-home .hero-grid{grid-template-columns:1fr}
+  .talos-home .hero{padding-top:36px}
+  .talos-home h1{font-size:clamp(40px,10.5vw,58px);max-width:12ch}
+  .talos-home .hero .lede{font-size:17px;margin-top:20px}
+  .talos-home .scanbox{max-width:320px;margin-top:16px}
+  .talos-home .meter-row{gap:22px;font-size:11px}
+  .talos-home .meter-row b{font-size:20px}
+  .talos-home .cta-row{margin-top:26px;gap:10px}
+  .talos-home .tick{display:none}
+  .chat-preview{padding:16px;border-radius:12px}
+  .chat-receipt{padding:16px}
+  .chat-request{margin-left:20px}
+  .worker-row{grid-template-columns:30px minmax(0,1fr);gap:12px}
+  .worker-row p{grid-column:2}
+  .preview-actions{align-items:flex-start}
+}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{animation:none!important;transition:none!important}}

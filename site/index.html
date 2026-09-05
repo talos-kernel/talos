@@ -80,41 +80,6 @@ a{color:var(--hot)}
 .wrap{max-width:1080px;margin:0 auto;padding:0 clamp(18px,4vw,52px)}
 b,strong{color:var(--hot);font-weight:600}
 
-/* ── CRT overlays ────────────────────────────── */
-.crt-fx{position:fixed;inset:0;pointer-events:none;z-index:90}
-.crt-fx::before{ /* scanlines */
-  content:"";position:absolute;inset:0;
-  background:repeating-linear-gradient(0deg, oklch(0 0 0/.16) 0 1px, transparent 1px 3px);
-}
-.crt-fx::after{ /* vignette + slight center bloom */
-  content:"";position:absolute;inset:0;
-  background:radial-gradient(ellipse at 50% 45%, transparent 55%, oklch(0 0 0/.42) 100%);
-}
-.flicker{position:fixed;inset:0;background:oklch(0.9 0.1 85);opacity:0;pointer-events:none;z-index:91}
-#rain{position:fixed;inset:0;z-index:-1;opacity:.45}
-
-/* ── boot screen ─────────────────────────────── */
-#boot{
-  display:none;position:fixed;inset:0;background:var(--bg);z-index:100;
-  align-items:center;justify-content:center;
-  transition:opacity .6s, visibility .6s;
-}
-html.js #boot{display:flex}
-#boot.off{opacity:0;visibility:hidden}
-#boot .inner{width:min(680px,92vw)}
-#bootlog{
-  font-family:var(--crt);font-size:clamp(16px,2.4vw,21px);line-height:1.5;
-  white-space:pre-wrap;text-shadow:0 0 8px oklch(0.8 0.155 80/.55);
-  min-height:16em;
-}
-#bootlog .ok{color:var(--allow)} #bootlog .warn{color:var(--deny)} #bootlog .dim{color:var(--dim)}
-#skip{
-  margin-top:26px;font-family:var(--mono);font-size:11px;letter-spacing:.24em;
-  text-transform:uppercase;color:var(--dim);background:none;
-  border:1px solid var(--line);padding:9px 20px;cursor:pointer;
-}
-#skip:hover{color:var(--hot);border-color:var(--amber)}
-
 /* ── nav ─────────────────────────────────────── */
 nav{position:fixed;inset:0 0 auto 0;z-index:50;border-bottom:1px solid var(--line);
   background:color-mix(in oklch, var(--bg) 88%, transparent);backdrop-filter:blur(8px)}
@@ -363,20 +328,10 @@ html.js .rv.in{opacity:1;transform:none}
   .rule{display:none}
 }
 </style>
+<link rel="stylesheet" href="/interface.css">
+<script src="/interface.js" defer></script>
 </head>
-<body>
-
-<canvas id="rain" aria-hidden="true"></canvas>
-<div class="rule" id="rule" aria-hidden="true"></div>
-<div class="crt-fx" aria-hidden="true"></div>
-<div class="flicker" id="flick" aria-hidden="true"></div>
-
-<div id="boot">
-  <div class="inner">
-    <div id="bootlog" aria-live="polite"></div>
-    <button id="skip">skip boot ▸</button>
-  </div>
-</div>
+<body class="talos-home">
 
 <nav>
   <div class="wrap">
@@ -401,15 +356,11 @@ html.js .rv.in{opacity:1;transform:none}
 <header class="hero" id="top">
   <div class="wrap hero-grid">
     <div>
-      <p class="sys">talos 0.15.1-alpha · deterministic gate · MIT</p>
-      <h1>I wanted an agent I could hand a shell to.</h1>
-      <p class="lede"><strong>So I built the gate first.</strong> A real shell. A
-      confined worker that builds, tests and browses for you. Four chat channels.
-      Before any tool call runs, the kernel has to sign off. That approval is
-      <strong>tied to the exact arguments, works once, and expires after
-      thirty seconds.</strong></p>
+      <p class="sys">self-hosted · open source · your machine</p>
+      <h1>Real work.<br>Your rules.</h1>
+      <p class="lede">A capable agent on your own machine. It researches, writes code and puts tools to work. <strong>You can follow every step. The permission kernel has the final say.</strong></p>
       <div class="cta-row">
-        <a class="btn" href="#kernel">Watch it work ▾</a>
+        <a class="btn" href="#mission">Watch it work ↓</a>
         <a class="btn ghost" href="#install">Install</a>
       </div>
       <div class="tick" id="tick">
@@ -420,9 +371,9 @@ html.js .rv.in{opacity:1;transform:none}
         <span class="t-why" id="tickWhy">clean — runs sandboxed, logged before it runs</span>
       </div>
       <div class="meter-row">
-        <span><b>2343</b>unit tests</span>
-        <span><b>208/208</b>adversarial</span>
-        <span><b>895</b>lines · gate</span>
+        <span><b>2398</b>unit tests</span>
+        <span><b>210/210</b>adversarial</span>
+        <span><b>896</b>lines · gate</span>
         <span><b>30s</b>token life</span>
       </div>
     </div>
@@ -433,6 +384,47 @@ html.js .rv.in{opacity:1;transform:none}
     </figure>
   </div>
 </header>
+
+<section class="mission-section" id="mission">
+  <div class="wrap mission-layout">
+    <div class="mission-intro">
+      <p class="sec-tag">A conversation with a working record</p>
+      <h2>You should never have to ask: is it doing anything?</h2>
+      <p>See what is running, what needs your decision and what actually finished. One updating message keeps the trail together. The answer stays readable.</p>
+      <div class="scenario-controls" role="group" aria-label="Choose an example workflow">
+        <button type="button" data-scenario="build" aria-pressed="true">🛠️ Build &amp; check</button>
+        <button type="button" data-scenario="approval" aria-pressed="false">⏸️ Your decision</button>
+        <button type="button" data-scenario="failure" aria-pressed="false">🔎 A clear failure</button>
+      </div>
+      <p class="simulation-note">Interactive illustration. These are example messages, not live jobs or performance measurements. Nothing runs on your machine.</p>
+    </div>
+    <div class="chat-preview" id="mission-preview">
+      <div class="chat-title"><span class="chat-avatar" aria-hidden="true">🛡️</span><div><strong>Talos</strong><small>Your agent. Your conversation.</small></div><span class="demo-badge">EXAMPLE</span></div>
+      <div class="chat-request" data-request>Fix the failing test. Show me what changed.</div>
+      <div class="chat-receipt" aria-live="polite" aria-atomic="true">
+        <div class="receipt-header"><strong>🛡️ TALOS</strong><span data-state>TURN FINISHED</span></div>
+        <p class="receipt-meta" data-meta>Illustrative workflow</p>
+        <ol class="receipt-trail" data-trail><li><span aria-hidden="true">🔎</span><span>Read the failure, make a scoped change, verify the result.</span></li></ol>
+        <p class="receipt-result" data-result>A worker receipt is followed by a separate check.</p>
+      </div>
+      <div class="preview-actions"><button type="button" class="btn" data-play>Replay example</button><small>Real activity uses measured time and tool events.</small></div>
+    </div>
+  </div>
+</section>
+
+<section id="workers">
+  <div class="wrap">
+    <p class="sec-tag">Different strengths. One permission kernel.</p>
+    <h2>Give the right worker a clear job.</h2>
+    <p class="sub">Keep the conversation with Talos. Hand bounded tasks to an explicitly enabled worker, then inspect the result. A worker choice never changes who is allowed to act.</p>
+    <div class="worker-roster">
+      <div class="worker-row"><span class="worker-icon" aria-hidden="true">🤝</span><div><h3>Claude</h3><code>delegate_code</code></div><p>Implementation, debugging and browser work through enabled MCP integrations. A disposable workspace contains the job.</p></div>
+      <div class="worker-row"><span class="worker-icon" aria-hidden="true">🧑‍💻</span><div><h3>Codex</h3><code>delegate_codex</code></div><p>Another implementation or review perspective. Isolated job credentials, explicit completion events and a checked artifact trail. <a href="/docs/#codex-worker">Configuration →</a></p></div>
+      <div class="worker-row"><span class="worker-icon" aria-hidden="true">🚀</span><div><h3>Antigravity</h3><code>delegate_agy</code></div><p>An additional backend through the same worker service. Explicit opt-in, bounded execution and a completion message to the originating conversation.</p></div>
+    </div>
+    <div class="privacy-note"><span aria-hidden="true">🔐</span><div><strong>Your deployment is not a public example.</strong>Identity, operator notes, login credentials and runtime data stay outside the source tree. Model requests still go to the provider you configure; self-hosting the agent does not make every model local.</div></div>
+  </div>
+</section>
 
 <section id="kernel">
   <div class="wrap">
@@ -462,7 +454,7 @@ html.js .rv.in{opacity:1;transform:none}
         patterns name, and it is the authoritative one. Two things a page cannot show: before
         any of these stages, the real kernel checks <em>who</em> is asking, and there is no
         default allowlist. And file tools walk their own pipeline — system floor, identity,
-        secrets, persistence, effect. 208 adversarial cases run against the Python kernel on
+        secrets, persistence, effect. 210 adversarial cases run against the Python kernel on
         every install and every update.</p>
       </div>
     </div>
@@ -499,10 +491,10 @@ html.js .rv.in{opacity:1;transform:none}
 <section id="tools">
   <div class="wrap">
     <p class="sec-tag rv">the manifest</p>
-    <h2 class="rv">Twenty-seven tools. Each one declared.</h2>
+    <h2 class="rv">Every tool has a declared effect.</h2>
     <p class="sub rv">The kernel does not guess what a tool might do. Every tool declares its
     <strong>effect</strong> in the manifest, and anything undeclared is refused on sight.
-    <strong>16 read, 5 write, 7 exec — 28 in all.</strong></p>
+    <strong>16 read, 5 write, 8 exec — 29 in all.</strong></p>
     <div class="tools">
       <div class="tool-row rv">
         <div><h3>read</h3><div class="fx">free at autonomy 5</div></div>
@@ -526,7 +518,7 @@ html.js .rv.in{opacity:1;transform:none}
         <div><h3>exec</h3><div class="fx">sandboxed — or refused where no sandbox exists</div></div>
         <div class="set">
           <code>run_shell</code><code>remote_exec</code><code>http_request</code><code>git</code><code>delegate_code</code><code>delegate_dag</code>
-          <code>delegate_agy</code>
+          <code>delegate_agy</code> <code>delegate_codex</code>
         </div>
         <p>One tool carries all the power, so one tool carries all the suspicion. A path floor
         for what is never touched, a hardline with no appeal, a sandbox for everything clean —
@@ -618,11 +610,11 @@ html.js .rv.in{opacity:1;transform:none}
     <p class="sub rv">None of this asks for belief. The installer runs both suites in front
     of you. Every number on this page is a number the suite reproduces.</p>
     <div class="stats">
-      <div class="stat rv"><div class="n cnt" data-n="2343">0</div><div class="l">unit tests, run by the installer in front of you</div></div>
-      <div class="stat rv"><div class="n cnt" data-n="208">0</div><div class="l">adversarial cases trying to pass the kernel</div></div>
+      <div class="stat rv"><div class="n cnt" data-n="2398">0</div><div class="l">unit tests, run by the installer in front of you</div></div>
+      <div class="stat rv"><div class="n cnt" data-n="210">0</div><div class="l">adversarial cases trying to pass the kernel</div></div>
       <div class="stat rv"><div class="n cnt" data-n="44">0</div><div class="l">end-to-end cases against a real model</div></div>
-      <div class="stat rv"><div class="n cnt" data-n="895">0</div><div class="l">lines in the file that decides every verdict</div></div>
-      <div class="stat rv"><div class="n cnt" data-n="26">0</div><div class="l">gated tools, each with a declared effect</div></div>
+      <div class="stat rv"><div class="n cnt" data-n="896">0</div><div class="l">lines in the file that decides every verdict</div></div>
+      <div class="stat rv"><div class="n cnt" data-n="29">0</div><div class="l">gated tools, each with a declared effect</div></div>
       <div class="stat rv"><div class="n cnt" data-n="30" data-suf="s">0</div><div class="l">token lifetime, single use</div></div>
       <div class="stat rv"><div class="n cnt" data-n="0">0</div><div class="l">identities allowed by default</div></div>
     </div>
@@ -641,9 +633,9 @@ html.js .rv.in{opacity:1;transform:none}
 <span class="p">curl</span> -fsSL https://talos-agent.ch/install.sh | <span class="p">bash</span>
 
   <span class="p">▸</span> Checking prerequisites      <span class="ok">✓ Python 3.11+</span>
-  <span class="p">▸</span> Running the test suite      <span class="ok">2343 passed</span>
+  <span class="p">▸</span> Running the test suite      <span class="ok">test suite passed</span>
   <span class="p">▸</span> Running the adversarial suite
-    <span class="ok">208/208 cases behaved as expected.</span> <span class="c">— any failure aborts the install</span>
+    <span class="ok">210/210 cases behaved as expected.</span> <span class="c">— any failure aborts the install</span>
 
   <span class="ok">Done.</span> Talos is in <b>~/talos</b> — <span class="warn">and it is not running.</span>
   <span class="c">That is not a forgotten step. The switch is yours.</span></pre>
@@ -746,49 +738,7 @@ const ART = `                                 :                  ..:-=====-:... 
 +. +***#***********- =        .=:.:#+          +*=.:-                   .::::.:-=+***=:.         =##- .=              -. = .*****+==--::..`;
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-/* ─── boot sequence ─── */
-(() => {
-  const boot = document.getElementById('boot');
-  const log = document.getElementById('bootlog');
-  if (reduced) { boot.remove(); return; }
-  const LINES = [
-    ['TALOS <span class="dim">0.15.1-alpha</span>', 120],
-    ['<span class="dim">An agent whose actions are bounded, explained and checkable.</span>', 340],
-    ['', 60],
-    ['▸ Checking prerequisites', 260],
-    ['  <span class="ok">✓</span> Python 3.11+', 140],
-    ['  <span class="ok">✓</span> curl, tar available', 200],
-    ['▸ Running the test suite', 420],
-    ['  <span class="ok">2343 passed</span>', 300],
-    ['▸ Running the adversarial suite', 460],
-    ['  <span class="ok">208/208 cases behaved as expected.</span>', 380],
-    ['', 80],
-    ['<span class="ok">Done.</span> The switch is yours. <span class="warn">Entering console…</span>', 520],
-  ];
-  let i = 0, out = '';
-  function next() {
-    if (i >= LINES.length) { end(); return; }
-    out += LINES[i][0] + '\n';
-    log.innerHTML = out + '<span style="opacity:.8">█</span>';
-    setTimeout(next, LINES[i++][1]);
-  }
-  function end() {
-    boot.classList.add('off');
-    flickOnce();
-    setTimeout(() => boot.remove(), 700);
-  }
-  document.getElementById('skip').addEventListener('click', end);
-  setTimeout(next, 300);
-})();
-
-/* occasional CRT flicker */
-const flick = document.getElementById('flick');
-function flickOnce() {
-  if (reduced) return;
-  flick.style.transition = 'none'; flick.style.opacity = .06;
-  setTimeout(() => { flick.style.transition = 'opacity .3s'; flick.style.opacity = 0; }, 50);
-}
-if (!reduced) setInterval(() => { if (Math.random() < 0.12) flickOnce(); }, 4000);
+/* Content is visible immediately; no boot, flicker or decorative background loop. */
 
 /* ─── portrait scan-in ─── */
 (() => {
@@ -797,7 +747,7 @@ if (!reduced) setInterval(() => { if (Math.random() < 0.12) flickOnce(); }, 4000
   pre.textContent = ART;
   if (reduced) return;
   let p = 0;
-  const t0 = performance.now() + 1800; /* wait for boot */
+  const t0 = performance.now();
   function step(t) {
     if (t < t0) { requestAnimationFrame(step); return; }
     p = Math.min((t - t0) / 3000, 1);
@@ -808,34 +758,6 @@ if (!reduced) setInterval(() => { if (Math.random() < 0.12) flickOnce(); }, 4000
     if (p < 1) requestAnimationFrame(step);
   }
   requestAnimationFrame(step);
-})();
-
-/* ─── verdict rain ─── */
-(() => {
-  if (reduced) return;
-  const cv = document.getElementById('rain'), ctx = cv.getContext('2d');
-  const GLYPHS = '✓⏸⛒·:=+#01';
-  let cols, drops;
-  function size() {
-    cv.width = innerWidth; cv.height = innerHeight;
-    cols = Math.floor(cv.width / 26);
-    drops = Array.from({length: cols}, () => ({y: Math.random() * -80, v: .1 + Math.random() * .25}));
-  }
-  size(); addEventListener('resize', size);
-  function frame() {
-    ctx.fillStyle = 'oklch(0.115 0.012 75 / 0.18)';
-    ctx.fillRect(0, 0, cv.width, cv.height);
-    ctx.font = '15px monospace';
-    drops.forEach((d, i) => {
-      const ch = GLYPHS[(Math.random() * GLYPHS.length) | 0];
-      ctx.fillStyle = Math.random() < .04 ? 'oklch(0.6 0.12 80/.7)' : 'oklch(0.4 0.06 80/.35)';
-      ctx.fillText(ch, i * 26, d.y * 22);
-      d.y += d.v;
-      if (d.y * 22 > cv.height + 60) { d.y = Math.random() * -30; }
-    });
-    requestAnimationFrame(frame);
-  }
-  frame();
 })();
 
 /* ─── kernel demo: faithful order, browser port ───
@@ -883,7 +805,6 @@ if (!reduced) setInterval(() => { if (Math.random() < 0.12) flickOnce(); }, 4000
       else if (i === r.stage) k += r.v === 'DENY' ? ' hit' : (r.v === 'ALLOW' ? ' pass' : ' hit-ask');
       return `<span class="${k}">${s}</span>`;
     }).join('');
-    if (r.v === 'DENY') flickOnce();
   }
   input.addEventListener('input', render);
 
@@ -929,35 +850,14 @@ if (!reduced) setInterval(() => { if (Math.random() < 0.12) flickOnce(); }, 4000
         why.textContent = r.why;
         v.style.transition = 'opacity .3s'; v.style.opacity = 1;
         why.style.transition = 'opacity .3s .1s'; why.style.opacity = 1;
-        if (r.v === 'DENY') flickOnce();
         setTimeout(show, 3800);
       }
     })();
   }
-  const t0 = performance.now() + 3400; /* let the boot finish first */
+  const t0 = performance.now();
   (function kick(t) {
     if (t < t0) requestAnimationFrame(kick); else show();
   })(performance.now());
-})();
-
-/* ─── scroll rule: one bronze line, transform only ─── */
-(() => {
-  if (reduced) return;
-  const rule = document.getElementById('rule');
-  let max = 1, queued = false;
-  const measure = () => {
-    max = Math.max(document.documentElement.scrollHeight - innerHeight, 1);
-  };
-  measure();
-  addEventListener('resize', measure, {passive: true});
-  addEventListener('scroll', () => {
-    if (queued) return;
-    queued = true;
-    requestAnimationFrame(() => {
-      rule.style.transform = 'scaleX(' + Math.min(scrollY / max, 1) + ')';
-      queued = false;
-    });
-  }, {passive: true});
 })();
 
 /* ─── reveals + counters ─── */
@@ -983,9 +883,12 @@ if (!reduced) setInterval(() => { if (Math.random() < 0.12) flickOnce(); }, 4000
 })();
 
 /* ─── copy ─── */
-document.querySelectorAll('.copy').forEach(b => b.addEventListener('click', () => {
-  navigator.clipboard.writeText('curl -fsSL https://talos-agent.ch/install.sh | bash');
-  b.textContent = 'copied ✓'; setTimeout(() => b.textContent = 'copy one-liner', 1600);
+document.querySelectorAll('.copy').forEach(b => b.addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText('curl -fsSL https://talos-agent.ch/install.sh | bash');
+    b.textContent = 'copied ✓';
+  } catch { b.textContent = 'select and copy the command below'; }
+  setTimeout(() => b.textContent = 'copy one-liner', 2200);
 }));
 </script>
 </body>

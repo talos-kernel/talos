@@ -65,6 +65,7 @@ TOOL_PROTOCOL = (
     '- delegate_status {"job_id": "…"} — read a delegated job\'s state and result\n'
     '- delegate_steer {"task_id": "bg_…", "instruction": "…"} — send a course correction to a RUNNING /background task (its id is in the start receipt and in /status); it reaches the run before its next step, never mid-call, and grants nothing — the task keeps its unattended ceiling. Only /background tasks can be steered: delegate answers, delegate_code jobs and schedules have no injection point\n'
     '- delegate_agy {"prompt": "…"} — hand a bounded coding task to the confined worker\'s agy backend (exists only when the operator enabled it); returns a job_id; no mcp/browser — those are claude-backend only\n'
+    '- delegate_codex {"prompt": "…"} — hand a bounded implementation, debugging or independent review task to the confined Codex worker (only when enabled); returns a job_id; no mcp/browser\n'
     '- browse {"url": "https://…"}\n'
     '- see_image {"path": "…", "question": "…"}\n'
     '- hear {"path": "…"}\n'
@@ -81,7 +82,12 @@ TOOL_PROTOCOL = (
     "browse renders a page in a real browser, so JavaScript runs and you see what a "
     "reader would see — use it when web_fetch comes back empty or skeletal. It only "
     "reads: there is no clicking, typing or form submission, and the browser can reach "
-    "nothing but the one host you asked for.\n"
+    "nothing but the one host you asked for. If a fetch or render times out or lacks the "
+    "needed facts, use web_search to find another official source (documentation, pricing "
+    "notice or product detail page), then fetch it. Do not repeat an identical failed "
+    "request or return a command traceback as the answer. Give the verified facts and "
+    "source links; state a remaining gap briefly if alternatives also fail. A refusal "
+    "by the kernel is a boundary, not a transport error to work around.\n"
     "vault_search is lexical and several words can become too restrictive. Start with "
     "1-3 distinctive terms copied from the operator. If it returns no results, retry with "
     "fewer terms; never add guessed synonyms or explanatory prose to the query.\n"
@@ -114,6 +120,12 @@ TOOL_PROTOCOL = (
     "exchanges that /new removed from the active context remain findable there. Other "
     "conversations are not reachable through it, by construction. Use it when the operator "
     "refers to something said earlier that is not in your context.\n"
+    "For questions about the operator's own systems, first ground the request in installed "
+    "skills, vault notes, entity_status or earlier conversation evidence. Use the named "
+    "owner agent for context it holds, and the configured remote_exec route for authorized "
+    "live inspection. Public web research supplements this; it cannot establish the "
+    "operator's actual server, configuration, access or billing. Independent bounded "
+    "research can use delegate; a coding worker is not required for a simple lookup.\n"
     "When you are blocked by a missing capability, unavailable integration, or repeated "
     "tool failure, call agent_consult before telling the operator the task cannot be done. "
     "If the operator explicitly tells you to consult or escalate to another agent, your first "
@@ -185,7 +197,14 @@ TOOL_PROTOCOL = (
     "own loop is for quick answers and orchestration. Any task that creates, changes, "
     "builds or researches beyond one lookup goes to the worker first. Do not delegate "
     "every small thing — the overhead is real — but never let a large task fail "
-    "locally without having weighed the worker."
+    "locally without having weighed the worker. "
+    "Choose only tools in the active manifest. Use delegate_code for browser/MCP work; "
+    "when available, use delegate_codex for a second implementation or independent review, "
+    "and delegate_agy for an alternative worker. Give each worker a concrete objective, "
+    "relevant context, writable scope, acceptance checks and the required evidence. "
+    "An accepted job is not finished work: use its terminal receipt and read back artifacts "
+    "before claiming success. If a worker is unavailable, consider another enabled backend "
+    "within the same authorized scope; never repeat a failed call unchanged or bypass a denial."
 )
 
 # Die Ankuendigung steht am ENDE, nicht mitten im Protokoll — und ihre Laenge ist ein
@@ -212,6 +231,12 @@ PLAN_PROTOCOL = (
     "line. It never replaces the TOOL_CALL line — it goes above it, and the TOOL_CALL "
     "line still has to be there:\n"
     'PLAN: {"goal": "…", "steps": ["…", "…"]}\n'
+    "Use at least two non-empty, concrete steps (for example, read the file, then report "
+    "its contents); a one-step announcement is ignored. When the operator explicitly "
+    "requests a plan, announce the requested sequence in this format. "
+    "Otherwise, routine factual lookups, price checks and simple comparisons need no "
+    "PLAN announcement: their source may change during research. Use ordinary tool calls "
+    "and deliver the answer directly. "
     "Announce one when a task genuinely takes several steps and you already know the "
     "sequence. It grants you nothing: every step still passes the kernel one at a time. "
     "What it does is bind you — the run's step budget shrinks to what you announced, and "
@@ -263,6 +288,16 @@ def skills_block(catalogue: str) -> str:
     """Der Katalog mit seinem Rahmensatz — leer, wenn nichts installiert ist."""
     text = catalogue.strip()
     return f"{SKILLS_HEADER}{text}\n" if text else ""
+
+
+def render_skill_source(source, prompt: str = "") -> str:
+    if source is None:
+        return ""
+    try:
+        render = getattr(source, "for_prompt", None)
+        return skills_block(render(prompt) if callable(render) else source())
+    except Exception:
+        return ""
 
 CANCELLED_TEXT = "Cancelled."
 
@@ -367,7 +402,7 @@ class ClaudeCliReasoner:
     def timeout_s(self) -> int:
         return self._timeout_s
 
-    def _skills_text(self) -> str:
+    def _skills_text(self, prompt: str = "") -> str:
         """Der Skill-Katalog fuer diesen Zug — leer, wenn keine Quelle verdrahtet ist.
 
         Injiziert statt selbst entdeckt: der Reasoner soll nicht wissen, wo Skills
@@ -375,18 +410,13 @@ class ClaudeCliReasoner:
         Rechner zufaellig installiert ist. Ein Fehler in der Quelle kostet den Katalog,
         nie den Zug — ohne Skills antwortet Talos wie bisher.
         """
-        if self._skills is None:
-            return ""
-        try:
-            return skills_block(self._skills())
-        except Exception:
-            return ""
+        return render_skill_source(self._skills, prompt)
 
     def reason(self, prompt: str, on_text: OnText | None = None) -> str:
         system = instructions.assemble_system_prompt(
             tool_protocol=TOOL_PROTOCOL,
             plan_protocol=PLAN_PROTOCOL,
-            skills=self._skills_text(),
+            skills=self._skills_text(prompt),
         )
         full = f"{system}\n\nNachricht:\n{prompt}"
         model_argv = ["--model", self._model] if self._model else []
@@ -679,7 +709,7 @@ class HermesCliReasoner:
         self._active: subprocess.Popen[str] | None = None
         self._cancel_requested = False
 
-    def _skills_text(self) -> str:
+    def _skills_text(self, prompt: str = "") -> str:
         """Der Skill-Katalog fuer diesen Zug — leer, wenn keine Quelle verdrahtet ist.
 
         Injiziert statt selbst entdeckt: der Reasoner soll nicht wissen, wo Skills
@@ -687,18 +717,13 @@ class HermesCliReasoner:
         Rechner zufaellig installiert ist. Ein Fehler in der Quelle kostet den Katalog,
         nie den Zug — ohne Skills antwortet Talos wie bisher.
         """
-        if self._skills is None:
-            return ""
-        try:
-            return skills_block(self._skills())
-        except Exception:
-            return ""
+        return render_skill_source(self._skills, prompt)
 
     def argv_for(self, prompt: str) -> list[str]:
         system = instructions.assemble_system_prompt(
             tool_protocol=TOOL_PROTOCOL,
             plan_protocol=PLAN_PROTOCOL,
-            skills=self._skills_text(),
+            skills=self._skills_text(prompt),
             final_protocol=HERMES_FINAL_CHANNEL_PROTOCOL,
         )
         full = f"{system}\n\nNachricht:\n{prompt}"

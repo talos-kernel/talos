@@ -3228,6 +3228,24 @@ _result(_cw_ok, "delegate_agy exists without the agent-side gate",
 if not _cw_ok:
     failures += 1
 
+_codex_names = {s.name for s in default_manifest(codex_backend=False).tools}
+_codex_ok = "delegate_codex" not in _codex_names and "delegate_code" in _codex_names
+_result(_codex_ok, "Codex delegation appears without the agent gate",
+        "absent without TALOS_CODEX_BACKEND=1" if _codex_ok else "GATE FAILED")
+if not _codex_ok:
+    failures += 1
+
+with tempfile.TemporaryDirectory(prefix="talos-codex-gate-") as _codex_ws:
+    _codex_reply = _cw.handle_frame(
+        json.dumps({"op": "submit", "job_id": "codex-denied", "prompt": "p",
+                    "workspace": _codex_ws, "backend": "codex"}).encode(),
+        _cw._Jobs(), spawn=lambda *args: (_ for _ in ()).throw(AssertionError("spawned")))
+    _codex_ok = not _codex_reply["ok"] and _codex_reply["kind"] == "unavailable"
+    _result(_codex_ok, "Codex runs without worker-owned configuration",
+            "unavailable before spawn" if _codex_ok else "GATE FAILED")
+    if not _codex_ok:
+        failures += 1
+
 # Gezaehlt, nicht addiert. Auf einer Maschine ohne Isolation faellt der
 # Identitaets-Block als SKIP heraus — dann steht hier ehrlich eine kleinere Zahl,
 # statt zwei Faelle zu behaupten, die niemand gefahren hat.

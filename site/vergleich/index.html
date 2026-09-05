@@ -252,6 +252,8 @@ html.js .rv.in{opacity:1;transform:none}
   html{scroll-behavior:auto}
 }
 </style>
+<link rel="stylesheet" href="/interface.css">
+<script src="/interface.js" defer></script>
 </head>
 <body>
 
@@ -297,11 +299,11 @@ html.js .rv.in{opacity:1;transform:none}
     never grant itself anything. The numbers below are the ones my test suite enforces
     on every page of this site.</p>
     <div class="spec-row">
-      <div class="spec"><b>28</b>tools here, every one gated</div>
+      <div class="spec"><b>29</b>tools here, every one gated</div>
       <div class="spec"><b>100+</b>skills there — counted honestly</div>
-      <div class="spec"><b>2343</b>unit tests</div>
-      <div class="spec"><b>208/208</b>adversarial cases</div>
-      <div class="spec"><b>895</b>gate lines</div>
+      <div class="spec"><b>2398</b>unit tests</div>
+      <div class="spec"><b>210/210</b>adversarial cases</div>
+      <div class="spec"><b>896</b>gate lines</div>
       <div class="spec"><b>0</b>inbound ports</div>
       <div class="spec"><b>0</b>default identities</div>
     </div>
@@ -320,7 +322,7 @@ html.js .rv.in{opacity:1;transform:none}
       (Telegram, mail, CLI, WhatsApp over an operator-controlled broker) — and
       all four only fetch.</li>
       <li class="rv"><b>Skills and plugins.</b> Catalogues in the hundreds, from calendars
-      to image generation. Talos has 28 tools, worker-confined MCP behind an
+      to image generation. Talos has 29 tools, worker-confined MCP behind an
       operator-owned registry, and a sub-agent DAG — and the number grows slowly,
       on purpose, see §3.</li>
       <li class="rv"><b>Browser automation.</b> Filling in forms, clicking, driving
@@ -338,7 +340,7 @@ html.js .rv.in{opacity:1;transform:none}
     <p class="sub rv" style="margin-top:26px">Both projects also move faster.
     There, a new capability is a <strong>feature question</strong>. Here it is a
     <strong>kernel question</strong>: every new tool needs a verdict that survives
-    208 adversarial cases.</p>
+    210 adversarial cases.</p>
   </div>
 </section>
 
@@ -462,8 +464,8 @@ html.js .rv.in{opacity:1;transform:none}
       <div class="why"><code>skill catalogue</code>
         <span>Breadth is cheap — <b>gated breadth is not</b>. Every tool needs a
         declared effect and a target extractor, otherwise there is nothing to
-        judge. The 28 tools are the ones where the kernel can justify every verdict;
-        tool number 28 had to pass the same test.</span></div>
+        judge. The 29 tools are the ones where the kernel can justify every verdict;
+        tool number 29 had to pass the same test.</span></div>
       <div class="why"><code>yolo mode</code>
         <span>The autonomy dial can only ever <b>tighten</b>, never widen. A mode
         that grants rights next to the kernel would be a second source of permission —
@@ -513,7 +515,7 @@ html.js .rv.in{opacity:1;transform:none}
         <p class="demo-note">Steps and verdicts speak the machine console's language —
         the console does not translate, not in the real Talos either. Simplified: the Python
         original knows more patterns than this port, and the
-        208 adversarial cases run against the original on every install.</p>
+        210 adversarial cases run against the original on every install.</p>
       </div>
     </div>
   </div>

@@ -61,6 +61,33 @@ def test_without_a_verified_address_nothing_resolves_at_all() -> None:
     assert browser.resolver_rules(SafeUrl("https://x/a", "x", 443, ())) == "MAP * ~NOTFOUND"
 
 
+def test_dual_stack_pins_verified_ipv4_and_ipv6_only_is_bracketed() -> None:
+    from talos.web import SafeUrl
+
+    v6 = "2606:4700:4700::1111"
+    safe = SafeUrl("https://example.com", "example.com", 443, (v6, "93.184.216.34"))
+    assert browser.resolver_rules(safe) == "MAP example.com 93.184.216.34, MAP * ~NOTFOUND"
+    ipv6 = SafeUrl(safe.url, safe.host, safe.port, (v6,))
+    assert browser.resolver_rules(ipv6) == f"MAP example.com [{v6}], MAP * ~NOTFOUND"
+
+
+def test_timeout_is_actionable_without_exposing_browser_argv() -> None:
+    import subprocess
+
+    def timeout(argv, **kwargs):
+        raise subprocess.TimeoutExpired(argv, kwargs['timeout'])
+    with pytest.raises(RuntimeError) as error:
+        browser.render("https://example.com", binary="/bin/chromium", resolve=_resolver, run=timeout)
+    assert 'web_search' in str(error.value) and '25s' in str(error.value)
+    assert '--user-data-dir' not in str(error.value) and '/bin/chromium' not in str(error.value)
+
+
+def test_browser_error_page_is_not_returned_as_source_evidence() -> None:
+    with pytest.raises(RuntimeError, match='could not load'):
+        browser.render("https://example.com", binary="/bin/chromium", resolve=_resolver,
+                       run=_run_mit('<html><div id="main-frame-error">ERR_NAME_NOT_RESOLVED</div></html>'))
+
+
 def test_every_hardening_flag_is_actually_passed() -> None:
     """Zusicherungen auf die EIGENSCHAFT, nicht auf die Reihenfolge der Argumente."""
     from talos.web import SafeUrl

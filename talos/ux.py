@@ -9,9 +9,8 @@ Das ist ausdruecklich **keine** i18n-Tabelle. Es gibt einen Nutzer und eine Spra
 eine Lookup-Mechanik waere Aufwand ohne Gegenwert. Es ist eine Konstantenliste, damit
 die paar Zeichen, die the operator bei jedem Lauf sieht, nicht ueber vier Dateien verstreut sind.
 
-Bewusst geometrisch statt der ueblichen Chatbot-Emoji (🧠🔧✅❌): Talos ist ein
-gravierter Bronzeautomat, kein Assistent mit Sprechblase. Emoji leben in Statuszeilen
-und Quittungen — nie in der Prosa der Antwort.
+Geometrische Zeichen sind der kompakte Vorgabestil; der expressive Stil zeichnet
+Werkzeuge und Zustaende mit Emoji. Die Stimme der Antwort steht getrennt in SOUL.md.
 """
 from __future__ import annotations
 
@@ -128,9 +127,9 @@ GEOMETRIC = Style(
 )
 
 # Ausdrucksvoll: dasselbe Vokabular in gaengigen Emoji, plus ein Verb je Werkzeug. Die
-# Kopfzeile bleibt die Signatur (◉) — sie benennt den Waechter, sie kommentiert nicht.
+# Kopfzeile traegt den Schild des Waechters; der Text nennt den beobachteten Zustand.
 EXPRESSIVE = Style(
-    talos=SYM_TALOS,
+    talos="🛡️",
     thinking="🧠", plan="🗺️", tool="🛠️",
     ok="✅", fail="❌", gate="⏸️", blocked="⛔", undo="↩️",
     tool_glyphs={
@@ -140,8 +139,9 @@ EXPRESSIVE = Style(
         "hear": "👂", "speak": "🔊",
         "grab_frame": "🎞️", "entity_status": "📡", "agent_consult": "🤝",
         "ask_operator": "🙋", "delegate": "🧭", "session_search": "🗂️",
-        "delegate_code": "🛠️", "delegate_status": "🔍", "delegate_dag": "🧩",
-        "delegate_agy": "🛠️", "delegate_steer": "🎯",
+        "delegate_code": "🤝", "delegate_status": "🔍", "delegate_dag": "🧩",
+        "delegate_agy": "🚀", "delegate_steer": "🎯",
+        "delegate_codex": "🧑‍💻",
         "skill_write": "🎓", "remote_exec": "🛰️", "http_request": "🔗",
         "git": "📦",
     },
@@ -154,8 +154,9 @@ EXPRESSIVE = Style(
         "grab_frame": "Capturing", "entity_status": "Checking",
         "agent_consult": "Consulting", "ask_operator": "Asking you",
         "delegate": "Delegating", "session_search": "Searching history",
-        "delegate_code": "Delegating code", "delegate_status": "Checking job",
-        "delegate_dag": "Delegating task graph", "delegate_agy": "Delegating code",
+        "delegate_code": "Delegating to Claude", "delegate_status": "Checking job",
+        "delegate_dag": "Delegating task graph", "delegate_agy": "Delegating to Antigravity",
+        "delegate_codex": "Delegating to Codex",
         "delegate_steer": "Steering background task",
         "skill_write": "Distilling skill", "remote_exec": "Running remote",
         "http_request": "Calling API", "git": "Running git",

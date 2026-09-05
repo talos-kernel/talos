@@ -4,9 +4,9 @@
 
 ## Facts
 
-- Permission kernel: 895 lines of Python, the only code that decides
-- 28 tools, all gated; unattended runs cannot escalate
-- 2343 tests, 208/208 red-team cases green at release time
+- Permission kernel: 896 lines of Python, the only code that decides
+- 29 tools, all gated; unattended runs cannot escalate
+- 2398 tests, 210/210 red-team cases green at release time
 - MCP servers run only inside a UID-separated worker, from an operator-owned registry — no marketplace, no third-party code in the agent process
 - Channels: Telegram, mail (IMAP pull), CLI, WhatsApp via an operator-controlled broker — every channel fetches; no inbound port, no webhook
 - Updates: signed tarballs, verified before anything is unpacked; dependencies pinned and hashed, installed with --require-hashes

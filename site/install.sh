@@ -5,7 +5,7 @@
 # test suite and the adversarial suite in front of your eyes, and starts nothing.
 #
 # What it does NOT do: no sudo, no system files, no service, no autostart, no
-# telemetry, no network access beyond the one download below.
+# telemetry. Network access is used for the release and Python package downloads.
 #
 # You are about to pipe a script from the internet into a shell. Talos' own kernel
 # classifies that pattern as risky and would ask you before running it. So: read this
@@ -15,14 +15,14 @@
 
 set -euo pipefail
 
-VERSION="0.17.2-alpha"
+VERSION="0.18.0-alpha"
 BASE="${TALOS_BASE:-https://talos-agent.ch}"
 TARBALL="${BASE}/dist/talos-${VERSION}.tar.gz"
 PREFIX="${TALOS_PREFIX:-$HOME/talos}"
 
 # --- output ------------------------------------------------------------------
 
-if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+if [ -t 1 ] && [ "${NO_COLOR+x}" != x ] && [ "${TERM:-dumb}" != dumb ]; then
   B=$'\033[1m'; DIM=$'\033[2m'; R=$'\033[0m'
   BRONZE=$'\033[38;5;179m'; AMBER=$'\033[38;5;214m'; PATINA=$'\033[38;5;108m'
   ERR=$'\033[38;5;167m'; WARN=$'\033[38;5;179m'
@@ -65,8 +65,10 @@ spin() {
   return $rc
 }
 
-trap 'printf "\033[?25h"; die "unexpected error on line $LINENO — nothing was started."' ERR
-trap 'printf "\033[?25h"' EXIT
+restore_cursor() { if [ "$TTY" -eq 1 ]; then printf '\033[?25h'; fi; }
+
+trap 'restore_cursor; die "unexpected error on line $LINENO — nothing was started."' ERR
+trap 'restore_cursor' EXIT
 
 # --- the guardian ------------------------------------------------------------
 # Drawn once, line by line, because the first thing a guardian does is show up.
@@ -133,7 +135,7 @@ step "Fetching sources"
 note "$TARBALL"
 
 TMP="$(mktemp -d)"
-trap 'printf "\033[?25h"; rm -rf "$TMP"' EXIT
+trap 'restore_cursor; rm -rf "$TMP"' EXIT
 spin "downloading" curl -fsSL "$TARBALL" -o "$TMP/talos.tar.gz" || die "download failed."
 
 # --- 2a. proof of integrity and origin ---------------------------------------
@@ -259,6 +261,17 @@ mkdir -p "$PREFIX/workspace" "$PREFIX/data"
 chmod 700 "$PREFIX/data"
 ok "$PREFIX/workspace (its working directory) · $PREFIX/data (event log, 0700)"
 
+# Keep an existing command (including a different Talos product) untouched.
+BIN_DIR="${TALOS_BIN_DIR:-$HOME/.local/bin}"
+mkdir -p "$BIN_DIR"
+chmod 755 "$PREFIX/bin/talos"
+if [ ! -e "$BIN_DIR/talos" ] && [ ! -L "$BIN_DIR/talos" ]; then
+  ln -s "$PREFIX/bin/talos" "$BIN_DIR/talos"
+  ok "talos command installed in $BIN_DIR"
+else
+  note "Existing $BIN_DIR/talos kept; use $PREFIX/bin/talos for this installation."
+fi
+
 # --- 6. done — deliberately without starting ---------------------------------
 
 say ""
@@ -267,15 +280,15 @@ say ""
 say "  ${DIM}That is not a forgotten step. The switch is yours.${R}"
 say ""
 say "  Next:"
-say "    ${B}1.${R} cd $PREFIX && .venv/bin/python -m talos setup --out $CONF"
-say "       ${DIM}asks for the bot token, checks it against Telegram, and waits for${R}"
-say "       ${DIM}you to message your bot so it can read your id from the message${R}"
-say "       ${DIM}itself. Then it asks which model it should think with.${R}"
-say "       ${DIM}Prefer an editor? \$EDITOR $CONF works too — same two keys.${R}"
+say "    ${B}1.${R} $PREFIX/bin/talos setup terminal --out $CONF"
+say "       ${DIM}confirm your local identity, choose your model — no Telegram needed.${R}"
 say ""
-say "    ${B}2.${R} .venv/bin/python -m talos"
+say "    ${B}2.${R} $PREFIX/bin/talos chat"
 say ""
-say "  ${DIM}Update later: .venv/bin/python -m talos update --check"
+say "  ${DIM}For the short command, put $BIN_DIR on your PATH.${R}"
+say "  Telegram instead: $PREFIX/bin/talos setup --out $CONF, then $PREFIX/bin/talos"
+say ""
+say "  ${DIM}Update later: $PREFIX/bin/talos update --check"
 say "  It unpacks beside this one, runs both suites in the NEW tree, and only"
 say "  switches if they pass. Your talos.env and data stay yours.${R}"
 say ""

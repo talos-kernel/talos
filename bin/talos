@@ -1,0 +1,13 @@
+#!/usr/bin/env python3
+"""Launch the installation's pinned environment from any working directory."""
+import os
+from pathlib import Path
+import sys
+
+root = Path(__file__).resolve().parent.parent
+python = root / ".venv" / "bin" / "python"
+if not python.is_file():
+    sys.stderr.write("Talos's virtual environment is missing. Follow the install guide at https://talos-agent.ch/docs/.\n")
+    raise SystemExit(2)
+os.environ["PYTHONPATH"] = str(root) + (os.pathsep + os.environ["PYTHONPATH"] if os.environ.get("PYTHONPATH") else "")
+os.execv(str(python), [str(python), "-m", "talos", *sys.argv[1:]])

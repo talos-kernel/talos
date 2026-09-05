@@ -275,7 +275,7 @@ def make_vault_runners(vault_dir: Path, qmd_bin: str) -> dict[str, Callable[[Too
     }
 
 
-def default_manifest(*, agy_backend: bool = True) -> ToolManifest:
+def default_manifest(*, agy_backend: bool = True, codex_backend: bool = True) -> ToolManifest:
     """Manifest der Start-Tools. Effekt/Reversibilität steuern das Gating.
 
     `undo_last` ist ein WRITE wie jedes andere — ein Rückrollen auf `~/.bashrc` fragt
@@ -416,6 +416,11 @@ def default_manifest(*, agy_backend: bool = True) -> ToolManifest:
         # — erst wenn beide das Backend kennen, laeuft ein agy-Job.
         manifest = manifest.with_tool(
             ToolSpec("delegate_agy", Effect.EXEC, reversible=False,
+                     requires_env=frozenset({"TALOS_CLAUDE_WORKER_SOCKET"}),
+                     sandbox_required=True))
+    if codex_backend:
+        manifest = manifest.with_tool(
+            ToolSpec("delegate_codex", Effect.EXEC, reversible=False,
                      requires_env=frozenset({"TALOS_CLAUDE_WORKER_SOCKET"}),
                      sandbox_required=True))
     return manifest
@@ -572,15 +577,29 @@ def make_delegate_agy_runner(
     work_root: str,
     exchange: claudejobs.Exchange | None = None,
 ) -> Callable[[ToolRequest], str]:
-    """Baut den `delegate_agy`-Runner. Dasselbe Bild wie `delegate_code`:
-    ableiten, abschicken, formatieren — nur eben an das agy-Backend desselben
-    Workers, und ohne browser/mcp (die sind dem claude-Backend vorbehalten;
-    der Worker lehnt einen agy-Frame mit MCP-Feldern ohnehin benannt ab).
-    Prompt-Behandlung ist 1:1 die des claude-Weges: der Prompt geht als
-    opaker Text durch, nichts wird injiziert oder umhuellt.
+    return _make_backend_runner(socket_path=socket_path, work_root=work_root,
+                                exchange=exchange, backend="agy")
+
+
+def make_delegate_codex_runner(
+    *, socket_path: str, work_root: str,
+    exchange: claudejobs.Exchange | None = None,
+) -> Callable[[ToolRequest], str]:
+    return _make_backend_runner(socket_path=socket_path, work_root=work_root,
+                                exchange=exchange, backend="codex")
+
+
+def _make_backend_runner(
+    *, socket_path: str, work_root: str, backend: str,
+    exchange: claudejobs.Exchange | None = None,
+) -> Callable[[ToolRequest], str]:
+    """Derive a workspace, submit to the fixed backend, format the receipt.
+
+    The backend is chosen by composition, never by model arguments. MCP stays
+    Claude-only; prompts pass through as opaque text just as for delegate_code.
     """
 
-    def delegate_agy(req: ToolRequest) -> str:
+    def delegate_backend(req: ToolRequest) -> str:
         prompt = _need(req, "prompt")
         job_id = uuid.uuid4().hex[:12]
         # Blattname aus der Kernelfunktion, Wurzel aus der Verdrahtung —
@@ -588,14 +607,14 @@ def make_delegate_agy_runner(
         workspace = str(Path(work_root) / Path(claude_job_workspace(job_id)).name)
         antwort = claudejobs.submit_job(
             socket_path, job_id, prompt, workspace, exchange=exchange,
-            backend="agy")
+            backend=backend)
         if not antwort.get("ok"):
-            return (f"delegate_agy: worker {antwort.get('kind', 'unavailable')}"
+            return (f"delegate_{backend}: worker {antwort.get('kind', 'unavailable')}"
                     f" — {antwort.get('message', '')}")
-        return (f"delegate_agy job_id={job_id} state={antwort.get('state')}"
+        return (f"delegate_{backend} job_id={job_id} state={antwort.get('state')}"
                 f" (workspace {workspace})")
 
-    return delegate_agy
+    return delegate_backend
 
 
 def make_delegate_dag_runner(

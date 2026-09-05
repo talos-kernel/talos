@@ -39,7 +39,8 @@ PrivateDevices=yes
 # der Jobs traegt die Sandbox, nicht die Unit; Modules/ControlGroups bleiben.
 ProtectKernelModules=yes
 ProtectControlGroups=yes
-RestrictSUIDSGID=yes
+# RestrictSUIDSGID is deliberately absent: it breaks bubblewrap's mount setup
+# on supported Linux hosts. Confinement is verified by the worker's sandbox probe.
 LockPersonality=yes
 # ProtectSystem=strict macht das ganze Dateisystem read-only; die Job-Workspaces
 # und das dedizierte HOME muessen schreibbar bleiben. Pfade an die eigene

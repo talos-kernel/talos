@@ -151,13 +151,21 @@ class SkillCatalog:
         skill = self.get(name)
         return None if skill is None else skill.load_body(max_chars=max_chars)
 
-    def render(self, *, max_chars: int = MAX_CATALOG_CHARS) -> str:
+    def render(self, *, max_chars: int = MAX_CATALOG_CHARS, query: str = "") -> str:
         """Der Katalog fuer den Systemprompt, mit ehrlichem Hinweis beim Abschneiden.
 
         Absteigend probiert statt gierig gefuellt, weil der Hinweis selbst Platz kostet:
         so bleibt die Ausgabe garantiert unter dem Deckel — inklusive Hinweis.
         """
-        lines = tuple(skill.catalog_line() for skill in self.skills)
+        # Match the current request BEFORE applying the context cap. Alphabetical
+        # truncation otherwise makes later skills permanently invisible.
+        terms = set(re.findall(r"\w{3,}", query.casefold()[-6000:]))
+        def score(skill: Skill) -> int:
+            name = set(re.findall(r"\w{3,}", skill.name.casefold()))
+            description = set(re.findall(r"\w{3,}", skill.description.casefold()))
+            return 10 * len(name & terms) + len(description & terms)
+        ordered = sorted(self.skills, key=lambda skill: (-score(skill), skill.name)) if terms else self.skills
+        lines = tuple(f"{skill.catalog_line()}\n  path: {skill.path}" for skill in ordered)
         for kept in range(len(lines), -1, -1):
             text = _catalog_text(lines, kept, max_chars)
             if len(text) <= max_chars:
@@ -165,6 +173,20 @@ class SkillCatalog:
         # Selbst der Hinweis passt nicht mehr. Dann lieber gar kein Katalog als ein
         # halber: ein leerer Katalog heisst „keine Skills" und ist damit harmlos.
         return ""
+
+
+class SkillSource:
+    """Live discovery with request-based ranking; no skill body is loaded eagerly."""
+
+    def __init__(self, roots: Iterable[RootLike]) -> None:
+        self.roots = tuple(roots)
+
+    def __call__(self) -> str:
+        return discover_skills(self.roots).render()
+
+    def for_prompt(self, prompt: str) -> str:
+        request = prompt.split("[Tool results so far]", 1)[0]
+        return discover_skills(self.roots).render(query=request)
 
 
 def discover_skills(

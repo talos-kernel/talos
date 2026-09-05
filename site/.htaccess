@@ -26,6 +26,10 @@ AddType application/gzip .gz .tgz
 
 # Der Quell-Tarball ist erreichbar, gehoert aber in keinen Suchindex.
 <IfModule mod_headers.c>
+  Header always set Strict-Transport-Security "max-age=15552000"
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set X-Frame-Options "DENY"
+  Header always set Content-Security-Policy "frame-ancestors 'none'"
   <FilesMatch "\.(tar\.gz|sig|sha256)$">
     Header set X-Robots-Tag "noindex"
   </FilesMatch>

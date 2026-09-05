@@ -212,6 +212,7 @@ class TalosConfig:
     # Zwei-Gate-Muster wie bei den MCP-Servern (Worker-Gate:
     # TALOS_CLAUDE_WORKER_AGY_BIN / TALOS_CLAUDE_WORKER_AGY_HOME).
     agy_backend: bool = False
+    codex_backend: bool = False
     # Browser-Automatisierung (chrome-devtools-mcp) INNERHALB der Worker-Sandbox,
     # nie als natives Werkzeug — Vorgabe AUS, wie der Worker selbst: ein Chrome
     # mit Netz im Job erweitert die Angriffsflaeche der Sandbox, also ist es ein
@@ -404,6 +405,7 @@ def load_config(*, require_channel: bool = True) -> TalosConfig:
             os.environ.get("TALOS_HERMES_BIN")
             or secrets.get("TALOS_HERMES_BIN", HERMES_BIN)
         ),
+        claude_bin=_value("TALOS_CLAUDE_BIN") or CLAUDE_BIN,
         hermes_provider_catalog=Path(
             os.environ.get("TALOS_HERMES_PROVIDER_CATALOG")
             or secrets.get("TALOS_HERMES_PROVIDER_CATALOG", str(HERMES_PROVIDER_CATALOG))
@@ -459,6 +461,7 @@ def load_config(*, require_channel: bool = True) -> TalosConfig:
             _value("TALOS_CLAUDE_WORKER_JOB_TIMEOUT") or "900"
         ),
         agy_backend=_value("TALOS_AGY_BACKEND") == "1",
+        codex_backend=_value("TALOS_CODEX_BACKEND") == "1",
         browser_mcp_enabled=_value("TALOS_BROWSER_MCP_ENABLED") == "1",
         # Ungueltige Namen fallen heraus statt die Liste unbrauchbar zu machen
         # — sie wuerden gegen die Registry ohnehin nie matchen (fail-closed).

@@ -28,6 +28,7 @@ from __future__ import annotations
 import getpass
 import os
 import re
+import shlex
 import shutil
 import sys
 import time
@@ -90,6 +91,7 @@ OPENAI_BASE_URL_KEY = base_url_var("openai-api")
 WRITTEN_KEYS = (
     TOKEN_KEY, USERNAME_KEY, PRINCIPALS_KEY,
     PROVIDER_KEY, MODEL_KEY, ANTHROPIC_KEY, OPENAI_KEY, OPENAI_BASE_URL_KEY,
+    "TALOS_CLAUDE_BIN", "TALOS_HERMES_BIN",
 )
 # Werte, die nie unmaskiert auf den Bildschirm dürfen — nicht einmal beim Rückblick
 # auf eine schon bestehende Datei.
@@ -97,10 +99,11 @@ SECRET_KEYS = frozenset({TOKEN_KEY, ANTHROPIC_KEY, OPENAI_KEY, "TALOS_MAIL_PASSW
 
 # Abschnitte, die einzeln nachgezogen werden koennen — wie `hermes setup <section>`.
 # Warum ueberhaupt: nach dem ersten Lauf will niemand die Kennung neu beweisen, nur weil
-# er das Modell wechselt. Ein Gesamtlauf ueberschreibt die Datei; ein Abschnitt ruehrt
-# ausschliesslich seine eigenen Schluessel an und laesst alles andere in Ruhe.
+# er das Modell wechselt. Jeder Lauf aendert nur die ausgewaehlten Schluessel
+# in einem atomaren Austausch und laesst andere Einstellungen stehen.
 SECTION_IDENTITY, SECTION_MODEL, SECTION_MAIL = "identity", "model", "mail"
-SECTIONS = (SECTION_IDENTITY, SECTION_MODEL, SECTION_MAIL)
+SECTION_TERMINAL = "terminal"
+SECTIONS = (SECTION_TERMINAL, SECTION_IDENTITY, SECTION_MODEL, SECTION_MAIL)
 
 MAIL_HOST_KEY = "TALOS_MAIL_HOST"
 MAIL_USER_KEY = "TALOS_MAIL_USER"
@@ -145,13 +148,15 @@ FILE_HEADER = (
 )
 
 USAGE = (
-    "usage: python -m talos setup [identity|model|mail] [--out PATH] [--wait SECONDS]\n"
-    "  (no section)  the full first run — writes the file from scratch\n"
+    "usage: python -m talos setup [terminal|identity|model|mail] [--out PATH] [--wait SECONDS]\n"
+    "  terminal      model + this terminal identity; no Telegram account needed\n"
+    "  (no section)  Telegram first run; preserves unrelated settings\n"
     "  identity      the bot token and who may command it\n"
     "  model         what the agent thinks with\n"
     "  mail          the second way in (IMAP), optional\n"
     "  --out         where to write the configuration (default: the path Talos reads)\n"
-    "  --wait        how long to wait for your first message, in seconds"
+    "  --wait        how long to wait for your first message, in seconds\n"
+    "  Next: talos chat (terminal), or python -m talos (Telegram service)"
 )
 
 __all__ = [
@@ -309,6 +314,8 @@ class ModelSetup:
     key_name: str = ""
     key: str = ""
     base_url: str = ""
+    binary_name: str = ""
+    binary: str = ""
 
     def values(self) -> tuple[tuple[str, str], ...]:
         values = [(PROVIDER_KEY, self.provider), (MODEL_KEY, self.model)]
@@ -316,6 +323,8 @@ class ModelSetup:
             values.append((self.key_name, self.key))
         if self.base_url:
             values.append((OPENAI_BASE_URL_KEY, self.base_url))
+        if self.binary_name and self.binary:
+            values.append((self.binary_name, self.binary))
         return tuple(values)
 
 
@@ -404,7 +413,16 @@ class _Console:
         return default
 
     def _write(self, text: str) -> None:
-        self._stdout.write(scrub(text, self._secrets))
+        from .terminalui import paint
+
+        text = scrub(text, self._secrets)
+        if text.lstrip().startswith(SYM_FAIL):
+            text = paint(text, "fail", out=self._stdout)
+        elif text.lstrip().startswith(SYM_OK):
+            text = paint(text, "ok", out=self._stdout)
+        elif text.rstrip().endswith(("]", "?", ":")):
+            text = paint(text, out=self._stdout)
+        self._stdout.write(text)
         flush = getattr(self._stdout, "flush", None)
         if flush is not None:
             flush()
@@ -498,9 +516,10 @@ def _next_offset(updates: Any, current: int) -> int:
 
 # ------------------------------------------------------------------- Schritte
 def _intro(console: _Console, out: Path) -> None:
-    console.say("")
-    console.say(f"  {SYM_TALOS} TALOS — setup")
-    console.say("  An agent whose actions are bounded, explained and checkable.")
+    from .terminalui import heading
+
+    console.say(heading("T A L O S  /  SETUP", "01 Connect  ·  02 Identity  ·  03 Model",
+                        out=console._stdout))
     console.say("")
     console.say("  Three things are missing before it can run: the bot token, who is")
     console.say("  allowed to command it, and what it thinks with. This asks for all")
@@ -641,11 +660,16 @@ def _manual_identity(console: _Console, wait_s: float) -> Principal:
 
 
 # ------------------------------------------------------------------- Modell
-def detect_runtimes() -> LocalRuntimes:
+def detect_runtimes(values: dict[str, str] | None = None) -> LocalRuntimes:
     """Was an Modell-Laufzeiten auf diesem Rechner wirklich benutzbar ist."""
+    values = values or {}
+    native = Path.home() / ".local/bin/claude"
+    claude = os.environ.get("TALOS_CLAUDE_BIN") or values.get("TALOS_CLAUDE_BIN")
+    hermes = os.environ.get("TALOS_HERMES_BIN") or values.get("TALOS_HERMES_BIN")
     return LocalRuntimes(
-        claude=_executable(config.CLAUDE_BIN, "claude"),
-        hermes=_executable(config.HERMES_BIN, "hermes"),
+        claude=_executable(claude or (str(native) if native.is_file() and
+                           os.access(native, os.X_OK) else config.CLAUDE_BIN), "claude"),
+        hermes=_executable(hermes or config.HERMES_BIN, "hermes"),
     )
 
 
@@ -663,26 +687,14 @@ def _executable(configured: str, name: str) -> str:
 
 
 def _routes(runtimes: LocalRuntimes) -> tuple[_Route, ...]:
-    """Die Auswahl. Ein CLI-Weg steht nur drin, wenn die CLI wirklich gefunden wurde.
-
-    WARUM öffentlich nur der eigene Schlüssel: der Abo-Weg liefe über die
-    Hersteller-CLI und damit über die Anmeldung eines *anderen* Menschen. Das ist
-    Impersonation, verstösst gegen die Nutzungsbedingungen und riskiert die Sperre
-    genau des Kontos, das gerade freundlich geteilt wurde — eine Entscheidung des
-    Betreibers, keine technische Bequemlichkeit. Ein Schlüssel gehört dem, der ihn
-    einträgt; nur der wird von sich aus angeboten.
-
-    Eine schon vorhandene lokale Einrichtung ist etwas anderes: dort ist der
-    Betreiber selbst angemeldet. Die wird erkannt, angeboten und als Vorschlagswert
-    behalten — nicht überschrieben und nicht wegkonfiguriert.
-    """
+    """API-Schluessel oder die eigene, bereits angemeldete lokale CLI."""
     local = [
         _Route(key, f"the {name} CLI already set up here ({path})", note)
         for key, name, path, note in (
             (ROUTE_CLAUDE_CLI, "claude", runtimes.claude,
-             "uses the sign-in on this machine — not meant for a public install"),
+             "uses your local sign-in; keep the CLI up to date"),
             (ROUTE_HERMES, "hermes", runtimes.hermes,
-             "same: it borrows the sign-in that is already on this machine"),
+             "uses your existing local provider configuration"),
         )
         if path
     ]
@@ -701,10 +713,10 @@ def _ask_model(
     Zuerst wird gezeigt, was schon da ist — sonst entscheidet der Betreiber blind
     und richtet womöglich ein zweites Mal ein, was längst funktioniert.
     """
-    found = detect_runtimes() if runtimes is None else runtimes
     present = _existing_values(out)
+    found = detect_runtimes(present) if runtimes is None else runtimes
     console.say("")
-    console.say("  3) What the agent thinks with.")
+    console.say("  Model connection — what the agent thinks with.")
     console.say("     Already on this machine:")
     console.say(f"       claude CLI: {found.claude or 'not found'}")
     console.say(f"       hermes CLI: {found.hermes or 'not found'}")
@@ -712,7 +724,7 @@ def _ask_model(
         console.say(f"       {name}: {_key_source(name, present)}")
     route = _choose_route(console, found)
     if route.key in {ROUTE_CLAUDE_CLI, ROUTE_HERMES}:
-        return _local_setup(console, route)
+        return _local_setup(console, route, found)
     return _api_setup(console, http, route)
 
 
@@ -750,7 +762,7 @@ def _match_route(routes: tuple[_Route, ...], answer: str) -> _Route | None:
     return next((route for route in routes if route.key == wanted), None)
 
 
-def _local_setup(console: _Console, route: _Route) -> ModelSetup:
+def _local_setup(console: _Console, route: _Route, runtimes: LocalRuntimes) -> ModelSetup:
     """Der lokale Weg bleibt, wie er ist: Anbieter und Modell, aber KEIN Schlüssel.
 
     Für Hermes wird der Anbietername genommen, den Talos ohnehin als Vorgabe trägt —
@@ -763,7 +775,10 @@ def _local_setup(console: _Console, route: _Route) -> ModelSetup:
         provider, models = config.DEFAULT_MODEL_PROVIDER, (config.DEFAULT_MODEL,)
     model = _choose_model(console, models)
     console.say(f"    {SYM_OK} keeping the local setup — no key is written.")
-    return ModelSetup(provider=provider, model=model)
+    claude = route.key == ROUTE_CLAUDE_CLI
+    return ModelSetup(provider=provider, model=model,
+                      binary_name="TALOS_CLAUDE_BIN" if claude else "TALOS_HERMES_BIN",
+                      binary=runtimes.claude if claude else runtimes.hermes)
 
 
 def _api_setup(console: _Console, http: Http, route: _Route) -> ModelSetup:
@@ -868,12 +883,7 @@ def _masked(key: str, value: str) -> str:
 def _write_env(
     out: Path, bot: Bot, principal: Principal, setup: ModelSetup
 ) -> tuple[tuple[str, str], ...]:
-    """Schreibt KEY=VALUE mit 0600 und gibt zurück, was drinsteht.
-
-    Die Datei entsteht direkt mit 0600 statt „schreiben, dann chmod": dazwischen
-    läge ein Moment, in dem der Token mit den Standardrechten auf der Platte liegt.
-    Der Modell-Schlüssel geht denselben Weg — er ist genauso ein Passwort.
-    """
+    """Ersetzt die bestaetigten Setup-Werte atomar; andere Einstellungen bleiben."""
     values = (
         (TOKEN_KEY, bot.token),
         (USERNAME_KEY, bot.username),
@@ -881,23 +891,25 @@ def _write_env(
         *setup.values(),
     )
     out.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    body = FILE_HEADER + "".join(f"{key}={value}\n" for key, value in values)
-    handle = os.open(out, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(handle, "w", encoding="utf-8") as target:
-        target.write(body)
-    # Existierte die Datei bereits, hat O_CREAT den Modus nicht gesetzt — nachziehen.
-    os.chmod(out, 0o600)
-    return values
+    return _write_section(out, values)
 
 
-def _report(console: _Console, out: Path, values: tuple[tuple[str, str], ...]) -> None:
+def _report(console: _Console, out: Path, values: tuple[tuple[str, str], ...],
+            *, terminal: bool = False) -> None:
     console.say("")
     console.say(f"  Wrote {out}, mode 600:")
     for key, value in values:
         console.say(f"    {_masked(key, value)}")
     console.say("")
     console.say("  Done — and it is not running.")
-    console.say("  Start it yourself:  python -m talos")
+    command = "python -m talos chat" if terminal else "python -m talos"
+    if out.resolve() not in {config.LOCAL_ENV.resolve(), config.SECRETS_ENV.resolve()}:
+        command = f"TALOS_SECRETS_ENV={shlex.quote(str(out.resolve()))} {command}"
+    console.say(f"  Start it yourself:  {command}")
+    console.say("  Change model later: talos setup model")
+    console.say(f"  Check configuration: talos config validate --file {shlex.quote(str(out))}")
+    console.say("  Diagnose prerequisites: talos doctor")
+    console.say("  A running service keeps its current settings until restarted.")
 
 
 # --------------------------------------------------------------------- Aufruf
@@ -968,18 +980,52 @@ def _ask_mail(console: _Console, out: Path) -> tuple[tuple[str, str], ...]:
 
 
 def _write_section(out: Path, values: tuple[tuple[str, str], ...]) -> tuple[tuple[str, str], ...]:
-    """Schreibt NUR die genannten Schluessel und laesst den Rest der Datei stehen.
+    """Alle Werte in EINEM atomaren Austausch, damit kein halber Abschnitt entsteht."""
+    from .configcli import write_keys
 
-    ⚠️ Der Gesamtlauf schreibt mit `O_TRUNC` — richtig fuer einen ersten Lauf, fatal fuer
-    einen Abschnitt: `setup model` haette sonst den Token geloescht. Deshalb hier derselbe
-    Weg wie bei `talos config set` (atomar, 0600 vom ersten Byte an, fremde Zeilen bleiben).
-    """
-    from .configcli import write_key
-    from .schema import _one_line
-
-    for name, wert in values:
-        write_key(out, name, _one_line(wert))
+    out.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    write_keys(out, dict(values))
     return values
+
+
+def _terminal(console: _Console, http: Http, options: Options,
+              runtimes: LocalRuntimes | None) -> int:
+    from .askcli import refuse_in_sandbox
+    from .chatcli import attended
+    from .configcli import read_file
+
+    if refuse_in_sandbox() or not attended(console._stdin, console._stdout):
+        raise _Aborted("terminal setup needs a real input AND output terminal, outside the sandbox.")
+    from .terminalui import heading
+
+    console.say(heading("T A L O S  /  TERMINAL SETUP",
+                        "01 Your identity  ·  02 Your model  ·  Then: talos chat",
+                        out=console._stdout))
+    principal = str(Principal("cli", str(os.getuid())))
+    existing = {}
+    if options.out.resolve() in {config.LOCAL_ENV.resolve(), config.SECRETS_ENV.resolve()}:
+        existing.update(read_file(config.LOCAL_ENV))
+        existing.update(read_file(config.SECRETS_ENV))
+    existing.update(read_file(options.out))
+    raw = existing.get(PRINCIPALS_KEY) or existing.get("TALOS_ALLOWED_USER_IDS", "")
+    identities = list(dict.fromkeys(str(Principal.parse(part)) for part in
+                                   raw.replace(",", " ").split()))
+    override = os.environ.get(PRINCIPALS_KEY) or os.environ.get("TALOS_ALLOWED_USER_IDS", "")
+    if override and principal not in {str(Principal.parse(p)) for p in override.replace(",", " ").split()}:
+        raise _Aborted(f"the environment overrides {PRINCIPALS_KEY} and excludes this terminal; "
+                       "update that override first. Nothing was written.")
+    console.say(f"  1) Allow this local user ({principal}) to give Talos instructions.")
+    console.say("     Tool permissions still come from the kernel; existing identities stay.")
+    if not console.confirm("  Enable this terminal?", default=False):
+        console.say("  Cancelled — nothing was written.")
+        return EXIT_OK
+    if principal not in identities:
+        identities.append(principal)
+    console.say("  2) Choose a model connection.")
+    model = _ask_model(console, http, options.out, runtimes)
+    values = ((PRINCIPALS_KEY, ",".join(identities)), *model.values())
+    _report(console, options.out, _write_section(options.out, values), terminal=True)
+    return EXIT_OK
 
 
 def _wizard(
@@ -1004,6 +1050,8 @@ def _section(
     console: _Console, http: Http, options: Options, runtimes: LocalRuntimes | None
 ) -> int:
     """Ein einzelner Abschnitt — er ruehrt ausschliesslich seine eigenen Schluessel an."""
+    if options.section == SECTION_TERMINAL:
+        return _terminal(console, http, options, runtimes)
     if not console.interactive:
         _explain_without_terminal(console, options.out)
         return EXIT_NO_TERMINAL
